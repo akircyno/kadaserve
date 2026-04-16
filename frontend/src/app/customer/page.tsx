@@ -16,6 +16,7 @@ type OrderItemRow = {
   quantity: number;
   unit_price: number;
   menu_items: {
+    id: string;
     name: string;
   } | null;
 };
@@ -34,6 +35,13 @@ type OrderRow = {
   total_amount: number;
   ordered_at: string;
   order_items: OrderItemRow[];
+};
+
+type FeedbackItem = {
+  order_id: string;
+  order_item_id: string;
+  menu_item_id: string;
+  item_name: string;
 };
 
 type PageProps = {
@@ -81,28 +89,16 @@ const fallbackMenuItems: MenuItem[] = [
   },
 ];
 
-const fallbackOrders: OrderRow[] = [
-  {
-    id: "KD-0046",
-    order_type: "pickup",
-    status: "out_for_delivery",
-    total_amount: 280,
-    ordered_at: new Date().toISOString(),
-    order_items: [
-      {
-        id: "oi-1",
-        quantity: 2,
-        unit_price: 140,
-        menu_items: { name: "Matcha Latte" },
-      },
-    ],
-  },
-];
+const fallbackOrders: OrderRow[] = [];
 
 export default async function CustomerPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
   const initialSection =
-    resolvedSearchParams.tab === "orders" ? "orders" : "menu";
+    resolvedSearchParams.tab === "orders"
+      ? "orders"
+      : resolvedSearchParams.tab === "feedback"
+      ? "feedback"
+      : "menu";
 
   const supabase = await createClient();
 
@@ -118,6 +114,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
   const menuItems = !menuError && menuData?.length ? menuData : fallbackMenuItems;
 
   let orders: OrderRow[] = fallbackOrders;
+  let feedbackItems: FeedbackItem[] = [];
 
   if (user) {
     const { data: ordersData, error: ordersError } = await supabase
@@ -134,6 +131,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
             quantity,
             unit_price,
             menu_items (
+              id,
               name
             )
           )
@@ -145,12 +143,44 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     if (!ordersError && ordersData) {
       orders = ordersData as unknown as OrderRow[];
     }
+
+    const eligibleStatuses = ["delivered", "completed"];
+
+    const eligibleOrderItems =
+      orders
+        .filter((order) => eligibleStatuses.includes(order.status))
+        .flatMap((order) =>
+          order.order_items
+            .filter((item) => item.menu_items?.id && item.menu_items?.name)
+            .map((item) => ({
+              order_id: order.id,
+              order_item_id: item.id,
+              menu_item_id: item.menu_items!.id,
+              item_name: item.menu_items!.name,
+            }))
+        ) ?? [];
+
+    if (eligibleOrderItems.length > 0) {
+      const { data: existingFeedback } = await supabase
+        .from("feedback")
+        .select("order_item_id")
+        .eq("customer_id", user.id);
+
+      const submittedIds = new Set(
+        (existingFeedback ?? []).map((item) => item.order_item_id)
+      );
+
+      feedbackItems = eligibleOrderItems.filter(
+        (item) => !submittedIds.has(item.order_item_id)
+      );
+    }
   }
 
   return (
     <CustomerDashboard
       menuItems={menuItems}
       orders={orders}
+      feedbackItems={feedbackItems}
       initialSection={initialSection}
     />
   );

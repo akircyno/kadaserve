@@ -54,8 +54,17 @@ type Filter = "all" | "coffee" | "non-coffee";
 type CustomerDashboardProps = {
   menuItems: MenuItem[];
   orders: Order[];
+  feedbackItems: FeedbackItem[];
   initialSection?: Section;
 };
+
+type FeedbackItem = {
+  order_id: string;
+  order_item_id: string;
+  menu_item_id: string;
+  item_name: string;
+};
+
 
 const sections: Array<{
   id: Section;
@@ -125,8 +134,10 @@ function getFilter(category: string): Filter {
 export function CustomerDashboard({
   menuItems,
   orders,
+  feedbackItems,
   initialSection = "menu",
 }: CustomerDashboardProps) {
+
   const router = useRouter();
   const { cartCount } = useCart();
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
@@ -134,6 +145,65 @@ export function CustomerDashboard({
   const [filter, setFilter] = useState<Filter>("all");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [selectedFeedbackItemId, setSelectedFeedbackItemId] = useState("");
+  const [tasteRating, setTasteRating] = useState(5);
+  const [strengthRating, setStrengthRating] = useState(5);
+  const [overallRating, setOverallRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+
+  const selectedFeedbackItem =
+    feedbackItems.find((item) => item.order_item_id === selectedFeedbackItemId) ??
+    feedbackItems[0];
+
+  async function handleSubmitFeedback() {
+    if (!selectedFeedbackItem) return;
+
+    setIsSubmittingFeedback(true);
+    setFeedbackMessage("");
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          order_id: selectedFeedbackItem.order_id,
+          order_item_id: selectedFeedbackItem.order_item_id,
+          menu_item_id: selectedFeedbackItem.menu_item_id,
+          taste_rating: tasteRating,
+          strength_rating: strengthRating,
+          overall_rating: overallRating,
+          comment: feedbackComment,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setFeedbackMessage(result.error || "Failed to submit feedback.");
+        return;
+      }
+
+      setFeedbackMessage("Feedback submitted successfully.");
+      setTimeout(() => {
+        window.location.href = "/customer?tab=feedback";
+      }, 700);
+    } catch {
+      setFeedbackMessage("Something went wrong while submitting feedback.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  }
+
+  useMemo(() => {
+    if (!selectedFeedbackItemId && feedbackItems.length > 0) {
+      setSelectedFeedbackItemId(feedbackItems[0].order_item_id);
+    }
+  }, [feedbackItems, selectedFeedbackItemId]);
+
 
   const filteredMenu = useMemo(() => {
     return menuItems.filter((item) => {
@@ -397,15 +467,97 @@ export function CustomerDashboard({
                   Feedback
                 </h1>
                 <p className="text-sm text-[#6F634E]">
-                  This will connect cleanly to your `feedback` table next.
+                  Share feedback for delivered or completed orders.
                 </p>
 
-                <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
-                  <p className="text-2xl font-bold">How was your order?</p>
-                  <p className="mt-2 text-[#5D694F]">
-                    We can build the star-rating form here in the next step.
-                  </p>
-                </div>
+                {feedbackItems.length === 0 ? (
+                  <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
+                    <p className="text-2xl font-bold">No feedback pending</p>
+                    <p className="mt-2 text-[#5D694F]">
+                      Once you complete an order that has not been reviewed yet, it will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
+                        Select Order Item
+                      </label>
+                      <select
+                        value={selectedFeedbackItemId}
+                        onChange={(event) => setSelectedFeedbackItemId(event.target.value)}
+                        className="w-full rounded-[16px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
+                      >
+                        {feedbackItems.map((item) => (
+                          <option key={item.order_item_id} value={item.order_item_id}>
+                            {item.item_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="mt-5 space-y-5">
+                      {(
+                        [
+                          ["Taste Quality", tasteRating, setTasteRating],
+                          ["Drink Strength", strengthRating, setStrengthRating],
+                          ["Overall Experience", overallRating, setOverallRating],
+                        ] as const
+                      ).map(([label, value, setValue]) => (
+                        <div key={label}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-lg font-bold">{label}</p>
+                            <span className="text-sm font-semibold text-[#7D7767]">
+                              {value}/5
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex gap-2">
+                            {[1, 2, 3, 4, 5].map((score) => (
+                              <button
+                                key={score}
+                                type="button"
+                                onClick={() => setValue(score)}
+                                className={`text-3xl ${
+                                  score <= value ? "text-[#123E26]" : "text-[#D8C8A7]"
+                                }`}
+                              >
+                                ★
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
+                          Comment
+                        </label>
+                        <textarea
+                          value={feedbackComment}
+                          onChange={(event) => setFeedbackComment(event.target.value)}
+                          placeholder="Tell us about your order"
+                          className="min-h-28 w-full rounded-[18px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
+                        />
+                      </div>
+
+                      {feedbackMessage ? (
+                        <p className="rounded-xl bg-[#F4F8F3] px-4 py-3 text-sm text-[#2D7A40]">
+                          {feedbackMessage}
+                        </p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={handleSubmitFeedback}
+                        disabled={isSubmittingFeedback || !selectedFeedbackItem}
+                        className="w-full rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white disabled:opacity-60"
+                      >
+                        {isSubmittingFeedback ? "Submitting..." : "Submit Feedback"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
