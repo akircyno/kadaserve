@@ -45,6 +45,14 @@ function formatOrderCode(id: string) {
   return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
+function normalizeTrackingStatus(order: Order): Order["status"] {
+  if (order.order_type === "delivery" && order.status === "completed") {
+    return "delivered";
+  }
+
+  return order.status;
+}
+
 function formatStatus(status: Order["status"]) {
   switch (status) {
     case "pending":
@@ -66,28 +74,97 @@ function formatStatus(status: Order["status"]) {
   }
 }
 
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function getOrderSteps(orderType: Order["order_type"]) {
   if (orderType === "pickup") {
     return [
-      { key: "pending", label: "Pending" },
-      { key: "preparing", label: "Preparing" },
-      { key: "ready", label: "Ready for Pickup" },
-      { key: "completed", label: "Completed" },
+      { key: "pending", label: "Pending", note: "Order placed" },
+      { key: "preparing", label: "Preparing", note: "Staff is preparing your order" },
+      { key: "ready", label: "Ready for Pickup", note: "You can now claim your order" },
+      { key: "completed", label: "Completed", note: "Order has been received" },
     ];
   }
 
   return [
-    { key: "pending", label: "Pending" },
-    { key: "preparing", label: "Preparing" },
-    { key: "ready", label: "Ready" },
-    { key: "out_for_delivery", label: "Out for Delivery" },
-    { key: "delivered", label: "Delivered" },
+    { key: "pending", label: "Pending", note: "Order placed" },
+    { key: "preparing", label: "Preparing", note: "Staff is preparing your order" },
+    { key: "ready", label: "Ready", note: "Order is ready for dispatch" },
+    {
+      key: "out_for_delivery",
+      label: "Out for Delivery",
+      note: "Your order is on the way",
+    },
+    { key: "delivered", label: "Delivered", note: "Order has arrived" },
   ];
 }
 
 function getCurrentStepIndex(order: Order) {
   const steps = getOrderSteps(order.order_type);
-  return steps.findIndex((step) => step.key === order.status);
+  const normalizedStatus = normalizeTrackingStatus(order);
+
+  return steps.findIndex((step) => step.key === normalizedStatus);
+}
+
+function isFinalCompletedStatus(order: Order, normalizedStatus: Order["status"]) {
+  if (order.order_type === "pickup") {
+    return normalizedStatus === "completed";
+  }
+
+  return normalizedStatus === "delivered";
+}
+
+function getStatusDescription(order: Order) {
+  const normalizedStatus = normalizeTrackingStatus(order);
+
+  if (normalizedStatus === "cancelled") {
+    return "This order was cancelled. Please contact staff if you need assistance.";
+  }
+
+  if (order.order_type === "pickup") {
+    switch (normalizedStatus) {
+      case "pending":
+        return "Your pickup order has been received and is waiting to be prepared.";
+      case "preparing":
+        return "Your order is currently being prepared by the staff.";
+      case "ready":
+        return "Your order is ready for pickup.";
+      case "completed":
+        return "Your pickup order has been completed.";
+      default:
+        return "We are processing your pickup order.";
+    }
+  }
+
+  switch (normalizedStatus) {
+    case "pending":
+      return "Your delivery order has been received and is waiting to be prepared.";
+    case "preparing":
+      return "Your order is currently being prepared by the staff.";
+    case "ready":
+      return "Your order is packed and ready for dispatch.";
+    case "out_for_delivery":
+      return "Your order is currently on the way.";
+    case "delivered":
+      return "Your delivery order has arrived.";
+    default:
+      return "We are processing your delivery order.";
+  }
 }
 
 function formatAddons(addons: string[] | null) {
@@ -146,9 +223,11 @@ export default async function OrderTrackingPage({ params }: PageProps) {
   }
 
   const typedOrder = order as Order;
+  const displayStatus = normalizeTrackingStatus(typedOrder);
   const steps = getOrderSteps(typedOrder.order_type);
   const currentStepIndex = getCurrentStepIndex(typedOrder);
-  const isCancelled = typedOrder.status === "cancelled";
+  const isCancelled = displayStatus === "cancelled";
+  const isFinished = isFinalCompletedStatus(typedOrder, displayStatus);
 
   return (
     <main className="min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
@@ -161,7 +240,7 @@ export default async function OrderTrackingPage({ params }: PageProps) {
         </div>
 
         <section className="mt-5 rounded-[28px] bg-white/90 p-6 shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
-          <div className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span
               className={`inline-flex rounded-full px-4 py-2 text-sm font-bold uppercase tracking-[0.14em] ${
                 isCancelled
@@ -169,31 +248,44 @@ export default async function OrderTrackingPage({ params }: PageProps) {
                   : "bg-[#F6E8D6] text-[#C68733]"
               }`}
             >
-              {formatStatus(typedOrder.status)}
+              {formatStatus(displayStatus)}
+            </span>
+
+            <span className="text-sm font-medium text-[#8A755D]">
+              Placed on {formatDateTime(typedOrder.ordered_at)}
             </span>
           </div>
 
+          <p className="mt-4 text-base leading-7 text-[#6F634E]">
+            {getStatusDescription(typedOrder)}
+          </p>
+
           {isCancelled ? (
-            <div className="rounded-[20px] bg-[#FFF4F0] px-5 py-4 text-[#9C543D]">
-              <p className="text-lg font-bold">This order was cancelled.</p>
+            <div className="mt-6 rounded-[20px] bg-[#FFF4F0] px-5 py-4 text-[#9C543D]">
+              <p className="text-lg font-bold">Order Cancelled</p>
               <p className="mt-1 text-sm">
-                Please contact staff if you need more details.
+                This order is no longer active in the tracking flow.
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="mt-8 space-y-6">
               {steps.map((step, index) => {
-                const isCompleted = index < currentStepIndex;
-                const isCurrent = index === currentStepIndex;
+                const isCompleted = isFinished
+                  ? index <= currentStepIndex
+                  : index < currentStepIndex;
+                const isCurrent = isFinished ? false : currentStepIndex === index;
+                const isUpcoming = index > currentStepIndex;
 
                 return (
                   <div key={step.key} className="flex gap-4">
                     <div className="flex flex-col items-center">
                       <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold ${
-                          isCompleted || isCurrent
-                            ? "bg-[#C6863A] text-white"
-                            : "bg-[#F1ECE3] text-[#8C7B64]"
+                        className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg font-bold ${
+                          isCompleted
+                            ? "border-[#5B8A4B] bg-[#5B8A4B] text-white"
+                            : isCurrent
+                            ? "border-[#C6863A] bg-[#C6863A] text-white"
+                            : "border-[#E7D9C1] bg-[#F8F3EA] text-[#B9A58A]"
                         }`}
                       >
                         {isCompleted ? "✓" : isCurrent ? "•" : ""}
@@ -202,23 +294,32 @@ export default async function OrderTrackingPage({ params }: PageProps) {
                       {index < steps.length - 1 ? (
                         <div
                           className={`mt-1 w-0.5 flex-1 ${
-                            index < currentStepIndex
-                              ? "bg-[#C6863A]"
-                              : "bg-[#E7D9C1]"
+                            isCompleted ? "bg-[#5B8A4B]" : "bg-[#E7D9C1]"
                           }`}
                         />
                       ) : null}
                     </div>
 
                     <div className="pb-5">
-                      <p className="text-2xl font-bold text-[#2A2018]">
+                      <p
+                        className={`text-2xl font-bold ${
+                          isCurrent
+                            ? "text-[#2A2018]"
+                            : isCompleted
+                            ? "text-[#2F5C3A]"
+                            : "text-[#8A755D]"
+                        }`}
+                      >
                         {step.label}
                       </p>
+
                       <p className="mt-1 text-sm text-[#8A755D]">
-                        {isCurrent
-                          ? "Current order status"
+                        {index === 0
+                          ? `${step.note} • ${formatTime(typedOrder.ordered_at)}`
+                          : isCurrent
+                          ? step.note
                           : isCompleted
-                          ? "Completed"
+                          ? step.note
                           : "Waiting"}
                       </p>
                     </div>
@@ -230,9 +331,14 @@ export default async function OrderTrackingPage({ params }: PageProps) {
         </section>
 
         <section className="mt-5 rounded-[28px] bg-white/90 p-6 shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#9D6D48]">
-            Your Order • {typedOrder.order_type.toUpperCase()}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-[#9D6D48]">
+              Your Order • {typedOrder.order_type.toUpperCase()}
+            </p>
+            <span className="rounded-full bg-[#F5EAD7] px-3 py-1 text-sm font-semibold text-[#7A4A25]">
+              {typedOrder.order_type === "pickup" ? "Pickup" : "Delivery"}
+            </span>
+          </div>
 
           <div className="mt-5 space-y-4">
             {typedOrder.order_items.map((item) => (
@@ -243,11 +349,8 @@ export default async function OrderTrackingPage({ params }: PageProps) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-2xl font-semibold text-[#1F1711]">
-                      {item.menu_items?.name ?? "Menu Item"}
-                      {" "}
-                      <span className="text-lg text-[#8A755D]">
-                        ({item.size})
-                      </span>
+                      {item.menu_items?.name ?? "Menu Item"}{" "}
+                      <span className="text-lg text-[#8A755D]">({item.size})</span>
                     </p>
 
                     <p className="mt-1 text-sm text-[#8A755D]">

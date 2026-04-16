@@ -88,6 +88,26 @@ function formatTime(value: string) {
   });
 }
 
+function formatOrderType(orderType: Order["order_type"]) {
+  return orderType === "pickup" ? "Pickup" : "Delivery";
+}
+
+function formatOrderItemSummary(itemNames: string[]) {
+  if (itemNames.length === 0) return "Order items";
+  if (itemNames.length === 1) return itemNames[0];
+  return `${itemNames[0]} + ${itemNames.length - 1} more`;
+}
+
+function getFeedbackEmoji(itemName: string) {
+  const text = itemName.toLowerCase();
+
+  if (text.includes("matcha")) return "🍵";
+  if (text.includes("strawberry")) return "🍓";
+  if (text.includes("mocha") || text.includes("chocolate")) return "🍫";
+  if (text.includes("tea")) return "🧋";
+  return "☕";
+}
+
 function formatOrderCode(id: string) {
   return id.startsWith("#") ? id : `#${id.slice(0, 8).toUpperCase()}`;
 }
@@ -412,27 +432,44 @@ export function CustomerDashboard({
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-2xl font-black">
+                            <p className="text-2xl font-black text-[#123E26]">
                               {formatOrderCode(order.id)}
                             </p>
-                            <p className="text-2xl font-bold">
-                              {itemNames.length > 0
-                                ? itemNames.join(", ")
-                                : "Order items"}
+                            <p className="mt-1 text-2xl font-bold text-[#1F1711]">
+                              {formatOrderItemSummary(itemNames)}
+                            </p>
+                            <p className="mt-2 text-sm text-[#7D7767]">
+                              Placed at {formatTime(order.ordered_at)}
                             </p>
                           </div>
 
-                          <span className="rounded-full bg-[#E7F1E6] px-4 py-2 text-lg font-semibold text-[#2B6540] sm:text-xl">
+                          <span
+                            className={`rounded-full px-4 py-2 text-sm font-semibold sm:text-base ${
+                              order.status === "cancelled"
+                                ? "bg-[#FBE9E2] text-[#9C543D]"
+                                : order.status === "completed" ||
+                                  order.status === "delivered"
+                                ? "bg-[#E8F4E4] text-[#2D7A40]"
+                                : "bg-[#F5EAD7] text-[#8C5C2A]"
+                            }`}
+                          >
                             {formatStatus(order.status)}
                           </span>
                         </div>
 
-                        <div className="mt-4 flex items-center justify-between text-lg font-bold text-[#765531] sm:text-2xl">
-                          <span>{order.order_type.toUpperCase()}</span>
-                          <span>{formatTime(order.ordered_at)}</span>
-                          <span className="text-[#123E26]">
+                        <div className="mt-4 flex items-center justify-between gap-4 border-t border-[#EEE2C8] pt-4">
+                          <div>
+                            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#8A755D]">
+                              {formatOrderType(order.order_type)}
+                            </p>
+                            <p className="mt-1 text-xs text-[#9A8A73]">
+                              Tap to track order
+                            </p>
+                          </div>
+
+                          <p className="text-2xl font-black text-[#9D6D48]">
                             {formatPrice(order.total_amount)}
-                          </span>
+                          </p>
                         </div>
                       </Link>
                     );
@@ -462,41 +499,71 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "feedback" && (
-              <div className="space-y-4">
-                <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-                  Feedback
-                </h1>
-                <p className="text-sm text-[#6F634E]">
-                  Share feedback for delivered or completed orders.
-                </p>
+              <div className="space-y-5">
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
+                    Feedback
+                  </h1>
+                  <p className="mt-1 text-sm text-[#6F634E]">
+                    Share feedback for delivered or completed orders.
+                  </p>
+                </div>
 
                 {feedbackItems.length === 0 ? (
                   <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
-                    <p className="text-2xl font-bold">No feedback pending</p>
+                    <p className="text-2xl font-bold text-[#123E26]">
+                      No feedback pending
+                    </p>
                     <p className="mt-2 text-[#5D694F]">
-                      Once you complete an order that has not been reviewed yet, it will appear here.
+                      Once you complete an order that has not been reviewed yet,
+                      it will appear here.
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
-                    <div>
+                  <div className="rounded-[28px] bg-white p-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)] sm:p-6">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#E9F1E6] text-4xl shadow-[0_8px_18px_rgba(12,58,30,0.10)]">
+                        {selectedFeedbackItem
+                          ? getFeedbackEmoji(selectedFeedbackItem.item_name)
+                          : "☕"}
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#7D7767]">
+                          How was your order?
+                        </p>
+                        <h2 className="mt-1 text-3xl font-bold text-[#123E26]">
+                          {selectedFeedbackItem?.item_name ?? "Select an item"}
+                        </h2>
+                        <p className="mt-1 text-sm text-[#5D694F]">
+                          Your feedback helps improve the customer experience.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6">
                       <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
                         Select Order Item
                       </label>
                       <select
                         value={selectedFeedbackItemId}
-                        onChange={(event) => setSelectedFeedbackItemId(event.target.value)}
-                        className="w-full rounded-[16px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
+                        onChange={(event) =>
+                          setSelectedFeedbackItemId(event.target.value)
+                        }
+                        className="w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFFCF7] px-4 py-3 outline-none"
                       >
                         {feedbackItems.map((item) => (
-                          <option key={item.order_item_id} value={item.order_item_id}>
+                          <option
+                            key={item.order_item_id}
+                            value={item.order_item_id}
+                          >
                             {item.item_name}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="mt-5 space-y-5">
+                    <div className="mt-6 space-y-6">
                       {(
                         [
                           ["Taste Quality", tasteRating, setTasteRating],
@@ -504,22 +571,29 @@ export function CustomerDashboard({
                           ["Overall Experience", overallRating, setOverallRating],
                         ] as const
                       ).map(([label, value, setValue]) => (
-                        <div key={label}>
-                          <div className="flex items-center justify-between">
-                            <p className="text-lg font-bold">{label}</p>
-                            <span className="text-sm font-semibold text-[#7D7767]">
+                        <div
+                          key={label}
+                          className="rounded-[20px] bg-[#FFF8EE] p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-lg font-bold text-[#123E26]">
+                              {label}
+                            </p>
+                            <span className="text-sm font-semibold text-[#8A755D]">
                               {value}/5
                             </span>
                           </div>
 
-                          <div className="mt-2 flex gap-2">
+                          <div className="mt-3 flex gap-2">
                             {[1, 2, 3, 4, 5].map((score) => (
                               <button
                                 key={score}
                                 type="button"
                                 onClick={() => setValue(score)}
-                                className={`text-3xl ${
-                                  score <= value ? "text-[#123E26]" : "text-[#D8C8A7]"
+                                className={`text-4xl transition ${
+                                  score <= value
+                                    ? "text-[#123E26]"
+                                    : "text-[#D8C8A7]"
                                 }`}
                               >
                                 ★
@@ -535,14 +609,22 @@ export function CustomerDashboard({
                         </label>
                         <textarea
                           value={feedbackComment}
-                          onChange={(event) => setFeedbackComment(event.target.value)}
+                          onChange={(event) =>
+                            setFeedbackComment(event.target.value)
+                          }
                           placeholder="Tell us about your order"
-                          className="min-h-28 w-full rounded-[18px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
+                          className="min-h-28 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFFCF7] px-4 py-3 outline-none placeholder:text-[#A49175]"
                         />
                       </div>
 
                       {feedbackMessage ? (
-                        <p className="rounded-xl bg-[#F4F8F3] px-4 py-3 text-sm text-[#2D7A40]">
+                        <p
+                          className={`rounded-xl px-4 py-3 text-sm font-medium ${
+                            feedbackMessage.toLowerCase().includes("success")
+                              ? "bg-[#EEF8EC] text-[#2D7A40]"
+                              : "bg-[#FFF1EC] text-[#9C543D]"
+                          }`}
+                        >
                           {feedbackMessage}
                         </p>
                       ) : null}
@@ -553,7 +635,9 @@ export function CustomerDashboard({
                         disabled={isSubmittingFeedback || !selectedFeedbackItem}
                         className="w-full rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white disabled:opacity-60"
                       >
-                        {isSubmittingFeedback ? "Submitting..." : "Submit Feedback"}
+                        {isSubmittingFeedback
+                          ? "Submitting..."
+                          : "Submit Feedback"}
                       </button>
                     </div>
                   </div>
