@@ -54,6 +54,7 @@ type Filter = "all" | "coffee" | "non-coffee";
 type CustomerDashboardProps = {
   menuItems: MenuItem[];
   orders: Order[];
+  initialSection?: Section;
 };
 
 const sections: Array<{
@@ -124,10 +125,11 @@ function getFilter(category: string): Filter {
 export function CustomerDashboard({
   menuItems,
   orders,
+  initialSection = "menu",
 }: CustomerDashboardProps) {
   const router = useRouter();
   const { cartCount } = useCart();
-  const [activeSection, setActiveSection] = useState<Section>("menu");
+  const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

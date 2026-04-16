@@ -36,6 +36,12 @@ type OrderRow = {
   order_items: OrderItemRow[];
 };
 
+type PageProps = {
+  searchParams: Promise<{
+    tab?: string;
+  }>;
+};
+
 const fallbackMenuItems: MenuItem[] = [
   {
     id: "1",
@@ -93,7 +99,11 @@ const fallbackOrders: OrderRow[] = [
   },
 ];
 
-export default async function CustomerPage() {
+export default async function CustomerPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
+  const initialSection =
+    resolvedSearchParams.tab === "orders" ? "orders" : "menu";
+
   const supabase = await createClient();
 
   const {
@@ -137,5 +147,11 @@ export default async function CustomerPage() {
     }
   }
 
-  return <CustomerDashboard menuItems={menuItems} orders={orders} />;
+  return (
+    <CustomerDashboard
+      menuItems={menuItems}
+      orders={orders}
+      initialSection={initialSection}
+    />
+  );
 }

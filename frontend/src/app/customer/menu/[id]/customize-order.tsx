@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Minus, Plus, ShoppingCart } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCart } from "../../cart-provider";
-
 
 type MenuItem = {
   id: string;
@@ -76,6 +75,14 @@ function getEmoji(name: string, category: string) {
 }
 
 export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { addItem, updateItem, getItemById } = useCart();
+
+  const cartItemId = searchParams.get("cartItemId");
+  const editingItem = cartItemId ? getItemById(cartItemId) : undefined;
+  const isEditing = Boolean(editingItem);
+
   const [quantity, setQuantity] = useState(1);
   const [sugarLevel, setSugarLevel] = useState(50);
   const [iceLevel, setIceLevel] = useState("regular");
@@ -83,31 +90,19 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const [temperature, setTemperature] = useState("iced");
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [specialInstructions, setSpecialInstructions] = useState("");
-  const router = useRouter();
-  const { addItem } = useCart();
   const [addedMessage, setAddedMessage] = useState("");
 
-    function handleAddToCart() {
-    addItem({
-      menu_item_id: menuItem.id,
-      name: menuItem.name,
-      base_price: menuItem.base_price,
-      quantity,
-      sugar_level: sugarLevel,
-      ice_level: menuItem.has_ice_level ? iceLevel : null,
-      size,
-      temperature,
-      addons: selectedAddons,
-      addon_price: addonTotal + sizeCharge,
-      special_instructions: specialInstructions.trim(),
-      image_url: menuItem.image_url,
-    });
+  useEffect(() => {
+    if (!editingItem) return;
 
-    setAddedMessage("Added to cart successfully.");
-    router.push("/customer/cart");
-  }
-
-
+    setQuantity(editingItem.quantity);
+    setSugarLevel(editingItem.sugar_level);
+    setIceLevel(editingItem.ice_level ?? "regular");
+    setSize(editingItem.size);
+    setTemperature(editingItem.temperature);
+    setSelectedAddons(editingItem.addons);
+    setSpecialInstructions(editingItem.special_instructions);
+  }, [editingItem]);
 
   const selectedSize = sizes.find((item) => item.value === size);
   const selectedAddonRows = addons.filter((item) =>
@@ -127,6 +122,35 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
         ? current.filter((item) => item !== value)
         : [...current, value]
     );
+  }
+
+  function handleSaveCartItem() {
+    const payload = {
+      menu_item_id: menuItem.id,
+      name: menuItem.name,
+      base_price: menuItem.base_price,
+      quantity,
+      sugar_level: sugarLevel,
+      ice_level: menuItem.has_ice_level ? iceLevel : null,
+      size,
+      temperature,
+      addons: selectedAddons,
+      addon_price: addonTotal + sizeCharge,
+      special_instructions: specialInstructions.trim(),
+      image_url: menuItem.image_url,
+    };
+
+    if (isEditing && cartItemId) {
+      updateItem(cartItemId, payload);
+      setAddedMessage("Cart item updated successfully.");
+    } else {
+      addItem(payload);
+      setAddedMessage("Added to cart successfully.");
+    }
+
+    setTimeout(() => {
+      router.push("/customer/cart");
+    }, 700);
   }
 
   return (
@@ -149,7 +173,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
               <div className="flex-1">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6D7A61]">
-                  Customize Order
+                  {isEditing ? "Edit Cart Item" : "Customize Order"}
                 </p>
                 <h1 className="mt-2 text-4xl font-black tracking-tight">
                   {menuItem.name}
@@ -356,19 +380,19 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
               <button
                 type="button"
-                onClick={handleAddToCart}
+                onClick={handleSaveCartItem}
                 disabled={!menuItem.is_available}
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ShoppingCart size={18} />
-                Add to Cart
-
-                {addedMessage ? (
-                  <p className="mt-3 text-sm font-semibold text-[#2D7A40]">
-                    {addedMessage}
-                  </p>
-                  ) : null}
+                {isEditing ? "Update Cart" : "Add to Cart"}
               </button>
+
+              {addedMessage ? (
+                <p className="mt-3 text-sm font-semibold text-[#2D7A40]">
+                  {addedMessage}
+                </p>
+              ) : null}
             </aside>
           </div>
         </section>

@@ -282,7 +282,7 @@ export default async function OrderTrackingPage({ params }: PageProps) {
         </section>
 
         <Link
-          href="/customer"
+          href="/customer?tab=orders"
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-[20px] border border-[#D9C4A3] bg-[#FAECD3] px-5 py-4 text-lg font-semibold text-[#7A4A25]"
         >
           <ArrowLeft size={18} />

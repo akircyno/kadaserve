@@ -38,6 +38,8 @@ export default function CartPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [isRedirectingToTracking, setIsRedirectingToTracking] = useState(false);
+
   
     useEffect(() => {
     setSelectedItemIds(items.map((item) => item.id));
@@ -89,21 +91,39 @@ export default function CartPage() {
 
       const orderId = result.orderId as string;
 
-      clearCart();
       setSuccessMessage(
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
+      setIsRedirectingToTracking(true);
+      clearCart();
 
       setTimeout(() => {
-        router.push(`/customer/orders/${orderId}`);
+        router.replace(`/customer/orders/${orderId}`);
         router.refresh();
-      }, 1200);
+      }, 900);
 
     } catch {
       setError("Something went wrong during checkout.");
     } finally {
       setIsCheckingOut(false);
     }
+  }
+
+  if (isRedirectingToTracking) {
+    return (
+      <main className="min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
+        <div className="mx-auto max-w-2xl">
+          <section className="rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] p-8 text-center shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
+            <h1 className="text-3xl font-black tracking-tight">
+              Redirecting to Order Tracking
+            </h1>
+            <p className="mt-3 text-base text-[#5D694F]">
+              Your order was placed successfully. Please wait a moment.
+            </p>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -145,7 +165,7 @@ export default function CartPage() {
           ) : (
             <>
               <div className="mt-6 space-y-4">
-                {items.map((item) => {
+                                {items.map((item) => {
                   const isSelected = selectedItemIds.includes(item.id);
 
                   return (
@@ -212,7 +232,7 @@ export default function CartPage() {
                       </div>
                     </article>
                   );
-                })}
+                })}``
               </div>
 
               <div className="mt-6 rounded-[24px] bg-white/80 p-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
