@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { DM_Sans, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
