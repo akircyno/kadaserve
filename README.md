@@ -15,14 +15,6 @@ Follow these steps to set up KadaServe on your local machine:
    npm install
    ```
 
-3. **Configure Environment Variables**:
-   - Create a `.env.local` file in the `frontend` directory and add:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_key
-   SUPABASE_SERVICE_ROLE_KEY=your_secret_key
-   ```
-
 4. **Verify Setup**:
    - Ensure Node.js is installed: `node --version`
    - Confirm dependencies are installed without errors:
@@ -53,7 +45,7 @@ To run KadaServe on your machine:
 
 ## Test Accounts
 
-If user registration is not yet implemented, create test users manually in Supabase Authentication.
+use this test account for testing
 
 **Customer**
 - Email: `customer@gmail.com`
