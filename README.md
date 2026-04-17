@@ -6,7 +6,7 @@ Follow these steps to set up KadaServe on your local machine:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/kadaserve.git
+   git clone https://github.com/akircyno/kadaserve.git
    cd kadaserve/frontend
    ```
 
