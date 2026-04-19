@@ -87,6 +87,9 @@ export default function StaffEncodeOrderPage() {
     const [activeCategory, setActiveCategory] = useState<Category>("all");
     const [orderType, setOrderType] = useState<OrderType>("pickup");
     const [walkinName, setWalkinName] = useState("");
+    const [deliveryAddress, setDeliveryAddress] = useState("");
+    const [deliveryEmail, setDeliveryEmail] = useState("");
+    const [deliveryPhone, setDeliveryPhone] = useState("");
     const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isLoadingMenu, setIsLoadingMenu] = useState(false);
@@ -269,6 +272,9 @@ export default function StaffEncodeOrderPage() {
                     items: cart,
                     totalAmount: total,
                     walkinName,
+                    deliveryAddress,
+                    deliveryEmail,
+                    deliveryPhone,
                 }),
             });
 
@@ -282,6 +288,9 @@ export default function StaffEncodeOrderPage() {
             setCart([]);
             setSelectedQuantities({});
             setWalkinName("");
+            setDeliveryAddress("");
+            setDeliveryEmail("");
+            setDeliveryPhone("");
             setSuccessMessage(
                 `Order #${result.orderId.slice(0, 8).toUpperCase()} added to queue.`
             );
@@ -505,6 +514,51 @@ export default function StaffEncodeOrderPage() {
                             className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
                         />
                     </label>
+
+                    {orderType === "delivery" ? (
+                        <div className="mt-4 space-y-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-4">
+                            <p className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-[#684B35]">
+                                Delivery Info
+                            </p>
+
+                            <label className="block">
+                                <span className="font-sans text-sm font-semibold text-[#684B35]">
+                                    Address
+                                </span>
+                                <input
+                                    value={deliveryAddress}
+                                    onChange={(event) => setDeliveryAddress(event.target.value)}
+                                    placeholder="Customer delivery address"
+                                    className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="font-sans text-sm font-semibold text-[#684B35]">
+                                    Email
+                                </span>
+                                <input
+                                    value={deliveryEmail}
+                                    onChange={(event) => setDeliveryEmail(event.target.value)}
+                                    placeholder="customer@email.com"
+                                    className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="font-sans text-sm font-semibold text-[#684B35]">
+                                    Phone
+                                </span>
+                                <input
+                                    value={deliveryPhone}
+                                    onChange={(event) => setDeliveryPhone(event.target.value)}
+                                    placeholder="09xxxxxxxxx"
+                                    className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                                />
+                            </label>
+                        </div>
+                    ) : null}
+
 
 
                     <div className="mt-5 space-y-4">

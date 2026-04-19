@@ -14,7 +14,12 @@ type CreateStaffOrderBody = {
   items: StaffCartItem[];
   totalAmount: number;
   walkinName?: string;
+  deliveryAddress?: string;
+  deliveryEmail?: string;
+  deliveryPhone?: string;
 };
+
+
 
 function normalizeSize(size: StaffCartItem["size"]) {
   if (size === "regular") return "small";
@@ -65,6 +70,20 @@ export async function POST(request: Request) {
       );
     }
 
+    if (body.orderType === "delivery") {
+      if (
+        !body.deliveryAddress?.trim() ||
+        !body.deliveryEmail?.trim() ||
+        !body.deliveryPhone?.trim()
+      ) {
+        return NextResponse.json(
+          { error: "Delivery address, email, and phone are required." },
+          { status: 400 }
+        );
+      }
+    }
+
+
     const calculatedTotal = body.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
@@ -87,9 +106,16 @@ export async function POST(request: Request) {
         payment_status: "paid",
         total_amount: calculatedTotal,
         walkin_name: body.walkinName?.trim() || "Walk-in Customer",
+        delivery_address:
+          body.orderType === "delivery" ? body.deliveryAddress?.trim() : null,
+        delivery_email:
+          body.orderType === "delivery" ? body.deliveryEmail?.trim() : null,
+        delivery_phone:
+          body.orderType === "delivery" ? body.deliveryPhone?.trim() : null,
       })
       .select("id")
       .single();
+
 
     if (orderError || !order) {
       return NextResponse.json(
