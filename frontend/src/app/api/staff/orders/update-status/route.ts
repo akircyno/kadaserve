@@ -10,6 +10,8 @@ type OrderStatus =
   | "completed"
   | "cancelled";
 
+type PaymentStatus = "unpaid" | "paid";
+
 function getNextStatus(
   orderType: "pickup" | "delivery",
   currentStatus: OrderStatus
@@ -65,6 +67,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const orderId = body.orderId as string;
+    const action = body.action as "advance" | "mark_paid" | undefined;
 
     if (!orderId) {
       return NextResponse.json(
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status")
+      .select("id, order_type, status, payment_status")
       .eq("id", orderId)
       .single();
 
@@ -86,6 +89,25 @@ export async function POST(request: Request) {
       );
     }
 
+    if (action === "mark_paid") {
+      const { error: paymentError } = await supabase
+        .from("orders")
+        .update({ payment_status: "paid" })
+        .eq("id", orderId);
+
+      if (paymentError) {
+        return NextResponse.json(
+          { error: paymentError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        paymentStatus: "paid",
+      });
+    }
+
     const nextStatus = getNextStatus(
       order.order_type,
       order.status as OrderStatus
@@ -94,6 +116,18 @@ export async function POST(request: Request) {
     if (!nextStatus) {
       return NextResponse.json(
         { error: "No next status available for this order." },
+        { status: 400 }
+      );
+    }
+
+    const paymentStatus = order.payment_status as PaymentStatus;
+
+    if (
+      paymentStatus !== "paid" &&
+      (nextStatus === "completed" || nextStatus === "delivered")
+    ) {
+      return NextResponse.json(
+        { error: "Mark this order as paid before closing it." },
         { status: 400 }
       );
     }

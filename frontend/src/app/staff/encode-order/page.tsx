@@ -13,6 +13,8 @@ type Category =
 
 type MenuCategory = Exclude<Category, "all">;
 type OrderType = "pickup" | "delivery";
+type PaymentMethod = "cash" | "gcash";
+type PaymentStatus = "paid" | "unpaid";
 type Size = "regular";
 
 type MenuItem = {
@@ -86,6 +88,8 @@ export default function StaffEncodeOrderPage() {
     const [search, setSearch] = useState("");
     const [activeCategory, setActiveCategory] = useState<Category>("all");
     const [orderType, setOrderType] = useState<OrderType>("pickup");
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+    const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
     const [walkinName, setWalkinName] = useState("");
     const [deliveryAddress, setDeliveryAddress] = useState("");
     const [deliveryEmail, setDeliveryEmail] = useState("");
@@ -275,6 +279,8 @@ export default function StaffEncodeOrderPage() {
                     deliveryAddress,
                     deliveryEmail,
                     deliveryPhone,
+                    paymentMethod,
+                    paymentStatus,
                 }),
             });
 
@@ -287,6 +293,9 @@ export default function StaffEncodeOrderPage() {
 
             setCart([]);
             setSelectedQuantities({});
+            setOrderType("pickup");
+            setPaymentMethod("cash");
+            setPaymentStatus("paid");
             setWalkinName("");
             setDeliveryAddress("");
             setDeliveryEmail("");
@@ -492,7 +501,13 @@ export default function StaffEncodeOrderPage() {
                             <button
                                 key={type}
                                 type="button"
-                                onClick={() => setOrderType(type)}
+                                onClick={() => {
+                                    setOrderType(type);
+
+                                    if (type === "delivery") {
+                                        setPaymentMethod("cash");
+                                    }
+                                }}
                                 className={`rounded-[16px] border px-4 py-3 font-sans text-sm font-semibold transition ${orderType === type
                                     ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                                     : "border-[#0D2E18] bg-white text-[#0D2E18] hover:bg-[#F7FBF5]"
@@ -559,6 +574,58 @@ export default function StaffEncodeOrderPage() {
                         </div>
                     ) : null}
 
+                    {cart.length > 0 ? (
+                    <div className="mt-4 space-y-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-4">
+                        <p className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-[#684B35]">
+                            Payment
+                        </p>
+
+                        <div>
+                            <p className="font-sans text-sm font-semibold text-[#684B35]">
+                                Method
+                            </p>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                {(orderType === "delivery"
+                                    ? (["cash"] as const)
+                                    : (["cash", "gcash"] as const)
+                                ).map((method) => (
+                                    <button
+                                        key={method}
+                                        type="button"
+                                        onClick={() => setPaymentMethod(method)}
+                                        className={`rounded-full border px-4 py-2.5 font-sans text-sm font-semibold transition ${paymentMethod === method
+                                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                                            : "border-[#D6C6AC] bg-white text-[#684B35]"
+                                            }`}
+                                    >
+                                        {method === "cash" ? "Cash" : "GCash"}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="font-sans text-sm font-semibold text-[#684B35]">
+                                Status
+                            </p>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                {(["paid", "unpaid"] as const).map((status) => (
+                                    <button
+                                        key={status}
+                                        type="button"
+                                        onClick={() => setPaymentStatus(status)}
+                                        className={`rounded-full border px-4 py-2.5 font-sans text-sm font-semibold transition ${paymentStatus === status
+                                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                                            : "border-[#D6C6AC] bg-white text-[#684B35]"
+                                            }`}
+                                    >
+                                        {status === "paid" ? "Paid" : "Unpaid"}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    ) : null}
 
 
                     <div className="mt-5 space-y-4">

@@ -17,7 +17,11 @@ type CreateStaffOrderBody = {
   deliveryAddress?: string;
   deliveryEmail?: string;
   deliveryPhone?: string;
+  paymentMethod?: "cash" | "gcash";
+  paymentStatus?: "unpaid" | "paid";
 };
+
+
 
 
 
@@ -70,6 +74,24 @@ export async function POST(request: Request) {
       );
     }
 
+    const paymentMethod = body.paymentMethod ?? "cash";
+    const paymentStatus = body.paymentStatus ?? "paid";
+
+    if (!["cash", "gcash"].includes(paymentMethod)) {
+      return NextResponse.json(
+        { error: "Invalid payment method." },
+        { status: 400 }
+      );
+    }
+
+    if (!["unpaid", "paid"].includes(paymentStatus)) {
+      return NextResponse.json(
+        { error: "Invalid payment status." },
+        { status: 400 }
+      );
+    }
+
+
     if (body.orderType === "delivery") {
       if (
         !body.deliveryAddress?.trim() ||
@@ -102,8 +124,8 @@ export async function POST(request: Request) {
         customer_id: null,
         order_type: body.orderType,
         status: "pending",
-        payment_method: "cash",
-        payment_status: "paid",
+        payment_method: paymentMethod,
+        payment_status: paymentStatus,
         total_amount: calculatedTotal,
         walkin_name: body.walkinName?.trim() || "Walk-in Customer",
         delivery_address:

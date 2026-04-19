@@ -144,8 +144,14 @@ function getOrderTypeStyle(orderType: "pickup" | "delivery") {
 
 function getPaymentStyle(paymentMethod: "cash" | "gcash") {
   return paymentMethod === "cash"
-    ? "bg-[#E6F7E8] text-[#1E7A3D]"
-    : "bg-[#E8F0FF] text-[#2454C5]";
+    ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
+    : "border border-[#684B35]/20 bg-[#FFF8EF]/70 text-[#684B35]";
+}
+
+function getPaymentStatusStyle(paymentStatus: "unpaid" | "paid") {
+  return paymentStatus === "paid"
+    ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
+    : "border border-[#B76522]/25 bg-[#FFF8EF]/70 text-[#B76522]";
 }
 
 function getStatusBadgeStyle(status: OrderStatus) {
@@ -175,6 +181,15 @@ function getColumnActionStyle(status: OrderStatus) {
   }
 
   return "bg-[#0D2E18] hover:bg-[#123821]";
+}
+
+function requiresPaymentBeforeNextAction(order: StaffOrder) {
+  const nextAction = getNextActionLabel(order.order_type, order.status);
+
+  return (
+    order.payment_status === "unpaid" &&
+    (nextAction === "Complete" || nextAction === "Mark Delivered")
+  );
 }
 
 function formatOrderSummary(order: StaffOrder) {
@@ -216,6 +231,7 @@ export default function StaffPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
   const [error, setError] = useState("");
 
@@ -376,6 +392,35 @@ export default function StaffPage() {
       router.refresh();
     } catch {
       setError("Something went wrong while updating status.");
+    }
+  }
+
+  async function handleMarkPaid(orderId: string) {
+    setError("");
+    setIsMarkingPaid(true);
+
+    try {
+      const response = await fetch("/api/staff/orders/update-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId, action: "mark_paid" }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || "Failed to mark order as paid.");
+        return;
+      }
+
+      await loadOrders();
+      router.refresh();
+    } catch {
+      setError("Something went wrong while marking payment as paid.");
+    } finally {
+      setIsMarkingPaid(false);
     }
   }
 
@@ -559,6 +604,7 @@ export default function StaffPage() {
                       order.order_type,
                       order.status
                     );
+                    const paymentRequired = requiresPaymentBeforeNextAction(order);
 
                     return (
                       <article
@@ -603,6 +649,14 @@ export default function StaffPage() {
                           >
                             {order.payment_method === "cash" ? "Cash" : "GCash"}
                           </span>
+
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                              order.payment_status
+                            )}`}
+                          >
+                            {order.payment_status === "paid" ? "Paid" : "Unpaid"}
+                          </span>
                         </div>
 
                         <div className="mt-4 space-y-1">
@@ -642,13 +696,20 @@ export default function StaffPage() {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (paymentRequired) {
+                                  openOrder(order);
+                                  return;
+                                }
+
                                 handleAdvance(order.id);
                               }}
-                              className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
-                                order.status
-                              )}`}
+                              className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold transition ${
+                                paymentRequired
+                                  ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
+                                  : `text-white ${getColumnActionStyle(order.status)}`
+                              }`}
                             >
-                              {nextAction}
+                              {paymentRequired ? "Mark Paid First" : nextAction}
                             </button>
                           ) : (
                             <span className="font-sans text-sm text-[#8C7A64]">
@@ -732,6 +793,14 @@ export default function StaffPage() {
                     >
                       {order.payment_method === "cash" ? "Cash" : "GCash"}
                     </span>
+
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                        order.payment_status
+                      )}`}
+                    >
+                      {order.payment_status === "paid" ? "Paid" : "Unpaid"}
+                    </span>
                   </div>
 
                   <div className="mt-4 space-y-1">
@@ -805,6 +874,14 @@ export default function StaffPage() {
                   )}`}
                 >
                   {selectedOrder.payment_method === "cash" ? "Cash" : "GCash"}
+                </span>
+
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                    selectedOrder.payment_status
+                  )}`}
+                >
+                  {selectedOrder.payment_status === "paid" ? "Paid" : "Unpaid"}
                 </span>
 
                 <span
@@ -958,6 +1035,18 @@ export default function StaffPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
+                    {selectedOrder.payment_status === "unpaid" &&
+                    !["cancelled"].includes(selectedOrder.status) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkPaid(selectedOrder.id)}
+                        disabled={isMarkingPaid}
+                        className="rounded-[14px] border border-[#0F441D]/25 bg-[#FFF8EF] px-5 py-3 font-sans text-base font-semibold text-[#0F441D] transition hover:bg-[#F4EEE6] disabled:opacity-60"
+                      >
+                        {isMarkingPaid ? "Marking..." : "Mark Paid"}
+                      </button>
+                    ) : null}
+
                     {!["completed", "delivered", "cancelled"].includes(
                       selectedOrder.status
                     ) ? (
@@ -977,16 +1066,27 @@ export default function StaffPage() {
                       <button
                         type="button"
                         onClick={async () => {
+                          if (requiresPaymentBeforeNextAction(selectedOrder)) {
+                            setError("Mark this order as paid before closing it.");
+                            return;
+                          }
+
                           await handleAdvance(selectedOrder.id);
                         }}
-                        className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
-                          selectedOrder.status
-                        )}`}
+                        className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold transition ${
+                          requiresPaymentBeforeNextAction(selectedOrder)
+                            ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
+                            : `text-white ${getColumnActionStyle(
+                                selectedOrder.status
+                              )}`
+                        }`}
                       >
-                        {getNextActionLabel(
-                          selectedOrder.order_type,
-                          selectedOrder.status
-                        )}
+                        {requiresPaymentBeforeNextAction(selectedOrder)
+                          ? "Payment Required"
+                          : getNextActionLabel(
+                              selectedOrder.order_type,
+                              selectedOrder.status
+                            )}
                       </button>
                     ) : (
                       <span className="rounded-[14px] bg-[#F4EEE6] px-4 py-3 font-sans text-sm font-semibold text-[#684B35]">
