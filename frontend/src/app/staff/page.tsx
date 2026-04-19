@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, RefreshCw, Search, Truck, X } from "lucide-react";
 
@@ -46,16 +46,18 @@ type StaffOrder = {
 };
 
 const fallbackOrders: StaffOrder[] = [];
+const finalStatuses: OrderStatus[] = ["completed", "delivered", "cancelled"];
+
 
 const boardColumns: Array<{
   key: OrderStatus;
   label: string;
 }> = [
-  { key: "pending", label: "Pending" },
-  { key: "preparing", label: "Preparing" },
-  { key: "ready", label: "Ready" },
-  { key: "out_for_delivery", label: "Out for Delivery" },
-];
+    { key: "pending", label: "Pending" },
+    { key: "preparing", label: "Preparing" },
+    { key: "ready", label: "Ready" },
+    { key: "out_for_delivery", label: "Out for Delivery" },
+  ];
 
 function formatOrderCode(id: string) {
   return `#${id.slice(0, 8).toUpperCase()}`;
@@ -78,8 +80,9 @@ function formatDateTime(value: string) {
 }
 
 function peso(value: number) {
-  return `₱${Math.round(value)}`;
+  return `\u20B1${Math.round(value)}`;
 }
+
 
 function formatStatus(status: OrderStatus) {
   switch (status) {
@@ -178,7 +181,7 @@ function formatOrderSummary(order: StaffOrder) {
   return order.order_items
     .map((item) => {
       const label = item.menu_items?.name ?? "Menu item";
-      return `${label} × ${item.quantity}`;
+      return `${label} x ${item.quantity}`;
     })
     .filter(Boolean);
 }
@@ -217,18 +220,20 @@ export default function StaffPage() {
   const [error, setError] = useState("");
 
   const activeOrders = useMemo(() => {
-    return orders.filter(
-      (order) => !["completed", "delivered", "cancelled"].includes(order.status)
-    );
+    return orders.filter((order) => !finalStatuses.includes(order.status));
   }, [orders]);
 
   const historyOrders = useMemo(() => {
     return orders
-      .filter((order) =>
-        ["completed", "delivered", "cancelled"].includes(order.status)
+      .filter((order) => finalStatuses.includes(order.status))
+      .sort(
+        (first, second) =>
+          new Date(second.ordered_at).getTime() -
+          new Date(first.ordered_at).getTime()
       )
       .slice(0, 8);
   }, [orders]);
+
 
   const filteredOrders = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -243,12 +248,14 @@ export default function StaffPage() {
         .join(" ")
         .toLowerCase();
       const orderType = order.order_type.toLowerCase();
+      const customerName = getOrderDisplayName(order).toLowerCase();
 
       const matchesSearch =
         !keyword ||
         orderCode.includes(keyword) ||
         itemNames.includes(keyword) ||
-        orderType.includes(keyword);
+        orderType.includes(keyword) ||
+        customerName.includes(keyword);
 
       return matchesType && matchesSearch;
     });
@@ -277,6 +284,31 @@ export default function StaffPage() {
     };
   }, [activeOrders]);
 
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  function formatNameFromEmail(email: string | null) {
+    if (!email) return null;
+
+    const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+
+    if (!name) return null;
+
+    return name
+      .split(" ")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function getOrderDisplayName(order: StaffOrder) {
+    return (
+      order.walkin_name?.trim() ||
+      formatNameFromEmail(order.delivery_email) ||
+      (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
+    );
+  }
+
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
     setIsConfirmingCancel(false);
@@ -302,6 +334,7 @@ export default function StaffPage() {
         setError(result.error || "Failed to load staff orders.");
         return;
       }
+
 
       setOrders(result.orders ?? []);
       setIsBootstrapped(true);
@@ -464,17 +497,16 @@ export default function StaffPage() {
               key={value}
               type="button"
               onClick={() => setOrderFilter(value)}
-              className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${
-                orderFilter === value
-                  ? "bg-[#0D2E18] text-[#FFF0DA]"
-                  : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
-              }`}
+              className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${orderFilter === value
+                ? "bg-[#0D2E18] text-[#FFF0DA]"
+                : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
+                }`}
             >
               {value === "all"
                 ? "All Orders"
                 : value === "pickup"
-                ? "Pickup"
-                : "Delivery"}
+                  ? "Pickup"
+                  : "Delivery"}
             </button>
           ))}
         </div>
@@ -535,9 +567,14 @@ export default function StaffPage() {
                         className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <p className="font-sans text-[1.9rem] font-bold leading-none text-[#0D2E18]">
-                            {formatOrderCode(order.id)}
-                          </p>
+                          <div>
+                            <p className="font-sans text-[1.9rem] font-bold leading-none text-[#0D2E18]">
+                              {formatOrderCode(order.id)}
+                            </p>
+                            <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                              {getOrderDisplayName(order)}
+                            </p>
+                          </div>
 
                           <span
                             className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
@@ -661,9 +698,14 @@ export default function StaffPage() {
                   className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <p className="font-sans text-[1.5rem] font-bold leading-none text-[#0D2E18]">
-                      {formatOrderCode(order.id)}
-                    </p>
+                    <div>
+                      <p className="font-sans text-[1.5rem] font-bold leading-none text-[#0D2E18]">
+                        {formatOrderCode(order.id)}
+                      </p>
+                      <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                        {getOrderDisplayName(order)}
+                      </p>
+                    </div>
 
                     <span
                       className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
@@ -813,13 +855,13 @@ export default function StaffPage() {
                 </div>
               ) : null}
 
-              {selectedOrder.walkin_name ? (
+              {getOrderDisplayName(selectedOrder) ? (
                 <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
                     Walk-in Customer
                   </p>
                   <p className="mt-2 font-sans text-base font-semibold text-[#0D2E18]">
-                    {selectedOrder.walkin_name}
+                    {getOrderDisplayName(selectedOrder)}
                   </p>
                 </div>
               ) : null}

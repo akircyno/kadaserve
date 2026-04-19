@@ -13,6 +13,7 @@ type CreateStaffOrderBody = {
   orderType: "pickup" | "delivery";
   items: StaffCartItem[];
   totalAmount: number;
+  walkinName?: string;
 };
 
 function normalizeSize(size: StaffCartItem["size"]) {
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
         payment_method: "cash",
         payment_status: "paid",
         total_amount: calculatedTotal,
-        walkin_name: "Walk-in Customer",
+        walkin_name: body.walkinName?.trim() || "Walk-in Customer",
       })
       .select("id")
       .single();
