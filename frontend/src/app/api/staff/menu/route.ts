@@ -17,43 +17,165 @@ type StaffMenuCategory =
   | "premium-blends"
   | "best-deals";
 
-const nonCoffeeItems = ["choco milk", "strawberry latte", "americano"];
-const pastriesItems = ["choco chip cookie", "red velvet cookie"];
-const latteSeriesItems = [
-  "matcha latte",
-  "french vanilla latte",
-  "hazelnut latte",
-  "brown sugar latte",
-  "spanish latte",
+type ApprovedMenuItem = {
+  name: string;
+  category: StaffMenuCategory;
+  aliases: string[];
+};
+
+const categoryOrder: StaffMenuCategory[] = [
+  "non-coffee",
+  "pastries",
+  "latte-series",
+  "premium-blends",
+  "best-deals",
 ];
-const premiumBlendItems = [
-  "strawberry matcha",
-  "macchiato",
-  "mocha",
-  "signature blend",
+
+const approvedMenuItems: ApprovedMenuItem[] = [
+  {
+    name: "Choco Milk",
+    category: "non-coffee",
+    aliases: ["choco milk", "chocolate milk"],
+  },
+  {
+    name: "Strawberry Latte",
+    category: "non-coffee",
+    aliases: ["strawberry latte"],
+  },
+  {
+    name: "Americano",
+    category: "non-coffee",
+    aliases: ["americano"],
+  },
+  {
+    name: "Choco Chil Cookie",
+    category: "pastries",
+    aliases: [
+      "choco chil cookie",
+      "choco chip cookie",
+      "chocolate chip cookie",
+      "choco cookie",
+    ],
+  },
+  {
+    name: "Red Velvet Cookie",
+    category: "pastries",
+    aliases: ["red velvet cookie"],
+  },
+  {
+    name: "Matcha Latte",
+    category: "latte-series",
+    aliases: ["matcha latte"],
+  },
+  {
+    name: "French Vanilla Latte",
+    category: "latte-series",
+    aliases: ["french vanilla latte"],
+  },
+  {
+    name: "Hazelnut Latte",
+    category: "latte-series",
+    aliases: ["hazelnut latte"],
+  },
+  {
+    name: "Brown Sugar Latte",
+    category: "latte-series",
+    aliases: ["brown sugar latte"],
+  },
+  {
+    name: "Spanish Latte",
+    category: "latte-series",
+    aliases: ["spanish latte"],
+  },
+  {
+    name: "Strawberry Matcha",
+    category: "premium-blends",
+    aliases: ["strawberry matcha"],
+  },
+  {
+    name: "Macchiato",
+    category: "premium-blends",
+    aliases: ["macchiato"],
+  },
+  {
+    name: "Mocha",
+    category: "premium-blends",
+    aliases: ["mocha"],
+  },
+  {
+    name: "Signature Blend",
+    category: "premium-blends",
+    aliases: ["signature blend"],
+  },
+  {
+    name: "Premium x Lattee",
+    category: "best-deals",
+    aliases: ["premium x lattee", "premium x latte"],
+  },
+  {
+    name: "Premium x Pastries",
+    category: "best-deals",
+    aliases: ["premium x pastries"],
+  },
+  {
+    name: "Strawberry Matcha",
+    category: "best-deals",
+    aliases: ["strawberry matcha", "strawberry matcha deal", "best strawberry matcha"],
+  },
+  {
+    name: "Patries",
+    category: "best-deals",
+    aliases: ["patries", "pastries", "pastries deal", "pastry deal"],
+  },
 ];
-const bestDealItems = ["premium x latte", "premium x pastries", "pastries"];
 
-function normalizeCategory(
-  category: string | null,
-  name: string
-): StaffMenuCategory {
-  const categoryValue = category?.trim().toLowerCase() ?? "";
-  const nameValue = name.trim().toLowerCase();
+function normalizeText(value: string) {
+  return value.trim().toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ");
+}
 
-  if (categoryValue.includes("best")) return "best-deals";
-  if (categoryValue.includes("pastr")) return "pastries";
-  if (categoryValue.includes("latte")) return "latte-series";
-  if (categoryValue.includes("premium")) return "premium-blends";
-  if (categoryValue.includes("non")) return "non-coffee";
+function normalizeCategoryValue(value: string | null) {
+  return normalizeText(value ?? "");
+}
 
-  if (bestDealItems.includes(nameValue)) return "best-deals";
-  if (pastriesItems.includes(nameValue)) return "pastries";
-  if (latteSeriesItems.includes(nameValue)) return "latte-series";
-  if (premiumBlendItems.includes(nameValue)) return "premium-blends";
-  if (nonCoffeeItems.includes(nameValue)) return "non-coffee";
+function findApprovedMenuItem(
+  rowName: string,
+  rowCategory: string | null
+): ApprovedMenuItem | null {
+  const normalizedName = normalizeText(rowName);
+  const normalizedCategory = normalizeCategoryValue(rowCategory);
+  const exactMatches = approvedMenuItems.filter((item) =>
+    item.aliases.map(normalizeText).includes(normalizedName)
+  );
 
-  return "premium-blends";
+  if (exactMatches.length === 0) {
+    return null;
+  }
+
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  const categoryMatch = exactMatches.find((item) => {
+    if (item.category === "non-coffee") {
+      return normalizedCategory.includes("non");
+    }
+
+    if (item.category === "pastries") {
+      return normalizedCategory.includes("pastr");
+    }
+
+    if (item.category === "latte-series") {
+      return normalizedCategory.includes("latte");
+    }
+
+    if (item.category === "premium-blends") {
+      return normalizedCategory.includes("premium");
+    }
+
+    return normalizedCategory.includes("best");
+  });
+
+  return categoryMatch ?? exactMatches[0];
 }
 
 export async function GET() {
@@ -96,14 +218,52 @@ export async function GET() {
       return NextResponse.json({ error: menuError.message }, { status: 500 });
     }
 
-    const normalizedMenuItems = ((menuItems ?? []) as MenuItemRow[]).map(
-      (item) => ({
-        id: item.id,
-        name: item.name,
-        price: item.base_price,
-        category: normalizeCategory(item.category, item.name),
-        imageUrl: item.image_url,
-      })
+    const approvedItems = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        price: number;
+        category: StaffMenuCategory;
+        imageUrl: string | null;
+      }
+    >();
+
+    for (const row of (menuItems ?? []) as MenuItemRow[]) {
+      const approvedItem = findApprovedMenuItem(row.name, row.category);
+
+      if (!approvedItem) {
+        continue;
+      }
+
+      const dedupeKey = `${approvedItem.category}:${normalizeText(
+        approvedItem.name
+      )}`;
+
+      if (approvedItems.has(dedupeKey)) {
+        continue;
+      }
+
+      approvedItems.set(dedupeKey, {
+        id: row.id,
+        name: approvedItem.name,
+        price: row.base_price,
+        category: approvedItem.category,
+        imageUrl: row.image_url,
+      });
+    }
+
+    const normalizedMenuItems = Array.from(approvedItems.values()).sort(
+      (first, second) => {
+        const firstCategoryIndex = categoryOrder.indexOf(first.category);
+        const secondCategoryIndex = categoryOrder.indexOf(second.category);
+
+        if (firstCategoryIndex !== secondCategoryIndex) {
+          return firstCategoryIndex - secondCategoryIndex;
+        }
+
+        return first.name.localeCompare(second.name);
+      }
     );
 
     return NextResponse.json({ menuItems: normalizedMenuItems });
