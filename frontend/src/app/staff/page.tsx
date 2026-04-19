@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, LogOut, RefreshCw, Search, Truck, X } from "lucide-react";
+import { ClipboardList, RefreshCw, Search, Truck, X } from "lucide-react";
 
 type OrderStatus =
   | "pending"
@@ -212,7 +212,6 @@ export default function StaffPage() {
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
   const [error, setError] = useState("");
@@ -377,21 +376,6 @@ export default function StaffPage() {
     }
   }
 
-  async function handleLogout() {
-    setIsLoggingOut(true);
-
-    try {
-      await fetch("/api/logout", {
-        method: "POST",
-      });
-
-      router.push("/login");
-      router.refresh();
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
       <header className="border-b border-[#DCCFB8] bg-white">
@@ -424,16 +408,6 @@ export default function StaffPage() {
             >
               <RefreshCw size={16} />
               {isLoading ? "Refreshing..." : "Refresh Orders"}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="inline-flex items-center gap-2 rounded-full border border-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#0D2E18] disabled:opacity-60"
-            >
-              <LogOut size={16} />
-              {isLoggingOut ? "Logging out..." : "Logout"}
             </button>
 
             <div className="flex items-center gap-3">

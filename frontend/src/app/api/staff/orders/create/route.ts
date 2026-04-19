@@ -1,0 +1,141 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+type StaffCartItem = {
+  id: string;
+  name: string;
+  price: number;
+  size: "regular" | "small" | "large";
+  quantity: number;
+};
+
+type CreateStaffOrderBody = {
+  orderType: "pickup" | "delivery";
+  items: StaffCartItem[];
+  totalAmount: number;
+};
+
+function normalizeSize(size: StaffCartItem["size"]) {
+  if (size === "regular") return "small";
+
+  return size;
+}
+
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError) {
+      return NextResponse.json(
+        { error: profileError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!profile || !["staff", "admin"].includes(profile.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = (await request.json()) as CreateStaffOrderBody;
+
+    if (!body.items || body.items.length === 0) {
+      return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
+    }
+
+    if (!["pickup", "delivery"].includes(body.orderType)) {
+      return NextResponse.json(
+        { error: "Invalid order type." },
+        { status: 400 }
+      );
+    }
+
+    const calculatedTotal = body.items.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    if (calculatedTotal !== body.totalAmount) {
+      return NextResponse.json(
+        { error: "Order total does not match cart total." },
+        { status: 400 }
+      );
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        customer_id: null,
+        order_type: body.orderType,
+        status: "pending",
+        payment_method: "cash",
+        payment_status: "paid",
+        total_amount: calculatedTotal,
+        walkin_name: "Walk-in Customer",
+      })
+      .select("id")
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json(
+        { error: orderError?.message || "Failed to create order." },
+        { status: 500 }
+      );
+    }
+
+    const orderItems = body.items.map((item) => ({
+      order_id: order.id,
+      menu_item_id: item.id,
+      quantity: item.quantity,
+      unit_price: item.price,
+      sugar_level: 100,
+      ice_level: "regular",
+      size: normalizeSize(item.size),
+      temperature: "iced",
+      addons: [],
+      special_instructions: null,
+    }));
+
+    const { error: itemsError } = await supabase
+      .from("order_items")
+      .insert(orderItems);
+
+    if (itemsError) {
+      await supabase.from("orders").delete().eq("id", order.id);
+
+      return NextResponse.json(
+        { error: itemsError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      orderId: order.id,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while creating the staff order.",
+      },
+      { status: 500 }
+    );
+  }
+}

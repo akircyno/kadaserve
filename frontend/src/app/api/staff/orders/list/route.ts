@@ -31,39 +31,39 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { data: orders, error: ordersError } = await supabase
-      .from("orders")
-      .select(
-        `
-          id,
-          order_type,
-          status,
-          payment_method,
-          payment_status,
-          total_amount,
-          ordered_at,
-          walkin_name,
-          delivery_address,
-          delivery_email,
-          delivery_phone,
-          order_items (
-            id,
-            quantity,
-            unit_price,
-            sugar_level,
-            ice_level,
-            size,
-            temperature,
-            addons,
-            special_instructions,
-            menu_items (
-              name
-            )
-          )
-        `
+const { data: orders, error: ordersError } = await supabase
+  .from("orders")
+  .select(
+    `
+      id,
+      order_type,
+      status,
+      payment_method,
+      payment_status,
+      total_amount,
+      ordered_at,
+      walkin_name,
+      delivery_address,
+      delivery_email,
+      delivery_phone,
+      order_items (
+        id,
+        quantity,
+        unit_price,
+        sugar_level,
+        ice_level,
+        size,
+        temperature,
+        addons,
+        special_instructions,
+        menu_items (
+          name
+        )
       )
-      .not("status", "in", "(completed,delivered,cancelled)")
-      .order("ordered_at", { ascending: true });
+    `
+  )
+  .order("ordered_at", { ascending: false });
+
 
     if (ordersError) {
       return NextResponse.json(
