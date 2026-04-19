@@ -2,16 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ClipboardList,
-  LayoutGrid,
-  LogOut,
-  Plus,
-  RefreshCw,
-  Search,
-  Truck,
-  X,
-} from "lucide-react";
+import { ClipboardList, LogOut, RefreshCw, Search, Truck, X } from "lucide-react";
 
 type OrderStatus =
   | "pending"
@@ -118,7 +109,7 @@ function getNextActionLabel(
   if (orderType === "pickup") {
     switch (status) {
       case "pending":
-        return "Start";
+        return "Start Preparing";
       case "preparing":
         return "Mark Ready";
       case "ready":
@@ -130,13 +121,13 @@ function getNextActionLabel(
 
   switch (status) {
     case "pending":
-      return "Start";
+      return "Start Preparing";
     case "preparing":
       return "Mark Ready";
     case "ready":
       return "Dispatch";
     case "out_for_delivery":
-      return "Delivered";
+      return "Mark Delivered";
     default:
       return null;
   }
@@ -164,6 +155,12 @@ function getStatusBadgeStyle(status: OrderStatus) {
       return "bg-[#FFF0DA] text-[#684B35]";
     case "out_for_delivery":
       return "bg-[#FFF0E5] text-[#B76522]";
+    case "completed":
+      return "bg-[#E6F2E8] text-[#1E7A3D]";
+    case "delivered":
+      return "bg-[#E8F0FF] text-[#2454C5]";
+    case "cancelled":
+      return "bg-[#FFF1EC] text-[#C55432]";
     default:
       return "bg-[#F4EEE6] text-[#684B35]";
   }
@@ -193,6 +190,19 @@ function formatAddonLabel(value: string) {
     .join(" ");
 }
 
+function getFinalStatusMessage(status: OrderStatus) {
+  switch (status) {
+    case "completed":
+      return "This pickup order has been completed.";
+    case "delivered":
+      return "This delivery order has been delivered.";
+    case "cancelled":
+      return "This order has been cancelled.";
+    default:
+      return null;
+  }
+}
+
 export default function StaffPage() {
   const router = useRouter();
 
@@ -203,12 +213,22 @@ export default function StaffPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
   const [error, setError] = useState("");
 
   const activeOrders = useMemo(() => {
     return orders.filter(
       (order) => !["completed", "delivered", "cancelled"].includes(order.status)
     );
+  }, [orders]);
+
+  const historyOrders = useMemo(() => {
+    return orders
+      .filter((order) =>
+        ["completed", "delivered", "cancelled"].includes(order.status)
+      )
+      .slice(0, 8);
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
@@ -257,6 +277,16 @@ export default function StaffPage() {
       ).length,
     };
   }, [activeOrders]);
+
+  function openOrder(order: StaffOrder) {
+    setSelectedOrder(order);
+    setIsConfirmingCancel(false);
+  }
+
+  function closeOrder() {
+    setSelectedOrder(null);
+    setIsConfirmingCancel(false);
+  }
 
   async function loadOrders() {
     setIsLoading(true);
@@ -317,6 +347,36 @@ export default function StaffPage() {
     }
   }
 
+  async function handleCancel(orderId: string) {
+    setError("");
+    setIsCancelling(true);
+
+    try {
+      const response = await fetch("/api/staff/orders/cancel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || "Failed to cancel order.");
+        return;
+      }
+
+      closeOrder();
+      await loadOrders();
+      router.refresh();
+    } catch {
+      setError("Something went wrong while cancelling the order.");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
   async function handleLogout() {
     setIsLoggingOut(true);
 
@@ -334,302 +394,363 @@ export default function StaffPage() {
 
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <div className="flex min-h-screen">
-        <aside className="flex w-[76px] shrink-0 flex-col justify-between bg-[#0D2E18] px-3 py-4">
-          <div className="space-y-5">
-            <button
-              type="button"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFFFFF] text-[#0D2E18]"
-            >
-              <Truck size={22} />
-            </button>
-
-            <button
-              type="button"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFFFFF]/14 text-[#FFF0DA]"
-            >
-              <LayoutGrid size={20} />
-            </button>
-
-            <button
-              type="button"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl text-[#FFF0DA]/75"
-            >
-              <Plus size={22} />
-            </button>
+      <header className="border-b border-[#DCCFB8] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+          <div>
+            <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
+              Order Queue
+            </p>
+            <h1 className="font-sans text-4xl font-bold text-[#0D2E18]">
+              Active orders
+            </h1>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="flex h-12 w-12 items-center justify-center rounded-2xl text-[#FFF0DA]/80"
-          >
-            <LogOut size={20} />
-          </button>
-        </aside>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex min-w-[260px] items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-4 py-3">
+              <Search size={18} className="text-[#8C7A64]" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search orders..."
+                className="w-full bg-transparent font-sans text-base text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+              />
+            </label>
 
-        <section className="min-w-0 flex-1">
-          <header className="border-b border-[#DCCFB8] bg-[#FFFFFF]">
-            <div className="flex flex-wrap items-start justify-between gap-4 px-6 py-5">
+            <button
+              type="button"
+              onClick={loadOrders}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#FFF0DA] disabled:opacity-60"
+            >
+              <RefreshCw size={16} />
+              {isLoading ? "Refreshing..." : "Refresh Orders"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="inline-flex items-center gap-2 rounded-full border border-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#0D2E18] disabled:opacity-60"
+            >
+              <LogOut size={16} />
+              {isLoggingOut ? "Logging out..." : "Logout"}
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0F441D] font-sans text-lg font-bold text-[#FFF0DA]">
+                ST
+              </div>
               <div>
-                <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
-                  Order Queue
+                <p className="font-sans text-lg font-semibold text-[#0D2E18]">
+                  Staff User
                 </p>
-                <h1 className="font-sans text-4xl font-bold text-[#0D2E18]">
-                  Active orders
-                </h1>
+                <p className="font-sans text-sm text-[#8C7A64]">Staff</p>
               </div>
-
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="flex min-w-[240px] items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-4 py-3">
-                  <Search size={18} className="text-[#8C7A64]" />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search orders..."
-                    className="w-full bg-transparent font-sans text-base text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
-                  />
-                </label>
-
-                <button
-                  type="button"
-                  onClick={loadOrders}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#FFF0DA] disabled:opacity-60"
-                >
-                  <RefreshCw size={16} />
-                  {isLoading ? "Refreshing..." : "Refresh Orders"}
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0F441D] font-sans text-lg font-bold text-[#FFF0DA]">
-                    ST
-                  </div>
-                  <div>
-                    <p className="font-sans text-lg font-semibold text-[#0D2E18]">
-                      Staff User
-                    </p>
-                    <p className="font-sans text-sm text-[#8C7A64]">Staff</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <div className="px-6 py-5">
-            <div className="grid gap-4 lg:grid-cols-4">
-              <div className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFFFF] p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-                <p className="font-sans text-sm text-[#8C7A64]">Pending</p>
-                <p className="mt-2 font-sans text-5xl font-semibold text-[#B44C1E]">
-                  {summary.pending}
-                </p>
-              </div>
-
-              <div className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFFFF] p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-                <p className="font-sans text-sm text-[#8C7A64]">Preparing</p>
-                <p className="mt-2 font-sans text-5xl font-semibold text-[#B76522]">
-                  {summary.preparing}
-                </p>
-              </div>
-
-              <div className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFFFF] p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-                <p className="font-sans text-sm text-[#8C7A64]">Ready</p>
-                <p className="mt-2 font-sans text-5xl font-semibold text-[#0F7A40]">
-                  {summary.ready}
-                </p>
-              </div>
-
-              <div className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFFFF] p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-                <p className="font-sans text-sm text-[#8C7A64]">
-                  Out for delivery
-                </p>
-                <p className="mt-2 font-sans text-5xl font-semibold text-[#684B35]">
-                  {summary.outForDelivery}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              {(["all", "pickup", "delivery"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setOrderFilter(value)}
-                  className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${
-                    orderFilter === value
-                      ? "bg-[#0D2E18] text-[#FFF0DA]"
-                      : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
-                  }`}
-                >
-                  {value === "all"
-                    ? "All Orders"
-                    : value === "pickup"
-                    ? "Pickup"
-                    : "Delivery"}
-                </button>
-              ))}
-            </div>
-
-            {error ? (
-              <div className="mt-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
-                {error}
-              </div>
-            ) : null}
-
-            {!isBootstrapped ? (
-              <div className="mt-5 rounded-[24px] border border-[#DCCFB8] bg-[#FFFFFF] p-6 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-                <p className="font-sans text-xl font-semibold text-[#0D2E18]">
-                  Load staff orders
-                </p>
-                <p className="mt-2 font-sans text-[#6E5D49]">
-                  Click Refresh Orders to fetch live active orders from Supabase.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid gap-4 xl:grid-cols-4">
-              {boardColumns.map((column) => {
-                const columnOrders = groupedOrders[column.key] ?? [];
-
-                return (
-                  <section
-                    key={column.key}
-                    className="rounded-[24px] border border-[#DCCFB8] bg-[#F9F1E4] p-4"
-                  >
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <h2 className="font-sans text-[1.35rem] font-semibold uppercase tracking-[0.06em] text-[#8C7A64]">
-                        {column.label}
-                      </h2>
-                      <span className="rounded-full bg-[#EFE3CF] px-3 py-1 font-sans text-sm font-semibold text-[#684B35]">
-                        {columnOrders.length}
-                      </span>
-                    </div>
-
-                    <div className="space-y-4">
-                      {columnOrders.length === 0 ? (
-                        <div className="rounded-[20px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
-                          No orders here
-                        </div>
-                      ) : null}
-
-                      {columnOrders.map((order) => {
-                        const items = formatOrderSummary(order);
-                        const nextAction = getNextActionLabel(
-                          order.order_type,
-                          order.status
-                        );
-
-                        return (
-                          <article
-                            key={order.id}
-                            onClick={() => setSelectedOrder(order)}
-                            className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-[#FFFFFF] p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <p className="font-sans text-[1.9rem] font-bold leading-none text-[#0D2E18]">
-                                {formatOrderCode(order.id)}
-                              </p>
-
-                              <span
-                                className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
-                                  order.status
-                                )}`}
-                              >
-                                {formatStatus(order.status)}
-                              </span>
-                            </div>
-
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
-                                  order.order_type
-                                )}`}
-                              >
-                                {order.order_type === "pickup"
-                                  ? "Pickup"
-                                  : "Delivery"}
-                              </span>
-                              <span
-                                className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
-                                  order.payment_method
-                                )}`}
-                              >
-                                {order.payment_method === "cash"
-                                  ? "Cash"
-                                  : "GCash"}
-                              </span>
-                            </div>
-
-                            <div className="mt-4 space-y-1">
-                              {items.map((item) => (
-                                <p
-                                  key={item}
-                                  className="font-sans text-[1.15rem] text-[#3C332A]"
-                                >
-                                  {item}
-                                </p>
-                              ))}
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between gap-3">
-                              <p className="font-sans text-lg text-[#9A856C]">
-                                {formatTime(order.ordered_at)}
-                              </p>
-                              <p className="font-sans text-2xl font-semibold text-[#684B35]">
-                                {peso(order.total_amount)}
-                              </p>
-                            </div>
-
-                            <div className="mt-5 flex items-center justify-between gap-3">
-                              <div className="inline-flex items-center gap-2 font-sans text-sm text-[#6E5D49]">
-                                {order.order_type === "delivery" ? (
-                                  <Truck size={16} />
-                                ) : (
-                                  <ClipboardList size={16} />
-                                )}
-                                {order.order_type === "delivery"
-                                  ? "Delivery flow"
-                                  : "Pickup flow"}
-                              </div>
-
-                              {nextAction ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleAdvance(order.id);
-                                  }}
-                                  className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
-                                    order.status
-                                  )}`}
-                                >
-                                  {nextAction}
-                                </button>
-                              ) : (
-                                <span className="font-sans text-sm text-[#8C7A64]">
-                                  No next action
-                                </span>
-                              )}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </section>
-                );
-              })}
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      </header>
+
+      <section className="px-6 py-5">
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
+            <p className="font-sans text-sm text-[#8C7A64]">Pending</p>
+            <p className="mt-2 font-sans text-5xl font-semibold text-[#B44C1E]">
+              {summary.pending}
+            </p>
+          </div>
+
+          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
+            <p className="font-sans text-sm text-[#8C7A64]">Preparing</p>
+            <p className="mt-2 font-sans text-5xl font-semibold text-[#B76522]">
+              {summary.preparing}
+            </p>
+          </div>
+
+          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
+            <p className="font-sans text-sm text-[#8C7A64]">Ready</p>
+            <p className="mt-2 font-sans text-5xl font-semibold text-[#0F7A40]">
+              {summary.ready}
+            </p>
+          </div>
+
+          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
+            <p className="font-sans text-sm text-[#8C7A64]">
+              Out for delivery
+            </p>
+            <p className="mt-2 font-sans text-5xl font-semibold text-[#684B35]">
+              {summary.outForDelivery}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          {(["all", "pickup", "delivery"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setOrderFilter(value)}
+              className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${
+                orderFilter === value
+                  ? "bg-[#0D2E18] text-[#FFF0DA]"
+                  : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
+              }`}
+            >
+              {value === "all"
+                ? "All Orders"
+                : value === "pickup"
+                ? "Pickup"
+                : "Delivery"}
+            </button>
+          ))}
+        </div>
+
+        {error ? (
+          <div className="mt-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
+            {error}
+          </div>
+        ) : null}
+
+        {!isBootstrapped ? (
+          <div className="mt-5 rounded-[24px] border border-[#DCCFB8] bg-white p-6 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
+            <p className="font-sans text-xl font-semibold text-[#0D2E18]">
+              Load staff orders
+            </p>
+            <p className="mt-2 font-sans text-[#6E5D49]">
+              Click Refresh Orders to fetch live active orders from Supabase.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-4">
+          {boardColumns.map((column) => {
+            const columnOrders = groupedOrders[column.key] ?? [];
+
+            return (
+              <section
+                key={column.key}
+                className="rounded-[24px] border border-[#DCCFB8] bg-[#F9F1E4] p-4"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="font-sans text-[1.35rem] font-semibold uppercase tracking-[0.06em] text-[#8C7A64]">
+                    {column.label}
+                  </h2>
+                  <span className="rounded-full bg-[#EFE3CF] px-3 py-1 font-sans text-sm font-semibold text-[#684B35]">
+                    {columnOrders.length}
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {columnOrders.length === 0 ? (
+                    <div className="rounded-[20px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+                      No orders here
+                    </div>
+                  ) : null}
+
+                  {columnOrders.map((order) => {
+                    const items = formatOrderSummary(order);
+                    const nextAction = getNextActionLabel(
+                      order.order_type,
+                      order.status
+                    );
+
+                    return (
+                      <article
+                        key={order.id}
+                        onClick={() => openOrder(order)}
+                        className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <p className="font-sans text-[1.9rem] font-bold leading-none text-[#0D2E18]">
+                            {formatOrderCode(order.id)}
+                          </p>
+
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
+                              order.status
+                            )}`}
+                          >
+                            {formatStatus(order.status)}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
+                              order.order_type
+                            )}`}
+                          >
+                            {order.order_type === "pickup"
+                              ? "Pickup"
+                              : "Delivery"}
+                          </span>
+
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
+                              order.payment_method
+                            )}`}
+                          >
+                            {order.payment_method === "cash" ? "Cash" : "GCash"}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 space-y-1">
+                          {items.map((item, index) => (
+                            <p
+                              key={`${order.id}-${index}-${item}`}
+                              className="font-sans text-[1.15rem] text-[#3C332A]"
+                            >
+                              {item}
+                            </p>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <p className="font-sans text-lg text-[#9A856C]">
+                            {formatTime(order.ordered_at)}
+                          </p>
+                          <p className="font-sans text-2xl font-semibold text-[#684B35]">
+                            {peso(order.total_amount)}
+                          </p>
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-between gap-3">
+                          <div className="inline-flex items-center gap-2 font-sans text-sm text-[#6E5D49]">
+                            {order.order_type === "delivery" ? (
+                              <Truck size={16} />
+                            ) : (
+                              <ClipboardList size={16} />
+                            )}
+                            {order.order_type === "delivery"
+                              ? "Delivery flow"
+                              : "Pickup flow"}
+                          </div>
+
+                          {nextAction ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleAdvance(order.id);
+                              }}
+                              className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
+                                order.status
+                              )}`}
+                            >
+                              {nextAction}
+                            </button>
+                          ) : (
+                            <span className="font-sans text-sm text-[#8C7A64]">
+                              No next action
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="mt-8 rounded-[24px] border border-[#DCCFB8] bg-[#F9F1E4] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
+                Order History
+              </p>
+              <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
+                Recent finished and cancelled orders
+              </h2>
+            </div>
+
+            <span className="rounded-full bg-[#EFE3CF] px-3 py-1 font-sans text-sm font-semibold text-[#684B35]">
+              {historyOrders.length} shown
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {historyOrders.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+                No finished orders yet
+              </div>
+            ) : null}
+
+            {historyOrders.map((order) => {
+              const items = formatOrderSummary(order);
+
+              return (
+                <article
+                  key={order.id}
+                  onClick={() => openOrder(order)}
+                  className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <p className="font-sans text-[1.5rem] font-bold leading-none text-[#0D2E18]">
+                      {formatOrderCode(order.id)}
+                    </p>
+
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
+                        order.status
+                      )}`}
+                    >
+                      {formatStatus(order.status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
+                        order.order_type
+                      )}`}
+                    >
+                      {order.order_type === "pickup" ? "Pickup" : "Delivery"}
+                    </span>
+
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
+                        order.payment_method
+                      )}`}
+                    >
+                      {order.payment_method === "cash" ? "Cash" : "GCash"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-1">
+                    {items.slice(0, 2).map((item, index) => (
+                      <p
+                        key={`${order.id}-${index}-${item}`}
+                        className="font-sans text-[1rem] text-[#3C332A]"
+                      >
+                        {item}
+                      </p>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <p className="font-sans text-sm text-[#9A856C]">
+                      {formatDateTime(order.ordered_at)}
+                    </p>
+                    <p className="font-sans text-xl font-semibold text-[#684B35]">
+                      {peso(order.total_amount)}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {selectedOrder ? (
         <>
           <div
             className="fixed inset-0 z-40 bg-[#0D2E18]/35"
-            onClick={() => setSelectedOrder(null)}
+            onClick={closeOrder}
           />
+
           <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
             <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-6 py-5">
               <div>
@@ -643,8 +764,8 @@ export default function StaffPage() {
 
               <button
                 type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="rounded-full bg-[#FFFFFF] p-2 text-[#0D2E18]"
+                onClick={closeOrder}
+                className="rounded-full bg-white p-2 text-[#0D2E18]"
               >
                 <X size={20} />
               </button>
@@ -680,14 +801,14 @@ export default function StaffPage() {
               </div>
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[20px] border border-[#DCCFB8] bg-[#FFFFFF] p-4">
+                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-sm text-[#8C7A64]">Placed at</p>
                   <p className="mt-2 font-sans text-lg font-semibold text-[#0D2E18]">
                     {formatDateTime(selectedOrder.ordered_at)}
                   </p>
                 </div>
 
-                <div className="rounded-[20px] border border-[#DCCFB8] bg-[#FFFFFF] p-4">
+                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-sm text-[#8C7A64]">Total</p>
                   <p className="mt-2 font-sans text-lg font-semibold text-[#684B35]">
                     {peso(selectedOrder.total_amount)}
@@ -696,7 +817,7 @@ export default function StaffPage() {
               </div>
 
               {selectedOrder.order_type === "delivery" ? (
-                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-[#FFFFFF] p-4">
+                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
                     Delivery Info
                   </p>
@@ -719,7 +840,7 @@ export default function StaffPage() {
               ) : null}
 
               {selectedOrder.walkin_name ? (
-                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-[#FFFFFF] p-4">
+                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
                     Walk-in Customer
                   </p>
@@ -737,12 +858,13 @@ export default function StaffPage() {
                 {selectedOrder.order_items.map((item) => (
                   <div
                     key={item.id}
-                    className="rounded-[20px] border border-[#DCCFB8] bg-[#FFFFFF] p-4"
+                    className="rounded-[20px] border border-[#DCCFB8] bg-white p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-sans text-lg font-semibold text-[#0D2E18]">
-                          {item.menu_items?.name ?? "Menu item"} × {item.quantity}
+                          {item.menu_items?.name ?? "Menu item"} ×{" "}
+                          {item.quantity}
                         </p>
 
                         <div className="mt-2 space-y-1 font-sans text-sm text-[#5F5346]">
@@ -762,9 +884,7 @@ export default function StaffPage() {
                           ) : null}
 
                           {item.special_instructions ? (
-                            <p>
-                              Note: {item.special_instructions}
-                            </p>
+                            <p>Note: {item.special_instructions}</p>
                           ) : null}
                         </div>
                       </div>
@@ -779,35 +899,87 @@ export default function StaffPage() {
             </div>
 
             <div className="border-t border-[#DCCFB8] px-6 py-5">
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-sans text-lg font-semibold text-[#0D2E18]">
-                  Next action
-                </p>
+              {isConfirmingCancel ? (
+                <div className="rounded-[18px] border border-[#E8B8A8] bg-[#FFF1EC] p-4">
+                  <p className="font-sans text-base font-semibold text-[#9C543D]">
+                    Cancel this order?
+                  </p>
+                  <p className="mt-1 font-sans text-sm text-[#9C543D]">
+                    This will mark the order as cancelled and remove it from the
+                    active board.
+                  </p>
 
-                {getNextActionLabel(
-                  selectedOrder.order_type,
-                  selectedOrder.status
-                ) ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await handleAdvance(selectedOrder.id);
-                    }}
-                    className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingCancel(false)}
+                      className="rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-2 font-sans text-sm font-semibold text-[#684B35]"
+                    >
+                      Keep Order
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCancel(selectedOrder.id)}
+                      disabled={isCancelling}
+                      className="rounded-[14px] bg-[#C55432] px-4 py-2 font-sans text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {isCancelling ? "Cancelling..." : "Yes, Cancel"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="font-sans text-lg font-semibold text-[#0D2E18]">
+                      Order actions
+                    </p>
+                    {getFinalStatusMessage(selectedOrder.status) ? (
+                      <p className="mt-1 font-sans text-sm text-[#8C7A64]">
+                        {getFinalStatusMessage(selectedOrder.status)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    {!["completed", "delivered", "cancelled"].includes(
                       selectedOrder.status
-                    )}`}
-                  >
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsConfirmingCancel(true)}
+                        className="rounded-[14px] border border-[#C55432] px-5 py-3 font-sans text-base font-semibold text-[#C55432] transition hover:bg-[#FFF1EC]"
+                      >
+                        Cancel Order
+                      </button>
+                    ) : null}
+
                     {getNextActionLabel(
                       selectedOrder.order_type,
                       selectedOrder.status
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleAdvance(selectedOrder.id);
+                        }}
+                        className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold text-white transition ${getColumnActionStyle(
+                          selectedOrder.status
+                        )}`}
+                      >
+                        {getNextActionLabel(
+                          selectedOrder.order_type,
+                          selectedOrder.status
+                        )}
+                      </button>
+                    ) : (
+                      <span className="rounded-[14px] bg-[#F4EEE6] px-4 py-3 font-sans text-sm font-semibold text-[#684B35]">
+                        Final Status
+                      </span>
                     )}
-                  </button>
-                ) : (
-                  <span className="font-sans text-sm text-[#8C7A64]">
-                    No next action
-                  </span>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           </aside>
         </>
