@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Minus, Plus, ShoppingCart } from "lucide-react";
 import { useCart } from "../../cart-provider";
@@ -95,13 +95,15 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   useEffect(() => {
     if (!editingItem) return;
 
-    setQuantity(editingItem.quantity);
-    setSugarLevel(editingItem.sugar_level);
-    setIceLevel(editingItem.ice_level ?? "regular");
-    setSize(editingItem.size);
-    setTemperature(editingItem.temperature);
-    setSelectedAddons(editingItem.addons);
-    setSpecialInstructions(editingItem.special_instructions);
+    startTransition(() => {
+      setQuantity(editingItem.quantity);
+      setSugarLevel(editingItem.sugar_level);
+      setIceLevel(editingItem.ice_level ?? "regular");
+      setSize(editingItem.size);
+      setTemperature(editingItem.temperature);
+      setSelectedAddons(editingItem.addons);
+      setSpecialInstructions(editingItem.special_instructions);
+    });
   }, [editingItem]);
 
   const selectedSize = sizes.find((item) => item.value === size);
@@ -167,8 +169,17 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
         <section className="overflow-hidden rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
           <div className="border-b border-[#DECFAF] px-5 py-5 sm:px-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-40 w-full items-center justify-center rounded-[24px] bg-[#E7F1E6] text-6xl sm:w-48">
-                {getEmoji(menuItem.name, menuItem.category)}
+              <div className="flex h-40 w-full items-center justify-center overflow-hidden rounded-[24px] bg-[#E7F1E6] text-6xl sm:w-48">
+                {menuItem.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={menuItem.image_url}
+                    alt={menuItem.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  getEmoji(menuItem.name, menuItem.category)
+                )}
               </div>
 
               <div className="flex-1">

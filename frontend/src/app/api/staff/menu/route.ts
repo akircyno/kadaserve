@@ -8,6 +8,7 @@ type MenuItemRow = {
   category: string | null;
   image_url: string | null;
   is_available: boolean;
+  updated_at: string | null;
 };
 
 type StaffMenuCategory =
@@ -17,12 +18,6 @@ type StaffMenuCategory =
   | "premium-blends"
   | "best-deals";
 
-type ApprovedMenuItem = {
-  name: string;
-  category: StaffMenuCategory;
-  aliases: string[];
-};
-
 const categoryOrder: StaffMenuCategory[] = [
   "non-coffee",
   "pastries",
@@ -31,151 +26,78 @@ const categoryOrder: StaffMenuCategory[] = [
   "best-deals",
 ];
 
-const approvedMenuItems: ApprovedMenuItem[] = [
-  {
-    name: "Choco Milk",
-    category: "non-coffee",
-    aliases: ["choco milk", "chocolate milk"],
-  },
-  {
-    name: "Strawberry Latte",
-    category: "non-coffee",
-    aliases: ["strawberry latte"],
-  },
-  {
-    name: "Americano",
-    category: "non-coffee",
-    aliases: ["americano"],
-  },
-  {
-    name: "Choco Chil Cookie",
-    category: "pastries",
-    aliases: [
-      "choco chil cookie",
-      "choco chip cookie",
-      "chocolate chip cookie",
-      "choco cookie",
-    ],
-  },
-  {
-    name: "Red Velvet Cookie",
-    category: "pastries",
-    aliases: ["red velvet cookie"],
-  },
-  {
-    name: "Matcha Latte",
-    category: "latte-series",
-    aliases: ["matcha latte"],
-  },
-  {
-    name: "French Vanilla Latte",
-    category: "latte-series",
-    aliases: ["french vanilla latte"],
-  },
-  {
-    name: "Hazelnut Latte",
-    category: "latte-series",
-    aliases: ["hazelnut latte"],
-  },
-  {
-    name: "Brown Sugar Latte",
-    category: "latte-series",
-    aliases: ["brown sugar latte"],
-  },
-  {
-    name: "Spanish Latte",
-    category: "latte-series",
-    aliases: ["spanish latte"],
-  },
-  {
-    name: "Strawberry Matcha",
-    category: "premium-blends",
-    aliases: ["strawberry matcha"],
-  },
-  {
-    name: "Macchiato",
-    category: "premium-blends",
-    aliases: ["macchiato"],
-  },
-  {
-    name: "Mocha",
-    category: "premium-blends",
-    aliases: ["mocha"],
-  },
-  {
-    name: "Signature Blend",
-    category: "premium-blends",
-    aliases: ["signature blend"],
-  },
-  {
-    name: "Premium x Lattee",
-    category: "best-deals",
-    aliases: ["premium x lattee", "premium x latte"],
-  },
-  {
-    name: "Premium x Pastries",
-    category: "best-deals",
-    aliases: ["premium x pastries"],
-  },
-  {
-    name: "Strawberry Matcha",
-    category: "best-deals",
-    aliases: ["strawberry matcha", "strawberry matcha deal", "best strawberry matcha"],
-  },
-  {
-    name: "Patries",
-    category: "best-deals",
-    aliases: ["patries", "pastries", "pastries deal", "pastry deal"],
-  },
-];
-
 function normalizeText(value: string) {
-  return value.trim().toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/_/g, "-")
+    .replace(/\s+/g, " ");
 }
 
-function normalizeCategoryValue(value: string | null) {
-  return normalizeText(value ?? "");
+function normalizeCategory(category: string | null): StaffMenuCategory | null {
+  const normalizedCategory = normalizeText(category ?? "");
+
+  if (
+    normalizedCategory === "all-coffee" ||
+    normalizedCategory === "hot-coffee" ||
+    normalizedCategory === "iced-coffee" ||
+    normalizedCategory === "coffee"
+  ) {
+    return "non-coffee";
+  }
+
+  if (
+    normalizedCategory === "non-coffee" ||
+    normalizedCategory === "milk-tea" ||
+    normalizedCategory === "frappe"
+  ) {
+    return "non-coffee";
+  }
+
+  if (normalizedCategory === "pastries" || normalizedCategory === "food") {
+    return "pastries";
+  }
+
+  if (normalizedCategory === "latte-series") {
+    return "latte-series";
+  }
+
+  if (normalizedCategory === "premium-blends") {
+    return "premium-blends";
+  }
+
+  if (normalizedCategory === "best-deals" || normalizedCategory === "others") {
+    return "best-deals";
+  }
+
+  return null;
 }
 
-function findApprovedMenuItem(
-  rowName: string,
-  rowCategory: string | null
-): ApprovedMenuItem | null {
-  const normalizedName = normalizeText(rowName);
-  const normalizedCategory = normalizeCategoryValue(rowCategory);
-  const exactMatches = approvedMenuItems.filter((item) =>
-    item.aliases.map(normalizeText).includes(normalizedName)
-  );
-
-  if (exactMatches.length === 0) {
-    return null;
+function shouldReplaceExistingItem(
+  existingItem: {
+    imageUrl: string | null;
+    updatedAt: string | null;
+  },
+  nextItem: MenuItemRow
+) {
+  if (!existingItem.imageUrl && nextItem.image_url) {
+    return true;
   }
 
-  if (exactMatches.length === 1) {
-    return exactMatches[0];
+  if (existingItem.imageUrl && !nextItem.image_url) {
+    return false;
   }
 
-  const categoryMatch = exactMatches.find((item) => {
-    if (item.category === "non-coffee") {
-      return normalizedCategory.includes("non");
-    }
+  if (!existingItem.updatedAt) {
+    return true;
+  }
 
-    if (item.category === "pastries") {
-      return normalizedCategory.includes("pastr");
-    }
+  if (!nextItem.updated_at) {
+    return false;
+  }
 
-    if (item.category === "latte-series") {
-      return normalizedCategory.includes("latte");
-    }
-
-    if (item.category === "premium-blends") {
-      return normalizedCategory.includes("premium");
-    }
-
-    return normalizedCategory.includes("best");
-  });
-
-  return categoryMatch ?? exactMatches[0];
+  return new Date(nextItem.updated_at) > new Date(existingItem.updatedAt);
 }
 
 export async function GET() {
@@ -210,7 +132,7 @@ export async function GET() {
 
     const { data: menuItems, error: menuError } = await supabase
       .from("menu_items")
-      .select("id, name, base_price, category, image_url, is_available")
+      .select("id, name, base_price, category, image_url, is_available, updated_at")
       .eq("is_available", true)
       .order("name", { ascending: true });
 
@@ -218,7 +140,7 @@ export async function GET() {
       return NextResponse.json({ error: menuError.message }, { status: 500 });
     }
 
-    const approvedItems = new Map<
+    const normalizedItems = new Map<
       string,
       {
         id: string;
@@ -226,35 +148,43 @@ export async function GET() {
         price: number;
         category: StaffMenuCategory;
         imageUrl: string | null;
+        updatedAt: string | null;
       }
     >();
 
     for (const row of (menuItems ?? []) as MenuItemRow[]) {
-      const approvedItem = findApprovedMenuItem(row.name, row.category);
+      const category = normalizeCategory(row.category);
 
-      if (!approvedItem) {
+      if (!category) {
         continue;
       }
 
-      const dedupeKey = `${approvedItem.category}:${normalizeText(
-        approvedItem.name
-      )}`;
+      const dedupeKey = `${category}:${normalizeText(row.name)}`;
+      const existingItem = normalizedItems.get(dedupeKey);
 
-      if (approvedItems.has(dedupeKey)) {
+      if (existingItem && !shouldReplaceExistingItem(existingItem, row)) {
         continue;
       }
 
-      approvedItems.set(dedupeKey, {
+      normalizedItems.set(dedupeKey, {
         id: row.id,
-        name: approvedItem.name,
+        name: row.name,
         price: row.base_price,
-        category: approvedItem.category,
+        category,
         imageUrl: row.image_url,
+        updatedAt: row.updated_at,
       });
     }
 
-    const normalizedMenuItems = Array.from(approvedItems.values()).sort(
-      (first, second) => {
+    const staffMenuItems = Array.from(normalizedItems.values())
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        category: item.category,
+        imageUrl: item.imageUrl,
+      }))
+      .sort((first, second) => {
         const firstCategoryIndex = categoryOrder.indexOf(first.category);
         const secondCategoryIndex = categoryOrder.indexOf(second.category);
 
@@ -263,10 +193,9 @@ export async function GET() {
         }
 
         return first.name.localeCompare(second.name);
-      }
-    );
+      });
 
-    return NextResponse.json({ menuItems: normalizedMenuItems });
+    return NextResponse.json({ menuItems: staffMenuItems });
   } catch (error) {
     return NextResponse.json(
       {

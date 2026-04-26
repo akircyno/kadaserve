@@ -142,6 +142,10 @@ export default function StaffEncodeOrderPage() {
         return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     }, [cart]);
 
+    const hasRequiredDeliveryInfo =
+        orderType !== "delivery" ||
+        (deliveryAddress.trim().length > 0 && deliveryPhone.trim().length > 0);
+
     const cartCount = useMemo(() => {
         return cart.reduce((sum, item) => sum + item.quantity, 0);
     }, [cart]);
@@ -260,6 +264,11 @@ export default function StaffEncodeOrderPage() {
 
     async function handleSubmitOrderQueue() {
         if (cart.length === 0 || isSubmitting) return;
+
+        if (!hasRequiredDeliveryInfo) {
+            setError("Delivery address and phone are required.");
+            return;
+        }
 
         setIsSubmitting(true);
         setError("");
@@ -538,21 +547,23 @@ export default function StaffEncodeOrderPage() {
 
                             <label className="block">
                                 <span className="font-sans text-sm font-semibold text-[#684B35]">
-                                    Address
+                                    Address <span className="text-[#C55432]">*</span>
                                 </span>
                                 <input
                                     value={deliveryAddress}
                                     onChange={(event) => setDeliveryAddress(event.target.value)}
                                     placeholder="Customer delivery address"
+                                    required={orderType === "delivery"}
                                     className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
                                 />
                             </label>
 
                             <label className="block">
                                 <span className="font-sans text-sm font-semibold text-[#684B35]">
-                                    Email
+                                    Email <span className="text-[#8C7A64]">(optional)</span>
                                 </span>
                                 <input
+                                    type="email"
                                     value={deliveryEmail}
                                     onChange={(event) => setDeliveryEmail(event.target.value)}
                                     placeholder="customer@email.com"
@@ -562,15 +573,22 @@ export default function StaffEncodeOrderPage() {
 
                             <label className="block">
                                 <span className="font-sans text-sm font-semibold text-[#684B35]">
-                                    Phone
+                                    Phone <span className="text-[#C55432]">*</span>
                                 </span>
                                 <input
+                                    type="tel"
                                     value={deliveryPhone}
                                     onChange={(event) => setDeliveryPhone(event.target.value)}
                                     placeholder="09xxxxxxxxx"
+                                    required={orderType === "delivery"}
                                     className="mt-2 w-full rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
                                 />
                             </label>
+                            <p className="font-sans text-xs text-[#8C7A64]">
+                                Address and phone are required for delivery.
+                                Email can be added if the customer wants a
+                                digital contact record.
+                            </p>
                         </div>
                     ) : null}
 
@@ -732,7 +750,11 @@ export default function StaffEncodeOrderPage() {
                         <button
                             type="button"
                             onClick={handleSubmitOrderQueue}
-                            disabled={cart.length === 0 || isSubmitting}
+                            disabled={
+                                cart.length === 0 ||
+                                isSubmitting ||
+                                !hasRequiredDeliveryInfo
+                            }
                             className="mt-5 w-full rounded-[16px] border border-[#0D2E18] bg-[#0D2E18] px-4 py-4 font-sans text-base font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#BFD0B8] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
                         >
                             {isSubmitting ? "Submitting..." : "Submit Order Queue"}

@@ -67,6 +67,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const orderId = body.orderId as string;
+    const expectedStatus = body.expectedStatus as OrderStatus | undefined;
     const action = body.action as "advance" | "mark_paid" | undefined;
 
     if (!orderId) {
@@ -108,6 +109,17 @@ export async function POST(request: Request) {
       });
     }
 
+    if (expectedStatus && order.status !== expectedStatus) {
+      return NextResponse.json(
+        {
+          error:
+            "This order already moved. Refreshing orders to show the latest status.",
+          currentStatus: order.status,
+        },
+        { status: 409 }
+      );
+    }
+
     const nextStatus = getNextStatus(
       order.order_type,
       order.status as OrderStatus
@@ -135,7 +147,8 @@ export async function POST(request: Request) {
     const { error: updateError } = await supabase
       .from("orders")
       .update({ status: nextStatus })
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .eq("status", expectedStatus ?? order.status);
 
     if (updateError) {
       return NextResponse.json(

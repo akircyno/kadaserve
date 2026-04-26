@@ -95,11 +95,10 @@ export async function POST(request: Request) {
     if (body.orderType === "delivery") {
       if (
         !body.deliveryAddress?.trim() ||
-        !body.deliveryEmail?.trim() ||
         !body.deliveryPhone?.trim()
       ) {
         return NextResponse.json(
-          { error: "Delivery address, email, and phone are required." },
+          { error: "Delivery address and phone are required." },
           { status: 400 }
         );
       }

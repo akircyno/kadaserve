@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, RefreshCw, Search, Truck, X } from "lucide-react";
 
@@ -61,6 +61,27 @@ const boardColumns: Array<{
 
 function formatOrderCode(id: string) {
   return `#${id.slice(0, 8).toUpperCase()}`;
+}
+
+function formatNameFromEmail(email: string | null) {
+  if (!email) return null;
+
+  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+
+  if (!name) return null;
+
+  return name
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getOrderDisplayName(order: StaffOrder) {
+  return (
+    order.walkin_name?.trim() ||
+    formatNameFromEmail(order.delivery_email) ||
+    (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
+  );
 }
 
 function formatTime(value: string) {
@@ -233,6 +254,8 @@ export default function StaffPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [error, setError] = useState("");
 
   const activeOrders = useMemo(() => {
@@ -301,29 +324,16 @@ export default function StaffPage() {
   }, [activeOrders]);
 
   useEffect(() => {
-    loadOrders();
+    loadOrders({ showLoading: true });
   }, []);
 
-  function formatNameFromEmail(email: string | null) {
-    if (!email) return null;
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      loadOrders({ showLoading: false });
+    }, 15000);
 
-    const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-
-    if (!name) return null;
-
-    return name
-      .split(" ")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
-  }
-
-  function getOrderDisplayName(order: StaffOrder) {
-    return (
-      order.walkin_name?.trim() ||
-      formatNameFromEmail(order.delivery_email) ||
-      (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
-    );
-  }
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
@@ -335,9 +345,15 @@ export default function StaffPage() {
     setIsConfirmingCancel(false);
   }
 
-  async function loadOrders() {
-    setIsLoading(true);
-    setError("");
+  async function loadOrders({
+    showLoading = true,
+  }: {
+    showLoading?: boolean;
+  } = {}) {
+    if (showLoading) {
+      setIsLoading(true);
+      setError("");
+    }
 
     try {
       const response = await fetch("/api/staff/orders/list", {
@@ -352,25 +368,38 @@ export default function StaffPage() {
       }
 
 
-      setOrders(result.orders ?? []);
-      setIsBootstrapped(true);
+      startTransition(() => {
+        setOrders(result.orders ?? []);
+        setIsBootstrapped(true);
+        setLastSyncedAt(new Date());
+        setSelectedOrder((currentSelectedOrder) => {
+          if (!currentSelectedOrder) {
+            return null;
+          }
 
-      if (selectedOrder) {
-        const updatedSelectedOrder =
-          (result.orders ?? []).find(
-            (order: StaffOrder) => order.id === selectedOrder.id
-          ) ?? null;
-        setSelectedOrder(updatedSelectedOrder);
-      }
+          return (
+            (result.orders ?? []).find(
+              (order: StaffOrder) => order.id === currentSelectedOrder.id
+            ) ?? null
+          );
+        });
+      });
     } catch {
       setError("Something went wrong while loading orders.");
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }
 
-  async function handleAdvance(orderId: string) {
+  async function handleAdvance(orderId: string, expectedStatus: OrderStatus) {
+    if (updatingOrderIds.includes(orderId)) {
+      return;
+    }
+
     setError("");
+    setUpdatingOrderIds((current) => [...current, orderId]);
 
     try {
       const response = await fetch("/api/staff/orders/update-status", {
@@ -378,13 +407,16 @@ export default function StaffPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, expectedStatus }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
         setError(result.error || "Failed to update order status.");
+        if (result.currentStatus) {
+          await loadOrders();
+        }
         return;
       }
 
@@ -392,6 +424,10 @@ export default function StaffPage() {
       router.refresh();
     } catch {
       setError("Something went wrong while updating status.");
+    } finally {
+      setUpdatingOrderIds((current) =>
+        current.filter((updatingOrderId) => updatingOrderId !== orderId)
+      );
     }
   }
 
@@ -478,15 +514,27 @@ export default function StaffPage() {
               />
             </label>
 
-            <button
-              type="button"
-              onClick={loadOrders}
-              disabled={isLoading}
-              className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#FFF0DA] disabled:opacity-60"
-            >
-              <RefreshCw size={16} />
-              {isLoading ? "Refreshing..." : "Refresh Orders"}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => loadOrders({ showLoading: true })}
+                disabled={isLoading}
+                className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#FFF0DA] disabled:opacity-60"
+              >
+                <RefreshCw size={16} />
+                {isLoading ? "Syncing..." : "Sync latest"}
+              </button>
+
+              <p className="font-sans text-[11px] text-[#8C7A64]">
+                Auto-syncs every 15s
+                {lastSyncedAt
+                  ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}`
+                  : ""}
+              </p>
+            </div>
 
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0F441D] font-sans text-lg font-bold text-[#FFF0DA]">
@@ -605,6 +653,7 @@ export default function StaffPage() {
                       order.status
                     );
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
+                    const isUpdatingOrder = updatingOrderIds.includes(order.id);
 
                     return (
                       <article
@@ -701,15 +750,20 @@ export default function StaffPage() {
                                   return;
                                 }
 
-                                handleAdvance(order.id);
+                                handleAdvance(order.id, order.status);
                               }}
+                              disabled={isUpdatingOrder}
                               className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold transition ${
                                 paymentRequired
                                   ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
                                   : `text-white ${getColumnActionStyle(order.status)}`
-                              }`}
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
                             >
-                              {paymentRequired ? "Mark Paid First" : nextAction}
+                              {paymentRequired
+                                ? "Mark Paid First"
+                                : isUpdatingOrder
+                                ? "Updating..."
+                                : nextAction}
                             </button>
                           ) : (
                             <span className="font-sans text-sm text-[#8C7A64]">
@@ -1071,18 +1125,24 @@ export default function StaffPage() {
                             return;
                           }
 
-                          await handleAdvance(selectedOrder.id);
+                          await handleAdvance(
+                            selectedOrder.id,
+                            selectedOrder.status
+                          );
                         }}
+                        disabled={updatingOrderIds.includes(selectedOrder.id)}
                         className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold transition ${
                           requiresPaymentBeforeNextAction(selectedOrder)
                             ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
                             : `text-white ${getColumnActionStyle(
                                 selectedOrder.status
                               )}`
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
                       >
                         {requiresPaymentBeforeNextAction(selectedOrder)
                           ? "Payment Required"
+                          : updatingOrderIds.includes(selectedOrder.id)
+                          ? "Updating..."
                           : getNextActionLabel(
                               selectedOrder.order_type,
                               selectedOrder.status

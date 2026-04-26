@@ -144,10 +144,18 @@ function getEmoji(item: MenuItem) {
 }
 
 function getFilter(category: string): Filter {
-  if (category.includes("coffee")) return "coffee";
-  if (category === "non_coffee" || category === "milk_tea" || category === "frappe") {
+  const normalizedCategory = category.toLowerCase().replace(/_/g, "-");
+
+  if (
+    normalizedCategory === "non-coffee" ||
+    normalizedCategory === "milk-tea" ||
+    normalizedCategory === "frappe"
+  ) {
     return "non-coffee";
   }
+
+  if (normalizedCategory.includes("coffee")) return "coffee";
+
   return "all";
 }
 
@@ -347,30 +355,30 @@ export function CustomerDashboard({
                   ))}
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+                <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {filteredMenu.map((item) => (
                     <article
                       key={item.id}
-                      className="rounded-[22px] border border-[#DDD0B7] bg-white/90 p-2.5 shadow-[0_8px_20px_rgba(0,0,0,0.08)] sm:p-3"
+                      className="rounded-[24px] border border-[#DDD0B7] bg-white/90 p-3 shadow-[0_8px_20px_rgba(0,0,0,0.08)] transition hover:shadow-[0_12px_24px_rgba(0,0,0,0.10)]"
                     >
-                      <div className="flex h-24 items-center justify-center rounded-[16px] bg-[#E7F1E6] text-3xl sm:h-28 sm:text-4xl">
-                        {getEmoji(item)}
-                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-[#E7F1E6] text-3xl">
+                          {item.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.image_url}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            getEmoji(item)
+                          )}
+                        </div>
 
-                      <div className="mt-3">
-                        <div className="flex flex-col gap-2">
-                          <div>
-                            <h2 className="line-clamp-2 text-lg font-bold leading-tight sm:text-2xl sm:leading-none">
-                              {item.name}
-                            </h2>
-                            <p className="mt-1 line-clamp-2 text-[10px] text-[#7D7767] sm:text-xs">
-                              {item.description ?? "Freshly prepared drink"}
-                            </p>
-                          </div>
-
+                        <div className="flex min-w-0 flex-1 flex-col">
                           <div className="flex justify-end">
                             <span
-                              className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] sm:text-[10px] ${
+                              className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
                                 item.is_available
                                   ? "bg-[#E9F5E7] text-[#2D7A40]"
                                   : "bg-[#FBE9E2] text-[#9C543D]"
@@ -379,19 +387,26 @@ export function CustomerDashboard({
                               {item.is_available ? "Available" : "Unavailable"}
                             </span>
                           </div>
-                        </div>
 
-                        <div className="mt-3 flex items-center justify-between">
-                          <p className="text-2xl font-black text-[#765531] sm:text-3xl">
-                            {formatPrice(item.base_price)}
+                          <h2 className="mt-3 line-clamp-2 text-xl font-black leading-tight text-[#123E26]">
+                            {item.name}
+                          </h2>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#7D7767]">
+                            {item.description ?? "Freshly prepared drink"}
                           </p>
 
-                          <Link
-                            href={`/customer/menu/${item.id}`}
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#123E26] text-white sm:h-11 sm:w-11"
-                          >
-                            <ShoppingCart size={17} />
-                          </Link>
+                          <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+                            <p className="text-2xl font-black text-[#765531]">
+                              {formatPrice(item.base_price)}
+                            </p>
+
+                            <Link
+                              href={`/customer/menu/${item.id}`}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#123E26] text-white"
+                            >
+                              <ShoppingCart size={17} />
+                            </Link>
+                          </div>
                         </div>
                       </div>
                     </article>
