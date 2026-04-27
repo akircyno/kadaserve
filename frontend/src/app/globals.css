@@ -1,22 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fff0da;
+  --foreground: #0d2e18;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-kada-green: #0f441d;
+  --color-kada-beige: #fff0da;
+  --color-kada-forest: #0d2e18;
+  --color-kada-white: #ffffff;
+  --color-kada-brown: #684b35;
   --font-sans: var(--font-dm-sans);
   --font-display: var(--font-playfair);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

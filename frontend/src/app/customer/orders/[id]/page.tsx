@@ -274,7 +274,6 @@ export default async function OrderTrackingPage({ params }: PageProps) {
                   ? index <= currentStepIndex
                   : index < currentStepIndex;
                 const isCurrent = isFinished ? false : currentStepIndex === index;
-                const isUpcoming = index > currentStepIndex;
 
                 return (
                   <div key={step.key} className="flex gap-4">

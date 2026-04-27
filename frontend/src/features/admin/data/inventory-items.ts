@@ -1,0 +1,60 @@
+import type { InventoryItem } from "@/features/admin/components/admin-inventory-view";
+
+export const inventoryItems: InventoryItem[] = [
+  {
+    name: "Fresh Milk",
+    unit: "liter",
+    onHand: 20,
+    minNeed: 10,
+    maxCap: 40,
+    supplier: "Local dairy supply",
+  },
+  {
+    name: "Oat Milk",
+    unit: "liter",
+    onHand: 8,
+    minNeed: 6,
+    maxCap: 20,
+    supplier: "Supplier",
+  },
+  {
+    name: "Condensed Milk",
+    unit: "cans",
+    onHand: 12,
+    minNeed: 8,
+    maxCap: 24,
+    supplier: "Supplier",
+  },
+  {
+    name: "Coffee Beans",
+    unit: "kg",
+    onHand: 15,
+    minNeed: 8,
+    maxCap: 30,
+    supplier: "Supplier",
+  },
+  {
+    name: "Espresso Capsules",
+    unit: "pcs",
+    onHand: 2,
+    minNeed: 10,
+    maxCap: 50,
+    supplier: "Supplier",
+  },
+  {
+    name: "Matcha Powder",
+    unit: "kg",
+    onHand: 4,
+    minNeed: 4,
+    maxCap: 10,
+    supplier: "Supplier",
+  },
+  {
+    name: "Sugar Syrup",
+    unit: "bottle",
+    onHand: 10,
+    minNeed: 6,
+    maxCap: 20,
+    supplier: "Supplier",
+  },
+];

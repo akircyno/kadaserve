@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CartProvider } from "./cart-provider";
+import { CartProvider } from "@/features/customer/providers/cart-provider";
 
 export default function CustomerLayout({
   children,

@@ -4,24 +4,11 @@ import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Minus, Plus, ShoppingCart } from "lucide-react";
-import { useCart } from "../../cart-provider";
-
-type MenuItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  base_price: number;
-  image_url: string | null;
-  is_available: boolean;
-  has_sugar_level: boolean;
-  has_ice_level: boolean;
-  has_size_option: boolean;
-  has_temp_option: boolean;
-};
+import { useCart } from "@/features/customer/providers/cart-provider";
+import type { CustomizableMenuItem } from "@/types/menu";
 
 type CustomizeOrderProps = {
-  menuItem: MenuItem;
+  menuItem: CustomizableMenuItem;
 };
 
 const sugarLevels = [

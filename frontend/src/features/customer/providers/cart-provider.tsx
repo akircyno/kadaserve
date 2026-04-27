@@ -4,26 +4,11 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from "react";
-
-export type CartItem = {
-  id: string;
-  menu_item_id: string;
-  name: string;
-  base_price: number;
-  quantity: number;
-  sugar_level: number;
-  ice_level: string | null;
-  size: string;
-  temperature: string;
-  addons: string[];
-  addon_price: number;
-  special_instructions: string;
-  image_url: string | null;
-};
+import type { CartItem } from "@/types/cart";
+export type { CartItem } from "@/types/cart";
 
 type AddCartItemInput = Omit<CartItem, "id">;
 
@@ -43,6 +28,25 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "kadaserve-cart";
 
+function readStoredItems() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const saved = window.localStorage.getItem(STORAGE_KEY);
+
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(saved) as CartItem[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function buildSignature(item: AddCartItemInput) {
   return JSON.stringify({
     menu_item_id: item.menu_item_id,
@@ -56,20 +60,7 @@ function buildSignature(item: AddCartItemInput) {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!saved) return;
-
-    try {
-      const parsed = JSON.parse(saved) as CartItem[];
-      setItems(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setItems([]);
-    }
-  }, []);
+  const [items, setItems] = useState<CartItem[]>(() => readStoredItems());
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -141,18 +132,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems([]);
   }
 
-  const value = useMemo(
-    () => ({
-      items,
-      cartCount: items.reduce((sum, item) => sum + item.quantity, 0),
-      addItem,
-      updateItem,
-      getItemById,
-      removeItem,
-      clearCart,
-    }),
-    [items]
-  );
+  const value: CartContextValue = {
+    items,
+    cartCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    addItem,
+    updateItem,
+    getItemById,
+    removeItem,
+    clearCart,
+  };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

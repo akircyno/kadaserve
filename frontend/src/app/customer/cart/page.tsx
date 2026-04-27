@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ShoppingCart, Trash2 } from "lucide-react";
-import { useCart } from "../cart-provider";
+import { useCart } from "@/features/customer/providers/cart-provider";
 
 function peso(value: number) {
   return `₱${Math.round(value)}`;

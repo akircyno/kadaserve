@@ -13,56 +13,19 @@ import {
   X,
   LogOut,
 } from "lucide-react";
-import { useCart } from "./cart-provider";
-
-type MenuItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  base_price: number;
-  image_url: string | null;
-  is_available: boolean;
-};
-
-type Order = {
-  id: string;
-  order_type: "pickup" | "delivery";
-  status:
-    | "pending"
-    | "preparing"
-    | "ready"
-    | "out_for_delivery"
-    | "delivered"
-    | "completed"
-    | "cancelled";
-  total_amount: number;
-  ordered_at: string;
-  order_items: {
-    id: string;
-    quantity: number;
-    unit_price: number;
-    menu_items: {
-      name: string;
-    } | null;
-  }[];
-};
+import { useCart } from "@/features/customer/providers/cart-provider";
+import type { CustomerMenuItem } from "@/types/menu";
+import type { CustomerOrder } from "@/types/orders";
+import type { FeedbackItem } from "@/types/feedback";
 
 type Section = "menu" | "orders" | "recommendations" | "feedback";
 type Filter = "all" | "coffee" | "non-coffee";
 
 type CustomerDashboardProps = {
-  menuItems: MenuItem[];
-  orders: Order[];
+  menuItems: CustomerMenuItem[];
+  orders: CustomerOrder[];
   feedbackItems: FeedbackItem[];
   initialSection?: Section;
-};
-
-type FeedbackItem = {
-  order_id: string;
-  order_item_id: string;
-  menu_item_id: string;
-  item_name: string;
 };
 
 
@@ -88,7 +51,7 @@ function formatTime(value: string) {
   });
 }
 
-function formatOrderType(orderType: Order["order_type"]) {
+function formatOrderType(orderType: CustomerOrder["order_type"]) {
   return orderType === "pickup" ? "Pickup" : "Delivery";
 }
 
@@ -112,7 +75,7 @@ function formatOrderCode(id: string) {
   return id.startsWith("#") ? id : `#${id.slice(0, 8).toUpperCase()}`;
 }
 
-function formatStatus(status: Order["status"]) {
+function formatStatus(status: CustomerOrder["status"]) {
   switch (status) {
     case "pending":
       return "Pending";
@@ -133,7 +96,7 @@ function formatStatus(status: Order["status"]) {
   }
 }
 
-function getEmoji(item: MenuItem) {
+function getEmoji(item: CustomerMenuItem) {
   const text = `${item.name} ${item.category}`.toLowerCase();
 
   if (text.includes("matcha")) return "🍵";

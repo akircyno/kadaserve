@@ -1,48 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { CustomerDashboard } from "./customer-dashboard";
-
-type MenuItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  base_price: number;
-  image_url: string | null;
-  is_available: boolean;
-};
-
-type OrderItemRow = {
-  id: string;
-  quantity: number;
-  unit_price: number;
-  menu_items: {
-    id: string;
-    name: string;
-  } | null;
-};
-
-type OrderRow = {
-  id: string;
-  order_type: "pickup" | "delivery";
-  status:
-    | "pending"
-    | "preparing"
-    | "ready"
-    | "out_for_delivery"
-    | "delivered"
-    | "completed"
-    | "cancelled";
-  total_amount: number;
-  ordered_at: string;
-  order_items: OrderItemRow[];
-};
-
-type FeedbackItem = {
-  order_id: string;
-  order_item_id: string;
-  menu_item_id: string;
-  item_name: string;
-};
+import { CustomerDashboard } from "@/features/customer/components/customer-dashboard";
+import type { CustomerMenuItem } from "@/types/menu";
+import type { CustomerOrder } from "@/types/orders";
+import type { FeedbackItem } from "@/types/feedback";
 
 type PageProps = {
   searchParams: Promise<{
@@ -50,7 +10,7 @@ type PageProps = {
   }>;
 };
 
-const fallbackMenuItems: MenuItem[] = [
+const fallbackMenuItems: CustomerMenuItem[] = [
   {
     id: "1",
     name: "Matcha",
@@ -89,7 +49,7 @@ const fallbackMenuItems: MenuItem[] = [
   },
 ];
 
-const fallbackOrders: OrderRow[] = [];
+const fallbackOrders: CustomerOrder[] = [];
 
 export default async function CustomerPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
@@ -113,7 +73,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
   const menuItems = !menuError && menuData?.length ? menuData : fallbackMenuItems;
 
-  let orders: OrderRow[] = fallbackOrders;
+  let orders: CustomerOrder[] = fallbackOrders;
   let feedbackItems: FeedbackItem[] = [];
 
   if (user) {
@@ -141,7 +101,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       .order("ordered_at", { ascending: false });
 
     if (!ordersError && ordersData) {
-      orders = ordersData as unknown as OrderRow[];
+      orders = ordersData as unknown as CustomerOrder[];
     }
 
     const eligibleStatuses = ["delivered", "completed"];

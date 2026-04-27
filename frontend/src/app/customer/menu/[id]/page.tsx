@@ -1,20 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { CustomizeOrder } from "./customize-order";
-
-type MenuItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  base_price: number;
-  image_url: string | null;
-  is_available: boolean;
-  has_sugar_level: boolean;
-  has_ice_level: boolean;
-  has_size_option: boolean;
-  has_temp_option: boolean;
-};
+import { CustomizeOrder } from "@/features/customer/components/customize-order";
+import type { CustomizableMenuItem } from "@/types/menu";
 
 type PageProps = {
   params: Promise<{
@@ -50,5 +37,5 @@ export default async function MenuItemPage({ params }: PageProps) {
     notFound();
   }
 
-  return <CustomizeOrder menuItem={menuItem as MenuItem} />;
+  return <CustomizeOrder menuItem={menuItem as CustomizableMenuItem} />;
 }
