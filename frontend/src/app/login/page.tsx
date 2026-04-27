@@ -1,11 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 
-const LOGO_SRC = "/logo.png";
+const LOGO_SRC = "/images/logo/logo.png";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -215,6 +216,9 @@ export default function LoginPage() {
 
               <button
                 type="button"
+                onClick={() => {
+                  window.location.href = "/api/auth/google";
+                }}
                 className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-3 font-sans text-base font-semibold text-[#123E26]"
               >
                 <span className="text-lg">
@@ -230,9 +234,9 @@ export default function LoginPage() {
 
               <p className="mt-6 text-center font-sans text-sm text-[#8B7B66]">
                 New to KadaServe?{" "}
-                <span className="font-semibold text-[#165C28]">
+                <Link href="/signup" className="font-semibold text-[#165C28]">
                   Create an account
-                </span>
+                </Link>
               </p>
             </div>
           </div>
