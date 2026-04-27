@@ -13,6 +13,24 @@ function getRoleRedirect(role: string | null | undefined) {
   return "/customer";
 }
 
+function getUserFullName(
+  userMetadata: Record<string, unknown> | null | undefined,
+  email: string
+) {
+  const fullName = userMetadata?.full_name;
+  const name = userMetadata?.name;
+
+  if (typeof fullName === "string" && fullName.trim()) {
+    return fullName.trim();
+  }
+
+  if (typeof name === "string" && name.trim()) {
+    return name.trim();
+  }
+
+  return email;
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
@@ -59,6 +77,7 @@ export async function GET(request: Request) {
 
   const { error: profileCreateError } = await supabase.from("profiles").insert({
     id: user.id,
+    full_name: getUserFullName(user.user_metadata, user.email ?? ""),
     email: user.email ?? "",
     role: "customer",
   });

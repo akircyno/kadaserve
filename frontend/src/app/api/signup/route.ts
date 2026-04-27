@@ -23,15 +23,99 @@ function getPasswordIssues(password: string) {
   return issues;
 }
 
+const nameRegex = /^[A-Za-z\s.-]+$/;
+const emailRegex =
+  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+function isValidName(value: string) {
+  return nameRegex.test(value.trim());
+}
+
+function isValidPhone(value: string) {
+  return /^(09|\+639)\d{9}$/.test(value.trim());
+}
+
+function isValidEmail(value: string) {
+  return emailRegex.test(value.trim());
+}
+
+function getAdultCutoffDate() {
+  const today = new Date();
+  return new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+}
+
+function isAtLeast18(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const selectedDate = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(selectedDate.getTime())) {
+    return false;
+  }
+
+  return selectedDate <= getAdultCutoffDate();
+}
+
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const { fullName, phone, dateOfBirth, email, password } =
+      await request.json();
+    const normalizedFullName =
+      typeof fullName === "string" ? fullName.trim() : "";
+    const normalizedPhone = typeof phone === "string" ? phone.trim() : "";
+    const normalizedDateOfBirth =
+      typeof dateOfBirth === "string" ? dateOfBirth.trim() : "";
     const normalizedEmail =
       typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!normalizedEmail || typeof password !== "string") {
+    if (
+      !normalizedFullName ||
+      !normalizedPhone ||
+      !normalizedDateOfBirth ||
+      !normalizedEmail ||
+      typeof password !== "string"
+    ) {
       return NextResponse.json(
-        { error: "Email and password are required." },
+        {
+          error:
+            "Full name, phone number, date of birth, email, and password are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidName(normalizedFullName)) {
+      return NextResponse.json(
+        {
+          error:
+            "Full name can only include letters, spaces, hyphens, and dots.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidPhone(normalizedPhone)) {
+      return NextResponse.json(
+        {
+          error:
+            "Phone number must be a valid Philippine mobile number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isAtLeast18(normalizedDateOfBirth)) {
+      return NextResponse.json(
+        { error: "You must be at least 18 years old to create an account." },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address." },
         { status: 400 }
       );
     }
@@ -54,6 +138,10 @@ export async function POST(request: Request) {
       password,
       options: {
         data: {
+          full_name: normalizedFullName,
+          name: normalizedFullName,
+          phone: normalizedPhone,
+          date_of_birth: normalizedDateOfBirth,
           role: "customer",
         },
       },
@@ -66,26 +154,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error: profileError } = await supabase.from("profiles").upsert(
-      {
-        id: authData.user.id,
-        email: authData.user.email ?? normalizedEmail,
+    if (!authData.session) {
+      return NextResponse.json({
+        success: true,
         role: "customer",
-      },
-      { onConflict: "id" }
-    );
-
-    if (profileError) {
-      return NextResponse.json(
-        { error: "Account created, but customer profile could not be saved." },
-        { status: 500 }
-      );
+        needsEmailConfirmation: true,
+      });
     }
 
     return NextResponse.json({
       success: true,
       role: "customer",
-      needsEmailConfirmation: !authData.session,
+      needsEmailConfirmation: false,
     });
   } catch {
     return NextResponse.json(
