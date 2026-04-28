@@ -34,6 +34,7 @@ function getUserFullName(
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
+  const next = requestUrl.searchParams.get("next");
 
   if (!code) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=no-code`);
@@ -55,6 +56,10 @@ export async function GET(request: Request) {
 
   if (!user) {
     return NextResponse.redirect(`${requestUrl.origin}/login?error=no-user`);
+  }
+
+  if (next?.startsWith("/") && !next.startsWith("//")) {
+    return NextResponse.redirect(`${requestUrl.origin}${next}`);
   }
 
   const { data: profile, error: profileFetchError } = await supabase
