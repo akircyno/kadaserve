@@ -51,7 +51,7 @@ export async function proxy(request: NextRequest) {
       .from("profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     const redirectUrl = request.nextUrl.clone();
 
@@ -70,15 +70,9 @@ export async function proxy(request: NextRequest) {
     .from("profiles")
     .select("role")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  const role = profile?.role;
-
-  if (!role) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    return NextResponse.redirect(loginUrl);
-  }
+  const role = profile?.role ?? "customer";
 
   if (isCustomerRoute && role !== "customer") {
     const redirectUrl = request.nextUrl.clone();

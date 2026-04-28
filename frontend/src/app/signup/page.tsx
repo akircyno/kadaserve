@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -124,8 +123,6 @@ function isAtLeast18(value: string) {
 }
 
 export default function SignupPage() {
-  const router = useRouter();
-
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -269,8 +266,7 @@ export default function SignupPage() {
         return;
       }
 
-      router.push("/customer");
-      router.refresh();
+      window.location.assign("/customer");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

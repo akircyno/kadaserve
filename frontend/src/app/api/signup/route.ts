@@ -154,6 +154,24 @@ export async function POST(request: Request) {
       );
     }
 
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: authData.user.id,
+      full_name: normalizedFullName,
+      email: authData.user.email ?? normalizedEmail,
+      phone: normalizedPhone,
+      date_of_birth: normalizedDateOfBirth,
+      role: "customer",
+    });
+
+    if (profileError) {
+      return NextResponse.json(
+        {
+          error: `Account created, but profile could not be saved: ${profileError.message}`,
+        },
+        { status: 500 }
+      );
+    }
+
     if (!authData.session) {
       return NextResponse.json({
         success: true,

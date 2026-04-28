@@ -34,6 +34,10 @@ export type CustomerMenuItem = {
   base_price: number;
   image_url: string | null;
   is_available: boolean;
+  has_sugar_level?: boolean;
+  has_ice_level?: boolean;
+  has_size_option?: boolean;
+  has_temp_option?: boolean;
 };
 
 export type CustomizableMenuItem = CustomerMenuItem & {

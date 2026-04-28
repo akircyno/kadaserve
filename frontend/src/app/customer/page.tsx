@@ -19,6 +19,10 @@ const fallbackMenuItems: CustomerMenuItem[] = [
     base_price: 145,
     image_url: null,
     is_available: true,
+    has_sugar_level: true,
+    has_ice_level: true,
+    has_size_option: true,
+    has_temp_option: true,
   },
   {
     id: "2",
@@ -28,6 +32,10 @@ const fallbackMenuItems: CustomerMenuItem[] = [
     base_price: 145,
     image_url: null,
     is_available: true,
+    has_sugar_level: true,
+    has_ice_level: false,
+    has_size_option: true,
+    has_temp_option: true,
   },
   {
     id: "3",
@@ -37,6 +45,10 @@ const fallbackMenuItems: CustomerMenuItem[] = [
     base_price: 145,
     image_url: null,
     is_available: true,
+    has_sugar_level: true,
+    has_ice_level: true,
+    has_size_option: true,
+    has_temp_option: true,
   },
   {
     id: "4",
@@ -46,6 +58,10 @@ const fallbackMenuItems: CustomerMenuItem[] = [
     base_price: 145,
     image_url: null,
     is_available: true,
+    has_sugar_level: true,
+    has_ice_level: true,
+    has_size_option: true,
+    has_temp_option: true,
   },
 ];
 
@@ -68,7 +84,9 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
   const { data: menuData, error: menuError } = await supabase
     .from("menu_items")
-    .select("id, name, description, category, base_price, image_url, is_available")
+    .select(
+      "id, name, description, category, base_price, image_url, is_available, has_sugar_level, has_ice_level, has_size_option, has_temp_option"
+    )
     .order("name", { ascending: true });
 
   const menuItems = !menuError && menuData?.length ? menuData : fallbackMenuItems;
