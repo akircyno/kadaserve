@@ -275,7 +275,7 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-4 lg:flex lg:items-center lg:justify-center lg:px-8">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-3 lg:flex lg:items-center lg:justify-center lg:px-8">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -284,21 +284,21 @@ export default function SignupPage() {
         Back to KadaServe
       </Link>
 
-      <div className="mx-auto w-full max-w-md lg:max-w-6xl">
-        <section className="overflow-hidden rounded-[2rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:max-h-[calc(100vh-3rem)] lg:min-h-[38rem] lg:grid-cols-[1.02fr_1fr]">
-          <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-8">
+      <div className="mx-auto w-full max-w-md lg:max-w-5xl">
+        <section className="overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:max-h-[calc(100vh-2rem)] lg:min-h-[34rem] lg:grid-cols-[1.02fr_1fr]">
+          <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-7">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
                 <Image
                   src={LOGO_SRC}
                   alt="KadaServe logo"
-                  width={56}
-                  height={56}
+                  width={48}
+                  height={48}
                   className="h-full w-full object-cover"
                 />
               </div>
 
-              <h1 className="font-display text-4xl font-semibold text-[#FFF0DA]">
+              <h1 className="font-display text-3xl font-semibold text-[#FFF0DA]">
                 KadaServe
               </h1>
             </div>
@@ -307,18 +307,18 @@ export default function SignupPage() {
               <p className="font-sans text-sm font-bold uppercase tracking-[0.18em] text-[#CDB898]">
                 Customer Account
               </p>
-              <h2 className="mt-4 max-w-lg font-display text-5xl font-semibold leading-[1.02] text-[#FFF0DA] xl:text-6xl">
+              <h2 className="mt-3 max-w-lg font-display text-4xl font-semibold leading-[1.02] text-[#FFF0DA] xl:text-5xl">
                 Order easier.
                 <br />
                 Track clearer.
               </h2>
-              <p className="mt-4 max-w-md font-sans text-base leading-relaxed text-[#FFF0DA]/75">
+              <p className="mt-3 max-w-md font-sans text-sm leading-relaxed text-[#FFF0DA]/75">
                 Create a customer account for browsing, checkout, order
                 tracking, and feedback.
               </p>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {[
                 {
                   title: "Smart Order Monitoring",
@@ -335,7 +335,7 @@ export default function SignupPage() {
               ].map((item) => (
                 <div
                   key={item.title}
-                  className="flex items-start gap-3 font-sans text-sm leading-relaxed text-[#FFF0DA]"
+                  className="flex items-start gap-2.5 font-sans text-xs leading-relaxed text-[#FFF0DA]"
                 >
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#CDB898]" />
                   <p>
@@ -349,7 +349,7 @@ export default function SignupPage() {
             </div>
           </div>
 
-          <div className="overflow-y-auto px-5 py-6 sm:px-8 lg:flex lg:flex-col lg:justify-center lg:px-10">
+          <div className="overflow-y-auto px-5 py-5 sm:px-7 lg:flex lg:flex-col lg:justify-center lg:px-8">
             <div className="mb-6 flex items-center gap-4 lg:hidden">
               <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18]">
                 <Image
@@ -366,13 +366,13 @@ export default function SignupPage() {
               </h1>
             </div>
 
-            <div className="mb-4">
-              <h2 className="font-sans text-4xl font-bold tracking-tight text-[#0D2E18] xl:text-4xl">
+            <div className="mb-3">
+              <h2 className="font-sans text-3xl font-bold tracking-tight text-[#0D2E18] xl:text-4xl">
                 Create your account
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-2.5">
               <div>
                 <label
                   htmlFor="full-name"
@@ -381,7 +381,7 @@ export default function SignupPage() {
                   Full Name
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <User className="mr-3 text-[#8C7A64]" size={18} />
                   <input
                     id="full-name"
@@ -428,7 +428,7 @@ export default function SignupPage() {
                   Phone Number
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <Phone className="mr-3 text-[#8C7A64]" size={18} />
                   <input
                     id="phone"
@@ -470,7 +470,7 @@ export default function SignupPage() {
                   Date of Birth
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <CalendarDays className="mr-3 text-[#8C7A64]" size={18} />
                   <input
                     id="date-of-birth"
@@ -508,7 +508,7 @@ export default function SignupPage() {
                   Email Address
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <Mail className="mr-3 text-[#8C7A64]" size={18} />
                   <input
                     id="email"
@@ -549,7 +549,7 @@ export default function SignupPage() {
                   Password
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
@@ -587,7 +587,7 @@ export default function SignupPage() {
                   Confirm Password
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
@@ -664,7 +664,7 @@ export default function SignupPage() {
               </button>
             </form>
 
-            <div className="mt-4">
+            <div className="mt-3">
               <div className="flex items-center gap-4">
                 <div className="h-px flex-1 bg-[#DCCFB8]" />
                 <span className="font-sans text-sm text-[#8C7A64]">or</span>
@@ -676,7 +676,7 @@ export default function SignupPage() {
                 onClick={() => {
                   window.location.href = "/api/auth/google";
                 }}
-                className="mt-4 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                className="mt-3 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
               >
                 <span className="text-lg">
                   <span className="text-[#4285F4]">G</span>
@@ -689,7 +689,7 @@ export default function SignupPage() {
                 Continue with Google
               </button>
 
-              <p className="mt-4 text-center font-sans text-sm text-[#8C7A64]">
+              <p className="mt-3 text-center font-sans text-sm text-[#8C7A64]">
                 Already have an account?{" "}
                 <Link href="/login" className="font-semibold text-[#0F441D]">
                   Sign in

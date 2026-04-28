@@ -85,7 +85,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-6 lg:flex lg:items-center lg:justify-center lg:px-8">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-4 lg:flex lg:items-center lg:justify-center lg:px-8">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -94,35 +94,35 @@ export default function LoginPage() {
         Back to KadaServe
       </Link>
 
-      <div className="mx-auto w-full max-w-md lg:max-w-6xl">
-        <section className="overflow-hidden rounded-[2rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:min-h-[41rem] lg:grid-cols-[1.02fr_1fr]">
-          <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-10">
+      <div className="mx-auto w-full max-w-md lg:max-w-5xl">
+        <section className="overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:min-h-[34.5rem] lg:grid-cols-[1.02fr_1fr]">
+          <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-8">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
                 <Image
                   src={LOGO_SRC}
                   alt="KadaServe logo"
-                  width={56}
-                  height={56}
+                  width={48}
+                  height={48}
                   className="h-full w-full object-cover"
                 />
               </div>
 
-              <h1 className="font-display text-4xl font-semibold text-[#FFF2E2]">
+              <h1 className="font-display text-3xl font-semibold text-[#FFF2E2]">
                 KadaServe
               </h1>
             </div>
 
             <div>
-              <h2 className="font-display text-6xl font-semibold leading-snug text-[#FFF0DA]">
+              <h2 className="font-display text-5xl font-semibold leading-tight text-[#FFF0DA]">
                 Every cup
               </h2>
-              <p className="font-display mt-1 text-6xl italic font-semibold leading-snug text-[#FFF0DA]">
+              <p className="font-display mt-1 text-5xl italic font-semibold leading-tight text-[#FFF0DA]">
                 tells a story.
               </p>
             </div>
 
-            <ul className="space-y-4 font-sans text-base text-[#FFF0DA]/78">
+            <ul className="space-y-3 font-sans text-sm text-[#FFF0DA]/78">
               {[
                 "Live Order Tracking",
                 "Smart Inventory Insights",
@@ -136,7 +136,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <div className="px-5 py-7 sm:px-8 sm:py-8 lg:flex lg:flex-col lg:justify-center lg:px-10">
+          <div className="px-5 py-6 sm:px-7 sm:py-7 lg:flex lg:flex-col lg:justify-center lg:px-8">
             <div className="mb-6 flex items-center gap-4 lg:hidden">
               <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18]">
                 <Image
@@ -153,25 +153,25 @@ export default function LoginPage() {
               </h1>
             </div>
 
-            <div className="mb-6">
-              <h2 className="font-sans text-5xl font-bold tracking-tight text-[#0D2E18]">
+            <div className="mb-5">
+              <h2 className="font-sans text-4xl font-bold tracking-tight text-[#0D2E18]">
                 Welcome back
               </h2>
-              <p className="mt-2 font-sans text-lg text-[#684B35]">
+              <p className="mt-1.5 font-sans text-base text-[#684B35]">
                 Sign in to order, track, and enjoy your favorites
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label
                   htmlFor="email"
-                  className="mb-2 block font-sans text-sm font-bold uppercase tracking-[0.08em] text-[#0F441D]"
+                  className="mb-1.5 block font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#0F441D]"
                 >
                   Email Address
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-3 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
                   <Mail className="mr-3 text-[#8C7A64]" size={18} />
                   <input
                     ref={emailInputRef}
@@ -205,12 +205,12 @@ export default function LoginPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="mb-2 block font-sans text-sm font-bold uppercase tracking-[0.08em] text-[#0F441D]"
+                  className="mb-1.5 block font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#0F441D]"
                 >
                   Password
                 </label>
 
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-3 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
+                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
@@ -236,7 +236,7 @@ export default function LoginPage() {
                   </button>
                 </div>
 
-                <div className="mt-2 text-right">
+                <div className="mt-1.5 text-right">
                   <Link
                     href="/forgot-password"
                     className="font-sans text-sm text-[#8C7A64] transition hover:text-[#0F441D]"
@@ -256,13 +256,13 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="w-full rounded-xl bg-[#0F441D] py-3 font-sans text-lg font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
+                className="w-full rounded-xl bg-[#0F441D] py-2.5 font-sans text-base font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
               >
                 {isLoading ? "Signing in..." : "Sign in"}
               </button>
             </form>
 
-            <div className="mt-7">
+            <div className="mt-5">
               <div className="flex items-center gap-4">
                 <div className="h-px flex-1 bg-[#DCCFB8]" />
                 <span className="font-sans text-sm text-[#8C7A64]">or</span>
@@ -274,7 +274,7 @@ export default function LoginPage() {
                 onClick={() => {
                   window.location.href = "/api/auth/google";
                 }}
-                className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl border border-[#D6C6AC] bg-white px-5 py-3 font-sans text-base font-semibold text-[#0D2E18] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                className="mt-4 flex w-full items-center justify-center gap-3 rounded-xl border border-[#D6C6AC] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 <span className="text-lg">
                   <span className="text-[#4285F4]">G</span>
@@ -287,7 +287,7 @@ export default function LoginPage() {
                 Continue with Google
               </button>
 
-              <p className="mt-5 text-center font-sans text-sm text-[#8C7A64]">
+              <p className="mt-4 text-center font-sans text-sm text-[#8C7A64]">
                 New to KadaServe?{" "}
                 <Link href="/signup" className="font-semibold text-[#0F441D]">
                   Create an account

@@ -50,6 +50,7 @@ export type CustomerOrderItem = {
   menu_items: {
     id?: string;
     name: string;
+    category?: string;
   } | null;
 };
 
@@ -59,5 +60,8 @@ export type CustomerOrder = {
   status: OrderStatus;
   total_amount: number;
   ordered_at: string;
+  delivery_address?: string | null;
+  delivery_email?: string | null;
+  delivery_phone?: string | null;
   order_items: CustomerOrderItem[];
 };

@@ -93,8 +93,39 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
   let orders: CustomerOrder[] = fallbackOrders;
   let feedbackItems: FeedbackItem[] = [];
+  let customerProfile = {
+    fullName: "KadaServe Customer",
+    email: user?.email ?? null,
+    phone: null as string | null,
+    defaultDeliveryAddress: null as string | null,
+    satisfactionAverage: null as number | null,
+  };
 
   if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email, phone")
+      .eq("id", user.id)
+      .maybeSingle();
+    const { data: deliveryProfile } = await supabase
+      .from("profiles")
+      .select("default_delivery_address")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    customerProfile = {
+      fullName:
+        profile?.full_name ||
+        user.user_metadata?.full_name ||
+        user.email?.split("@")[0] ||
+        "KadaServe Customer",
+      email: profile?.email || user.email || null,
+      phone: profile?.phone || null,
+      defaultDeliveryAddress:
+        deliveryProfile?.default_delivery_address ?? null,
+      satisfactionAverage: null,
+    };
+
     const { data: ordersData, error: ordersError } = await supabase
       .from("orders")
       .select(
@@ -104,13 +135,17 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           status,
           total_amount,
           ordered_at,
+          delivery_address,
+          delivery_email,
+          delivery_phone,
           order_items (
             id,
             quantity,
             unit_price,
             menu_items (
               id,
-              name
+              name,
+              category
             )
           )
         `
@@ -120,6 +155,10 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
     if (!ordersError && ordersData) {
       orders = ordersData as unknown as CustomerOrder[];
+      customerProfile.defaultDeliveryAddress =
+        customerProfile.defaultDeliveryAddress ||
+        orders.find((order) => order.delivery_address)?.delivery_address ||
+        null;
     }
 
     const eligibleStatuses = ["delivered", "completed"];
@@ -152,6 +191,21 @@ export default async function CustomerPage({ searchParams }: PageProps) {
         (item) => !submittedIds.has(item.order_item_id)
       );
     }
+
+    const { data: submittedFeedback } = await supabase
+      .from("feedback")
+      .select("overall_rating")
+      .eq("customer_id", user.id);
+
+    const ratings =
+      submittedFeedback
+        ?.map((item) => Number(item.overall_rating))
+        .filter((rating) => Number.isFinite(rating)) ?? [];
+
+    customerProfile.satisfactionAverage =
+      ratings.length > 0
+        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+        : null;
   }
 
   return (
@@ -160,6 +214,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       orders={orders}
       feedbackItems={feedbackItems}
       initialSection={initialSection}
+      customerProfile={customerProfile}
     />
   );
 }
