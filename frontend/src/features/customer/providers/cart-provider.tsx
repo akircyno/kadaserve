@@ -28,8 +28,12 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "kadaserve-cart";
 
-function readStoredItems() {
+function readStoredItems(isAuthenticated: boolean) {
   if (typeof window === "undefined") {
+    return [];
+  }
+
+  if (!isAuthenticated) {
     return [];
   }
 
@@ -59,14 +63,31 @@ function buildSignature(item: AddCartItemInput) {
   });
 }
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(() => readStoredItems());
+export function CartProvider({
+  children,
+  isAuthenticated = false,
+}: {
+  children: ReactNode;
+  isAuthenticated?: boolean;
+}) {
+  const [items, setItems] = useState<CartItem[]>(() =>
+    readStoredItems(isAuthenticated)
+  );
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+  }, [isAuthenticated, items]);
 
   function addItem(item: AddCartItemInput) {
+    if (!isAuthenticated) {
+      return;
+    }
+
     setItems((current) => {
       const incomingSignature = buildSignature(item);
 
@@ -108,6 +129,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   function updateItem(id: string, updates: UpdateCartItemInput) {
+    if (!isAuthenticated) {
+      return;
+    }
+
     setItems((current) =>
       current.map((item) =>
         item.id === id
@@ -125,6 +150,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   function removeItem(id: string) {
+    if (!isAuthenticated) {
+      return;
+    }
+
     setItems((current) => current.filter((item) => item.id !== id));
   }
 

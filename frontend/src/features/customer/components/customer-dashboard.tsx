@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
+  Coffee,
   CupSoda,
   Gift,
   HelpCircle,
@@ -160,6 +161,8 @@ const temperatures = [
   { label: "Hot", value: "hot" },
   { label: "Iced", value: "iced" },
 ];
+
+const onboardingStorageKey = "kadaserve_first_sip_onboarding_seen";
 
 const addons = [
   { label: "Extra Sugar", value: "extra_sugar", price: 10 },
@@ -706,6 +709,7 @@ export function CustomerDashboard({
   const profileInitials = getInitials(displayProfileName);
   const fullMenuRef = useRef<HTMLDivElement>(null);
   const recommendationScrollerRef = useRef<HTMLDivElement>(null);
+  const onboardingScrollerRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const trackingTouchStartYRef = useRef<number | null>(null);
   const isGuest = !isAuthenticated;
@@ -717,22 +721,24 @@ export function CustomerDashboard({
     Boolean(selectedFeedbackItem) && overallRating > 0 && !isSubmittingFeedback;
   const onboardingCards = [
     {
-      title: "Discover Your Daily Brew",
-      body: "KadaServe learns from your taste signals to rank the drinks and pastries you are most likely to enjoy next.",
+      title: "Coffee Crafted for You",
+      body: "Stop the guesswork. My system learns your unique taste profile to recommend the perfect brew tailored specifically to your preferences.",
       icon: Sparkles,
+      illustration: "discovery",
     },
     {
-      title: "Track in Real-Time",
-      body: "Watch each order move from pending to preparing, ready, delivery, or done without refreshing the page.",
+      title: "Track Every Sip",
+      body: "Stay in the loop with real-time updates. Follow your order's journey from the barista's counter to your doorstep or pickup window.",
       icon: ClipboardList,
+      illustration: "tracking",
     },
     {
-      title: "Earn as You Rate",
-      body: "Submit quick feedback after every order to earn reward points and improve your recommendations.",
+      title: "Rate, Earn, and Repeat",
+      body: "Your voice matters. Share your feedback on every order to earn points and unlock exclusive vouchers for your next Kada Cafe visit.",
       icon: Gift,
+      illustration: "rewards",
     },
   ];
-  const CurrentOnboardingIcon = onboardingCards[onboardingStep]?.icon ?? Sparkles;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -744,7 +750,7 @@ export function CustomerDashboard({
 
   useEffect(() => {
     const showOnboardingIfNeeded = () => {
-      if (window.localStorage.getItem("kadaserve_onboarding_seen") !== "true") {
+      if (window.localStorage.getItem(onboardingStorageKey) !== "true") {
         setIsOnboardingOpen(true);
       }
     };
@@ -753,17 +759,12 @@ export function CustomerDashboard({
     setIsSplashVisible(true);
     const splashTimeoutId = window.setTimeout(() => {
       setIsSplashVisible(false);
-      setIsTaglineVisible(true);
-    }, 1500);
-
-    const taglineTimeoutId = window.setTimeout(() => {
       setIsTaglineVisible(false);
       showOnboardingIfNeeded();
-    }, 2600);
+    }, 5000);
 
     return () => {
       window.clearTimeout(splashTimeoutId);
-      window.clearTimeout(taglineTimeoutId);
     };
   }, []);
 
@@ -1420,9 +1421,27 @@ export function CustomerDashboard({
   }
 
   function finishOnboarding() {
-    window.localStorage.setItem("kadaserve_onboarding_seen", "true");
+    window.localStorage.setItem(onboardingStorageKey, "true");
+    setActiveSection("home");
     setIsOnboardingOpen(false);
     setOnboardingStep(0);
+    window.setTimeout(() => {
+      onboardingScrollerRef.current?.scrollTo({ left: 0 });
+    }, 0);
+  }
+
+  function handleOnboardingNext() {
+    if (onboardingStep >= onboardingCards.length - 1) {
+      finishOnboarding();
+      return;
+    }
+
+    const nextStep = onboardingStep + 1;
+    setOnboardingStep(nextStep);
+    onboardingScrollerRef.current?.scrollTo({
+      left: onboardingScrollerRef.current.clientWidth * nextStep,
+      behavior: "smooth",
+    });
   }
 
   function handleFilterSelect(value: Filter) {
@@ -2348,7 +2367,7 @@ export function CustomerDashboard({
                       <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
                         Current Points
                       </p>
-                      <p className="mt-2 font-display text-6xl font-bold leading-none">
+                      <p className="mt-2 font-sans text-6xl font-bold leading-none">
                         {rewardPoints}
                       </p>
                     </div>
@@ -2607,48 +2626,135 @@ export function CustomerDashboard({
       </div>
 
       {isSplashVisible ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#F8F7F2] px-6 text-[#0D2E18]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.92)_0%,_rgba(248,247,242,0.96)_54%,_rgba(239,235,226,0.95)_100%)]" />
-          <div className="relative z-10 flex w-full max-w-[820px] flex-col items-center">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#0D2E18] px-6 text-[#FFF0DA]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,#0F441D_0%,#0D2E18_46%,#06190D_100%)]" />
+          <div className="kada-loading-exit relative z-10 flex w-full max-w-[820px] flex-col items-center">
+            <div className="relative mb-10 flex h-32 w-full max-w-md items-center justify-center text-center sm:mb-16 sm:h-36">
+              <div className="kada-brand-dissolve absolute inset-0 flex flex-col items-center justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_16px_34px_rgba(0,0,0,0.18)]">
+                  <svg
+                    viewBox="0 0 96 96"
+                    aria-hidden="true"
+                    className="h-11 w-11 text-[#0F441D]"
+                  >
+                    <g
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="8"
+                    >
+                      <circle cx="30" cy="58" r="15" />
+                      <circle cx="66" cy="58" r="15" />
+                      <path d="M30 58 48 42 66 58" />
+                      <path d="M48 42 57 26" />
+                      <path d="M55 25 64 43" />
+                    </g>
+                  </svg>
+                </div>
+                <p className="mt-5 font-display text-4xl font-bold text-[#FFF0DA]">
+                  KadaServe
+                </p>
+              </div>
+
+              <p className="kada-brand-emerge absolute inset-x-0 top-1/2 -translate-y-1/2 font-display text-4xl italic leading-tight text-[#FFF0DA]">
+                Every cup tells a story
+              </p>
+            </div>
+
             <div className="w-full max-w-[720px]">
-              <p className="-rotate-1 pl-3 font-sans text-xl font-black uppercase tracking-[0.16em] text-[#0F5A35] drop-shadow-sm sm:text-3xl">
+              <p className="-rotate-1 pl-1 font-sans text-[1.1rem] font-black uppercase tracking-[0.14em] text-[#FFF0DA] drop-shadow-sm sm:pl-3 sm:text-3xl sm:tracking-[0.16em]">
                 Kadaserve Loading...
               </p>
 
-              <div className="relative mt-4 h-9 rounded-full border-[4px] border-[#0F5A35] bg-transparent p-1 shadow-[0_2px_0_rgba(15,68,29,0.18)] sm:h-11">
-                <div className="kada-loading-fill h-full rounded-full bg-[linear-gradient(90deg,#0F441D_0%,#137845_100%)] shadow-[inset_0_2px_8px_rgba(255,255,255,0.18)]" />
-                <span className="kada-loading-spout absolute left-[67%] top-[calc(100%-2px)] h-16 w-3 rounded-b-full bg-[#0F5A35]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+3.8rem)]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+6.5rem)] [animation-delay:180ms]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+9.1rem)] [animation-delay:360ms]" />
+              <div className="relative mt-4 h-52 sm:h-72">
+                <svg
+                  viewBox="0 0 700 52"
+                  aria-hidden="true"
+                  className="h-12 w-full overflow-visible"
+                >
+                  <path
+                    d="M26 26 H674"
+                    fill="none"
+                    stroke="#FFF0DA"
+                    strokeLinecap="round"
+                    strokeWidth="30"
+                    opacity="0.95"
+                  />
+                  <path
+                    d="M26 26 H674"
+                    fill="none"
+                    stroke="#0F441D"
+                    strokeLinecap="round"
+                    strokeWidth="22"
+                    pathLength="100"
+                    className="kada-progress-path"
+                  />
+                </svg>
+                <span className="kada-loading-drip-rail absolute left-0 top-0 h-0 w-0">
+                  <span className="kada-loading-spout absolute left-0 top-[1.45rem] h-6 w-2 rounded-b-full bg-[#0F441D]" />
+                  <span className="kada-loading-drop absolute left-0 top-[2.75rem]" />
+                  <span className="kada-loading-drop absolute left-0 top-[3.7rem] [animation-delay:220ms]" />
+                  <span className="kada-loading-drop absolute left-0 top-[4.65rem] [animation-delay:440ms]" />
+                </span>
+
+                <svg
+                  viewBox="0 0 420 260"
+                  role="img"
+                  aria-label="KadaServe spoon bike loading mark"
+                  className="kada-transit-bike absolute top-[5rem] w-32 overflow-visible text-[#FFF0DA] sm:top-[6.4rem] sm:w-60"
+                >
+                  <g
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="18"
+                  >
+                    <path d="M122 178 212 112 296 178" />
+                    <path d="M212 112 258 58" />
+                    <path d="M250 48 286 110" />
+                    <path d="M205 112 168 178" />
+                  </g>
+                  <g className="kada-loading-wheel">
+                    <circle
+                      cx="122"
+                      cy="178"
+                      r="61"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="18"
+                    />
+                    <ellipse
+                      cx="122"
+                      cy="178"
+                      rx="27"
+                      ry="17"
+                      fill="currentColor"
+                      transform="rotate(-38 122 178)"
+                    />
+                  </g>
+                  <g className="kada-loading-wheel">
+                    <circle
+                      cx="296"
+                      cy="178"
+                      r="61"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="18"
+                    />
+                    <ellipse
+                      cx="296"
+                      cy="178"
+                      rx="27"
+                      ry="17"
+                      fill="currentColor"
+                      transform="rotate(48 296 178)"
+                    />
+                  </g>
+                </svg>
               </div>
             </div>
-
-            <svg
-              viewBox="0 0 420 260"
-              role="img"
-              aria-label="KadaServe coffee bicycle loading mark"
-              className="kada-loading-bike mt-20 w-[min(86vw,420px)] overflow-visible text-[#0F5A35] sm:mt-24"
-            >
-              <g
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="18"
-              >
-                <circle cx="122" cy="178" r="61" />
-                <circle cx="296" cy="178" r="61" />
-                <path d="M122 178 212 112 296 178" />
-                <path d="M212 112 258 58" />
-                <path d="M250 48 286 110" />
-                <path d="M205 112 168 178" />
-              </g>
-              <g fill="currentColor">
-                <ellipse cx="122" cy="178" rx="27" ry="17" transform="rotate(-38 122 178)" />
-                <ellipse cx="296" cy="178" rx="27" ry="17" transform="rotate(48 296 178)" />
-              </g>
-            </svg>
           </div>
         </div>
       ) : null}
@@ -2669,44 +2775,122 @@ export function CustomerDashboard({
 
       {isOnboardingOpen && !isTaglineVisible ? (
         <div className="fixed inset-0 z-[85] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-md md:items-center md:p-6">
-          <section className="w-full max-w-lg rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] p-5 shadow-[0_-18px_40px_rgba(13,46,24,0.20)] md:rounded-[30px] md:p-6 lg:max-w-xl">
-            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-[#DCCFB8] md:hidden" />
+          <section className="w-full max-w-lg rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.20)] md:rounded-[30px] lg:max-w-xl">
+            <div className="px-5 pb-5 pt-4 md:p-6">
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#DCCFB8] md:hidden" />
 
-            <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="flex items-center justify-between gap-4">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                  Quick Guide
+                  First Sip Journey
                 </p>
-                <h2 className="mt-1 font-display text-3xl font-bold leading-tight text-[#0D2E18] sm:text-4xl">
-                  {onboardingCards[onboardingStep]?.title}
-                </h2>
+                <button
+                  type="button"
+                  onClick={finishOnboarding}
+                  className="rounded-full border border-[#DCCFB8] bg-white/78 px-3 py-2 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white"
+                >
+                  Skip
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={finishOnboarding}
-                className="rounded-full border border-[#DCCFB8] bg-white px-3 py-2 font-sans text-xs font-bold text-[#684B35]"
-              >
-                Skip
-              </button>
             </div>
 
             <div
-              key={onboardingCards[onboardingStep]?.title}
-              className="kada-fade-up mt-5 rounded-[26px] bg-[#0D2E18] p-5 text-[#FFF0D8] sm:p-6"
+              ref={onboardingScrollerRef}
+              onScroll={(event) => {
+                const { clientWidth, scrollLeft } = event.currentTarget;
+                const nextStep = Math.round(scrollLeft / Math.max(clientWidth, 1));
+
+                if (nextStep !== onboardingStep) {
+                  setOnboardingStep(
+                    Math.min(Math.max(nextStep, 0), onboardingCards.length - 1)
+                  );
+                }
+              }}
+              className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0F441D]">
-                <CurrentOnboardingIcon size={26} />
-              </div>
-              <p className="mt-5 min-h-24 font-sans text-base leading-7 text-[#FFF0D8]/88 sm:min-h-20">
-                {onboardingCards[onboardingStep]?.body}
-              </p>
+              {onboardingCards.map((card) => {
+                const Icon = card.icon;
+
+                return (
+                  <article
+                    key={card.title}
+                    className="min-w-full snap-center px-5 pb-3 md:px-6"
+                  >
+                    <div className="flex min-h-[19rem] flex-col items-center justify-center rounded-[26px] bg-[#0D2E18] p-5 text-center text-[#FFF0D8] sm:min-h-[21rem] sm:p-6">
+                      <div className="relative flex h-32 w-32 items-center justify-center sm:h-36 sm:w-36">
+                        {card.illustration === "discovery" ? (
+                          <>
+                            <div className="absolute inset-4 rounded-full bg-[#FFF0DA]/12" />
+                            <div className="relative flex h-24 w-24 items-center justify-center rounded-[32px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_18px_34px_rgba(0,0,0,0.20)]">
+                              <Coffee className="h-12 w-12 text-[#0F441D]" />
+                            </div>
+                            <Sparkles className="absolute right-4 top-4 h-7 w-7 text-[#FFF0D8]" />
+                          </>
+                        ) : card.illustration === "tracking" ? (
+                          <div className="relative h-full w-full">
+                            <div className="absolute left-4 right-4 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#FFF0D8]/28">
+                              <div className="h-full w-2/3 rounded-full bg-[#FFF0D8]" />
+                            </div>
+                            <svg
+                              viewBox="0 0 96 96"
+                              aria-hidden="true"
+                              className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 text-[#FFF0D8]"
+                            >
+                              <g
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="8"
+                              >
+                                <circle cx="30" cy="60" r="14" />
+                                <circle cx="66" cy="60" r="14" />
+                                <path d="M30 60 48 44 66 60" />
+                                <path d="M48 44 57 28" />
+                                <path d="M55 28 64 45" />
+                              </g>
+                            </svg>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="absolute inset-5 rounded-full border border-[#FFF0D8]/28" />
+                            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#FFF0D8] text-[#0D2E18] shadow-[0_18px_34px_rgba(0,0,0,0.20)]">
+                              <span className="font-sans text-4xl font-black">+1</span>
+                            </div>
+                            <Gift className="absolute right-4 top-4 h-8 w-8 text-[#FFF0D8]" />
+                          </>
+                        )}
+                      </div>
+
+                      <div className="mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#0F441D]">
+                        <Icon size={20} />
+                      </div>
+                      <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-[#FFF0D8] sm:text-4xl">
+                        {card.title}
+                      </h2>
+                      <p className="mt-4 max-w-sm font-sans text-base leading-7 text-[#FFF0D8]/88">
+                        {card.body}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 px-5 pb-5 pt-2 md:px-6 md:pb-6">
               <div className="flex gap-2">
                 {onboardingCards.map((card, index) => (
-                  <span
+                  <button
                     key={card.title}
+                    type="button"
+                    aria-label={`Go to onboarding slide ${index + 1}`}
+                    onClick={() => {
+                      setOnboardingStep(index);
+                      onboardingScrollerRef.current?.scrollTo({
+                        left:
+                          onboardingScrollerRef.current.clientWidth * index,
+                        behavior: "smooth",
+                      });
+                    }}
                     className={`h-2 rounded-full transition-all ${
                       index === onboardingStep
                         ? "w-8 bg-[#0D2E18]"
@@ -2718,24 +2902,23 @@ export function CustomerDashboard({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (onboardingStep >= onboardingCards.length - 1) {
-                    finishOnboarding();
-                    return;
-                  }
-
-                  setOnboardingStep((step) => step + 1);
-                }}
+                onClick={handleOnboardingNext}
                 aria-label={
                   onboardingStep >= onboardingCards.length - 1
                     ? "Enter KadaServe"
                     : "Next onboarding slide"
                 }
-                className="group flex h-14 min-w-14 items-center justify-center rounded-full bg-[#0D2E18] px-5 font-sans text-sm font-bold text-[#FFF0D8] shadow-[0_12px_26px_rgba(13,46,24,0.20)] transition duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#0F441D] hover:shadow-[0_16px_34px_rgba(13,46,24,0.26)]"
+                className="group flex h-14 min-w-14 items-center justify-center rounded-full bg-[#0D2E18] px-5 font-sans text-sm font-bold text-[#FFF0DA] shadow-[0_12px_26px_rgba(13,46,24,0.20)] transition duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#0F441D] hover:shadow-[0_16px_34px_rgba(13,46,24,0.26)]"
               >
-                <span className="hidden sm:inline">
+                <span
+                  className={
+                    onboardingStep >= onboardingCards.length - 1
+                      ? "inline"
+                      : "hidden sm:inline"
+                  }
+                >
                   {onboardingStep >= onboardingCards.length - 1
-                    ? "Enter KadaServe"
+                    ? "Get Started"
                     : "Next"}
                 </span>
                 <ChevronRight className="h-5 w-5 transition group-hover:translate-x-0.5 sm:ml-2" />

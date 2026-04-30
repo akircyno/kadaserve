@@ -166,7 +166,7 @@ export function LandingPage() {
                           <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                             {card.title}
                           </p>
-                          <p className="mt-1 font-display text-2xl font-bold leading-none">
+                          <p className="mt-1 font-sans text-2xl font-bold leading-none">
                             {card.value}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#684B35]">
@@ -333,7 +333,7 @@ export function LandingPage() {
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-3xl bg-white p-4">
                     <p className="text-sm font-bold text-[#684B35]">{label}</p>
-                    <p className="mt-2 font-display text-3xl font-bold">{value}</p>
+                    <p className="mt-2 font-sans text-3xl font-bold">{value}</p>
                   </div>
                 ))}
               </div>

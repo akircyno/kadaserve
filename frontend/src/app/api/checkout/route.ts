@@ -16,6 +16,20 @@ type CheckoutItem = {
   image_url: string | null;
 };
 
+function getVoucherDiscount(subtotal: number, code: string) {
+  const normalizedCode = code.trim().toUpperCase();
+
+  if (normalizedCode === "KADA10") {
+    return Math.round(subtotal * 0.1);
+  }
+
+  if (normalizedCode === "FIRSTSIP") {
+    return Math.min(50, subtotal);
+  }
+
+  return 0;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -39,6 +53,7 @@ export async function POST(request: Request) {
     const deliveryAddress = body.deliveryAddress as string;
     const deliveryEmail = body.deliveryEmail as string;
     const deliveryPhone = body.deliveryPhone as string;
+    const voucherCode = typeof body.voucherCode === "string" ? body.voucherCode : "";
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
@@ -67,9 +82,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const totalAmount = items.reduce((sum, item) => {
+    const subtotal = items.reduce((sum, item) => {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
+    const totalAmount = Math.max(0, subtotal - getVoucherDiscount(subtotal, voucherCode));
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
