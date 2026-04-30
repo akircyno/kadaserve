@@ -24,6 +24,7 @@ const emptyMenuForm: MenuFormState = {
 };
 
 const adminMenuCategories: Array<{ value: MenuCategory; label: string }> = [
+  { value: "coffee", label: "Coffee" },
   { value: "non-coffee", label: "Non-Coffee" },
   { value: "pastries", label: "Pastries" },
   { value: "latte-series", label: "Latte Series" },
@@ -36,6 +37,7 @@ function peso(value: number) {
 }
 
 function formatCategory(category: string) {
+  if (category === "coffee") return "Coffee";
   if (category === "non-coffee") return "Non-Coffee";
   if (category === "latte-series") return "Latte Series";
   if (category === "premium-blends") return "Premium Blends";

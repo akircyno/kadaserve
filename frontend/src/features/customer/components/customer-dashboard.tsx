@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   type ChangeEvent,
   useEffect,
@@ -10,18 +9,24 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BadgePercent,
   Camera,
+  CalendarCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   ClipboardList,
-  Clock,
+  Coffee,
   CupSoda,
   Gift,
   HelpCircle,
   History,
   House,
   Languages,
+  LockKeyhole,
+  PartyPopper,
+  QrCode,
   Search,
   Settings,
   ShoppingCart,
@@ -29,7 +34,7 @@ import {
   Sparkles,
   Star,
   ShieldCheck,
-  TrendingUp,
+  Ticket,
   X,
   Minus,
   Plus,
@@ -44,6 +49,7 @@ import type { FeedbackItem } from "@/types/feedback";
 
 type Section = "home" | "menu" | "orders" | "rewards" | "feedback";
 type ProfileFaq = "order" | "delivery";
+type RewardsTab = "missions" | "redeem" | "wallet";
 type Filter =
   | "all"
   | "coffee"
@@ -71,6 +77,13 @@ type CustomerDashboardProps = {
     satisfactionAverage: number | null;
   };
   isAuthenticated?: boolean;
+};
+
+type RewardVoucher = {
+  code: string;
+  title: string;
+  expiresAt: string;
+  value: string;
 };
 
 
@@ -106,33 +119,33 @@ const mobileTabs: Array<
 ];
 
 const menuFilters: Array<{
-  value: Filter;
+  value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
   label: string;
+  icon: typeof CupSoda;
 }> = [
-  { value: "all", label: "All" },
-  { value: "coffee", label: "Coffee" },
-  { value: "non-coffee", label: "Non-Coffee" },
-  { value: "pastries", label: "Pastries" },
-  { value: "best-deals", label: "Best Deals" },
+  { value: "coffee", label: "Coffee", icon: Coffee },
+  { value: "non-coffee", label: "Non-Coffee", icon: CupSoda },
+  { value: "pastries", label: "Pastries", icon: Gift },
+  { value: "best-deals", label: "Best Deals", icon: BadgePercent },
 ];
 
 const localMenuImages: Record<string, string> = {
   "brown sugar choco latte":
-    "/images/menu/Latte-Series/Brown Sugar Choco Latte.png",
-  "brown sugar latte": "/images/menu/Latte-Series/Brown Sugar Latte.png",
-  "french vanilla latte": "/images/menu/Latte-Series/French Vanilla Latte.png",
-  matcha: "/images/menu/Latte-Series/Matcha.JPG",
-  "matcha latte": "/images/menu/Latte-Series/Matcha.JPG",
-  "spanish latte": "/images/menu/Latte-Series/Spanish Latte.png",
-  "choco milk": "/images/menu/Non-Coffee/Choco Milk Drink.png",
-  "choco milk drink": "/images/menu/Non-Coffee/Choco Milk Drink.png",
-  "strawberry latte": "/images/menu/Non-Coffee/Strawberry Latte.JPG",
-  macchiato: "/images/menu/Premium-Blends/Caramel Machiato.png",
-  machiato: "/images/menu/Premium-Blends/Caramel Machiato.png",
-  "caramel macchiato": "/images/menu/Premium-Blends/Caramel Machiato.png",
-  "caramel machiato": "/images/menu/Premium-Blends/Caramel Machiato.png",
-  mocha: "/images/menu/Premium-Blends/Mocha.png",
-  "strawberry matcha": "/images/menu/Premium-Blends/Strawberry Matcha.JPG",
+    "/images/menu/coffee/Brown Suagr Choco Latte.png",
+  "brown sugar latte": "/images/menu/coffee/Brown Sugar Latte.png",
+  "french vanilla latte": "/images/menu/coffee/French Vanilla Latte.png",
+  matcha: "/images/menu/coffee/Matcha Latte.png",
+  "matcha latte": "/images/menu/coffee/Matcha Latte.png",
+  "spanish latte": "/images/menu/coffee/Spanish Latte.png",
+  "choco milk": "/images/menu/non-coffee/Choco Milk Drink.png",
+  "choco milk drink": "/images/menu/non-coffee/Choco Milk Drink.png",
+  "strawberry latte": "/images/menu/non-coffee/Strawberry Latte.png",
+  macchiato: "/images/menu/premium-blends/Caramel Macchiato.png",
+  machiato: "/images/menu/premium-blends/Caramel Macchiato.png",
+  "caramel macchiato": "/images/menu/premium-blends/Caramel Macchiato.png",
+  "caramel machiato": "/images/menu/premium-blends/Caramel Macchiato.png",
+  mocha: "/images/menu/premium-blends/mocha.png",
+  "strawberry matcha": "/images/menu/premium-blends/strawberry matcha.png",
 };
 
 const sugarLevels = [
@@ -160,6 +173,37 @@ const temperatures = [
   { label: "Hot", value: "hot" },
   { label: "Iced", value: "iced" },
 ];
+
+const onboardingStorageKey = "kadaserve_first_sip_onboarding_seen";
+const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
+const checkInStorageKey = "kadaserve_daily_check_in";
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getRewardExpiry(daysFromNow = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function readRewardWallet() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(rewardsWalletStorageKey) ?? "[]"
+    ) as RewardVoucher[];
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 const addons = [
   { label: "Extra Sugar", value: "extra_sugar", price: 10 },
@@ -646,7 +690,7 @@ export function CustomerDashboard({
 }: CustomerDashboardProps) {
 
   const router = useRouter();
-  const { addItem, cartCount } = useCart();
+  const { addItem, cartCount, items: cartItems } = useCart();
   const [customerOrders, setCustomerOrders] = useState(orders);
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [isSplashVisible, setIsSplashVisible] = useState(false);
@@ -654,10 +698,12 @@ export function CustomerDashboard({
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [activePromoIndex, setActivePromoIndex] = useState(0);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCartTrayOpen, setIsCartTrayOpen] = useState(false);
   const [guestActionMessage, setGuestActionMessage] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("coffee");
   const [selectedMenuItem, setSelectedMenuItem] =
     useState<CustomerMenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -680,6 +726,13 @@ export function CustomerDashboard({
   const [feedbackComment, setFeedbackComment] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [activeRewardsTab, setActiveRewardsTab] =
+    useState<RewardsTab>("missions");
+  const [bonusRewardPoints, setBonusRewardPoints] = useState(0);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+  const [claimedMissionIds, setClaimedMissionIds] = useState<string[]>([]);
+  const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
+  const [rewardCelebration, setRewardCelebration] = useState("");
   const profileName = customerProfile?.fullName || "KadaServe Customer";
   const profileEmail = customerProfile?.email;
   const [displayProfileName, setDisplayProfileName] = useState(profileName);
@@ -704,8 +757,13 @@ export function CustomerDashboard({
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSettingsMessage, setProfileSettingsMessage] = useState("");
   const profileInitials = getInitials(displayProfileName);
+  const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
+  const menuCategoryRefs = useRef<
+    Partial<Record<Exclude<Filter, "all" | "latte-series" | "premium-blends">, HTMLElement | null>>
+  >({});
   const recommendationScrollerRef = useRef<HTMLDivElement>(null);
+  const onboardingScrollerRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const trackingTouchStartYRef = useRef<number | null>(null);
   const isGuest = !isAuthenticated;
@@ -717,22 +775,24 @@ export function CustomerDashboard({
     Boolean(selectedFeedbackItem) && overallRating > 0 && !isSubmittingFeedback;
   const onboardingCards = [
     {
-      title: "Discover Your Daily Brew",
-      body: "KadaServe learns from your taste signals to rank the drinks and pastries you are most likely to enjoy next.",
+      title: "Coffee Crafted for You",
+      body: "Stop the guesswork. My system learns your unique taste profile to recommend the perfect brew tailored specifically to your preferences.",
       icon: Sparkles,
+      illustration: "discovery",
     },
     {
-      title: "Track in Real-Time",
-      body: "Watch each order move from pending to preparing, ready, delivery, or done without refreshing the page.",
+      title: "Track Every Sip",
+      body: "Stay in the loop with real-time updates. Follow your order's journey from the barista's counter to your doorstep or pickup window.",
       icon: ClipboardList,
+      illustration: "tracking",
     },
     {
-      title: "Earn as You Rate",
-      body: "Submit quick feedback after every order to earn reward points and improve your recommendations.",
+      title: "Rate, Earn, and Repeat",
+      body: "Your voice matters. Share your feedback on every order to earn points and unlock exclusive vouchers for your next Kada Cafe visit.",
       icon: Gift,
+      illustration: "rewards",
     },
   ];
-  const CurrentOnboardingIcon = onboardingCards[onboardingStep]?.icon ?? Sparkles;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -744,7 +804,7 @@ export function CustomerDashboard({
 
   useEffect(() => {
     const showOnboardingIfNeeded = () => {
-      if (window.localStorage.getItem("kadaserve_onboarding_seen") !== "true") {
+      if (window.localStorage.getItem(onboardingStorageKey) !== "true") {
         setIsOnboardingOpen(true);
       }
     };
@@ -753,17 +813,12 @@ export function CustomerDashboard({
     setIsSplashVisible(true);
     const splashTimeoutId = window.setTimeout(() => {
       setIsSplashVisible(false);
-      setIsTaglineVisible(true);
-    }, 1500);
-
-    const taglineTimeoutId = window.setTimeout(() => {
       setIsTaglineVisible(false);
       showOnboardingIfNeeded();
-    }, 2600);
+    }, 5000);
 
     return () => {
       window.clearTimeout(splashTimeoutId);
-      window.clearTimeout(taglineTimeoutId);
     };
   }, []);
 
@@ -788,6 +843,10 @@ export function CustomerDashboard({
     const syncTrackingOrderFromUrl = () => {
       const orderId = new URLSearchParams(window.location.search).get("orderId");
       setTrackingOrderId(orderId);
+
+      if (orderId) {
+        setActiveSection("orders");
+      }
     };
 
     syncTrackingOrderFromUrl();
@@ -801,6 +860,20 @@ export function CustomerDashboard({
   useEffect(() => {
     setCustomerOrders(orders);
   }, [orders]);
+
+  useEffect(() => {
+    setCheckedInToday(
+      window.localStorage.getItem(checkInStorageKey) === getTodayKey()
+    );
+    setRewardWallet(readRewardWallet());
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      rewardsWalletStorageKey,
+      JSON.stringify(rewardWallet)
+    );
+  }, [rewardWallet]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -860,6 +933,11 @@ export function CustomerDashboard({
       setStrengthRating(3);
       setOverallRating(0);
       setFeedbackComment("");
+      setClaimedMissionIds((current) =>
+        current.includes("feedback") ? current : [...current, "feedback"]
+      );
+      setBonusRewardPoints((current) => current + 15);
+      setRewardCelebration("Feedback mission claimed. +15 points!");
       router.refresh();
     } catch {
       setFeedbackMessage("Something went wrong while submitting feedback.");
@@ -893,6 +971,18 @@ export function CustomerDashboard({
 
     return () => window.clearTimeout(timeoutId);
   }, [guestActionMessage]);
+
+  useEffect(() => {
+    if (!rewardCelebration) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRewardCelebration("");
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [rewardCelebration]);
 
 
   const uniqueMenuItems = useMemo(() => dedupeMenuItems(menuItems), [menuItems]);
@@ -961,12 +1051,12 @@ export function CustomerDashboard({
   const hasOrderAttention =
     activeOrder &&
     ["preparing", "ready", "out_for_delivery"].includes(activeOrder.status);
-  const completedOrderCount = customerOrders.filter((order) =>
-    ["completed", "delivered"].includes(order.status)
+  const rewardOrderCount = customerOrders.filter(
+    (order) => order.status !== "cancelled"
   ).length;
   const rewardCycleSize = 10;
-  const completedInRewardCycle = completedOrderCount % rewardCycleSize;
-  const hasVoucherReady = completedOrderCount > 0 && completedInRewardCycle === 0;
+  const completedInRewardCycle = rewardOrderCount % rewardCycleSize;
+  const hasVoucherReady = rewardOrderCount > 0 && completedInRewardCycle === 0;
   const ordersUntilVoucher = hasVoucherReady
     ? 0
     : rewardCycleSize - completedInRewardCycle;
@@ -1015,23 +1105,45 @@ export function CustomerDashboard({
       : currentHour < 18
       ? "Good afternoon"
       : "Good evening";
-  const rewardPoints = completedOrderCount * 20;
+  const rewardPoints = rewardOrderCount * 20;
+  const totalRewardPoints = rewardPoints + bonusRewardPoints;
   const feedbackMissionAvailable = feedbackItems.length > 0;
+  const feedbackMissionProgress = Math.min(3, preferenceSignals.length);
+  const hasPastryOrder = customerOrders.some((order) =>
+    order.order_items.some((item) => {
+      const text = `${item.menu_items?.name ?? ""} ${
+        item.menu_items?.category ?? ""
+      }`.toLowerCase();
+
+      return (
+        text.includes("pastry") ||
+        text.includes("cookie") ||
+        text.includes("panini") ||
+        text.includes("sandwich")
+      );
+    })
+  );
+  const diversityMissionClaimed = claimedMissionIds.includes("diversity");
+  const feedbackMissionClaimed = claimedMissionIds.includes("feedback");
+  const pointsProgress = Math.min(100, Math.round((totalRewardPoints / 500) * 100));
+  const pointsRingStyle = {
+    background: `conic-gradient(#0D2E18 ${pointsProgress}%, #E8D9BE ${pointsProgress}% 100%)`,
+  };
   const promoCards = [
     {
       title: "Spanish Latte Spotlight",
       body: "Creamy, balanced, and ranked high by Kada regulars this week.",
-      image: "/images/menu/Latte-Series/Spanish Latte.png",
+      image: "/images/menu/coffee/Spanish Latte.png",
     },
     {
       title: "Strawberry Matcha Mood",
       body: "A bright matcha layer for slow afternoons and study breaks.",
-      image: "/images/menu/Premium-Blends/Strawberry Matcha.JPG",
+      image: "/images/menu/premium-blends/strawberry matcha.png",
     },
     {
       title: rewardMessage,
       body: "Every completed order moves you closer to your next reward.",
-      image: "/images/menu/Premium-Blends/Caramel Machiato.png",
+      image: "/images/menu/premium-blends/Caramel Macchiato.png",
     },
   ];
   const activePromo = promoCards[activePromoIndex] ?? promoCards[0];
@@ -1059,19 +1171,106 @@ export function CustomerDashboard({
         item.name.toLowerCase().includes(debouncedQuery) ||
         (item.description ?? "").toLowerCase().includes(debouncedQuery);
 
-      const matchesFilter =
-        filter === "all" || getFilter(item.category) === filter;
-
-      return matchesQuery && matchesFilter;
+      return matchesQuery;
     });
 
     return sortMenuByAvailability(matchingItems);
-  }, [debouncedQuery, filter, uniqueMenuItems]);
+  }, [debouncedQuery, uniqueMenuItems]);
+  const menuGroups = menuFilters.map((item) => ({
+    ...item,
+    items: filteredMenu.filter((menuItem) => getFilter(menuItem.category) === item.value),
+  }));
+  const activeMenuFilter = menuFilters.some((item) => item.value === filter)
+    ? filter
+    : "coffee";
+  const recommendationLabels = [
+    "Your Recent Favorite",
+    "All Time Favorite",
+    "High Rating",
+  ];
+
+  useEffect(() => {
+    if (activeSection !== "menu") {
+      return;
+    }
+
+    const scroller = contentScrollerRef.current;
+
+    if (!scroller || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const menuValues = menuFilters.map((item) => item.value);
+    const chooseActiveCategory = () => {
+      const scrollerRect = scroller.getBoundingClientRect();
+      const activeLine = scrollerRect.top + Math.max(72, scrollerRect.height * 0.2);
+      const sectionPositions = menuValues
+        .map((value) => {
+          const section = menuCategoryRefs.current[value];
+
+          if (!section) {
+            return null;
+          }
+
+          const rect = section.getBoundingClientRect();
+
+          return {
+            value,
+            top: rect.top,
+            bottom: rect.bottom,
+          };
+        })
+        .filter(Boolean) as Array<{
+        value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
+        top: number;
+        bottom: number;
+      }>;
+
+      const categoryAtGuideLine = sectionPositions.find(
+        (section) => section.top <= activeLine && section.bottom > activeLine
+      );
+      const nearestPassedCategory = [...sectionPositions]
+        .filter((section) => section.top <= activeLine)
+        .sort((first, second) => second.top - first.top)[0];
+      const nextCategory =
+        categoryAtGuideLine?.value ??
+        nearestPassedCategory?.value ??
+        menuValues[0];
+
+      setFilter((current) => (current === nextCategory ? current : nextCategory));
+    };
+
+    const observer = new IntersectionObserver(chooseActiveCategory, {
+      root: scroller,
+      rootMargin: "-18% 0px -68% 0px",
+      threshold: [0, 0.15, 0.4, 0.7],
+    });
+
+    menuValues.forEach((value) => {
+      const section = menuCategoryRefs.current[value];
+
+      if (section) {
+        observer.observe(section);
+      }
+    });
+
+    const animationFrameId = window.requestAnimationFrame(chooseActiveCategory);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      observer.disconnect();
+    };
+  }, [activeSection, debouncedQuery, filteredMenu.length]);
 
   const selectedSize = sizes.find((item) => item.value === size);
   const selectedAddonRows = addons.filter((item) =>
     selectedAddons.includes(item.value)
   );
+  const cartTotal = cartItems.reduce(
+    (sum, item) => sum + (item.base_price + item.addon_price) * item.quantity,
+    0
+  );
+  const latestCartItem = cartItems.at(-1);
   const addonTotal = selectedAddonRows.reduce(
     (sum, item) => sum + item.price,
     0
@@ -1280,13 +1479,16 @@ export function CustomerDashboard({
 
   function openTrackingModal(orderId: string) {
     const params = new URLSearchParams(window.location.search);
+    params.set("tab", "orders");
     params.set("orderId", orderId);
     window.history.pushState(null, "", `${window.location.pathname}?${params}`);
+    setActiveSection("orders");
     setTrackingOrderId(orderId);
   }
 
   function closeTrackingModal() {
     const params = new URLSearchParams(window.location.search);
+    params.set("tab", "orders");
     params.delete("orderId");
     const queryString = params.toString();
     window.history.replaceState(
@@ -1294,6 +1496,7 @@ export function CustomerDashboard({
       "",
       queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname
     );
+    setActiveSection("orders");
     setTrackingOrderId(null);
   }
 
@@ -1420,16 +1623,78 @@ export function CustomerDashboard({
   }
 
   function finishOnboarding() {
-    window.localStorage.setItem("kadaserve_onboarding_seen", "true");
+    window.localStorage.setItem(onboardingStorageKey, "true");
+    setActiveSection("home");
     setIsOnboardingOpen(false);
     setOnboardingStep(0);
+    window.setTimeout(() => {
+      onboardingScrollerRef.current?.scrollTo({ left: 0 });
+    }, 0);
   }
 
-  function handleFilterSelect(value: Filter) {
-    setFilter(value);
-    fullMenuRef.current?.scrollIntoView({
+  function handleOnboardingNext() {
+    if (onboardingStep >= onboardingCards.length - 1) {
+      finishOnboarding();
+      return;
+    }
+
+    const nextStep = onboardingStep + 1;
+    setOnboardingStep(nextStep);
+    onboardingScrollerRef.current?.scrollTo({
+      left: onboardingScrollerRef.current.clientWidth * nextStep,
       behavior: "smooth",
-      block: "start",
+    });
+  }
+
+  function handleDailyCheckIn() {
+    if (checkedInToday) {
+      return;
+    }
+
+    window.localStorage.setItem(checkInStorageKey, getTodayKey());
+    setCheckedInToday(true);
+    setBonusRewardPoints((current) => current + 1);
+    setRewardCelebration("Daily check-in complete. +1 point!");
+  }
+
+  function claimDiversityMission() {
+    if (!hasPastryOrder || diversityMissionClaimed) {
+      return;
+    }
+
+    setClaimedMissionIds((current) => [...current, "diversity"]);
+    setBonusRewardPoints((current) => current + 10);
+    setRewardCelebration("Diversity mission claimed. +10 points!");
+  }
+
+  function redeemReward(reward: RewardVoucher) {
+    if (rewardWallet.some((item) => item.code === reward.code)) {
+      setActiveRewardsTab("wallet");
+      return;
+    }
+
+    setRewardWallet((current) => [reward, ...current]);
+    setActiveRewardsTab("wallet");
+    setRewardCelebration(`${reward.title} added to My Rewards.`);
+  }
+
+  function handleFilterSelect(
+    value: Exclude<Filter, "all" | "latte-series" | "premium-blends">
+  ) {
+    setFilter(value);
+    const scroller = contentScrollerRef.current;
+    const section = menuCategoryRefs.current[value];
+
+    if (!scroller || !section) {
+      return;
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const sectionRect = section.getBoundingClientRect();
+
+    scroller.scrollTo({
+      top: Math.max(0, scroller.scrollTop + sectionRect.top - scrollerRect.top - 12),
+      behavior: "smooth",
     });
   }
 
@@ -1490,15 +1755,14 @@ export function CustomerDashboard({
 
         <section className="flex min-w-0 flex-1 flex-col">
           <header className="flex items-center justify-between gap-3 border-b border-[#D7C7A9] bg-[#F8F7F4] px-4 py-3 sm:px-5">
-            <div className="flex w-full max-w-[310px] items-center gap-2 rounded-full border border-[#A7B08D] bg-[#F5EFDF] px-4 py-2">
-              <Search size={15} className="text-[#5E6857]" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search"
-                className="w-full bg-transparent text-sm outline-none placeholder:text-[#6E7768]"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              aria-label="Search menu"
+              className="fixed right-5 top-20 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#0D2E18] shadow-[0_10px_24px_rgba(13,46,24,0.16)] transition hover:bg-[#FFF8EF] sm:static sm:h-11 sm:w-11"
+            >
+              <Search size={20} />
+            </button>
 
             <button
               type="button"
@@ -1536,20 +1800,46 @@ export function CustomerDashboard({
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto px-4 py-5 pb-28 sm:px-5 2xl:px-8">
+          {isSearchOpen ? (
+            <div className="fixed inset-x-4 top-4 z-[70] flex items-center gap-2 rounded-full border border-[#D7C7A9] bg-white px-3 py-2 shadow-[0_16px_36px_rgba(13,46,24,0.16)] sm:left-[104px] sm:right-auto sm:w-[360px]">
+              <Search size={18} className="shrink-0 text-[#0D2E18]" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                autoFocus
+                placeholder="Search menu"
+                className="min-w-0 flex-1 bg-transparent font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#8A755D]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSearchOpen(false);
+                  setQuery("");
+                }}
+                aria-label="Close search"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFF0DA] text-[#0D2E18]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : null}
+
+          <div
+            ref={contentScrollerRef}
+            className="flex-1 overflow-y-auto px-4 py-5 pb-28 sm:px-5 2xl:px-8"
+          >
             {activeSection === "home" && (
               <div className="mx-auto w-full max-w-[1180px] space-y-5">
-                <section className="overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_top_left,#FFF0D8_0%,#F8EBCF_38%,#0F441D_140%)] p-5 shadow-[0_16px_36px_rgba(13,46,24,0.10)] sm:p-7">
+                <section className="pt-1">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                        Your Coffee Hub
+                      <p className="font-sans text-sm font-bold text-[#684B35]">
+                        {greeting}, {firstName}!
                       </p>
-                      <h1 className="mt-2 max-w-3xl font-display text-4xl font-bold leading-[0.98] tracking-[-0.03em] text-[#0D2E18] sm:text-5xl lg:text-6xl">
-                        {greeting},{" "}
-                        <span className="text-[#0F441D]">{firstName}</span>!
+                      <h1 className="mt-2 max-w-3xl font-display text-4xl font-bold leading-[1.02] text-[#0D2E18] sm:text-5xl">
+                        Your coffee hub is ready.
                       </h1>
-                      <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
+                      <p className="mt-3 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
                         Your next favorite cup is a tap away. Pick an intent,
                         track live orders, and earn rewards as you rate.
                       </p>
@@ -1564,7 +1854,7 @@ export function CustomerDashboard({
                           key={label}
                           type="button"
                           onClick={() => {
-                            setFilter("all");
+                            setFilter("coffee");
                             setActiveSection("menu");
                           }}
                           className="rounded-[26px] border border-[#DCCFB8] bg-white/82 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
@@ -1661,11 +1951,11 @@ export function CustomerDashboard({
                     </div>
                   </div>
 
-                  <div className="rounded-[28px] border border-[#DCCFB8] bg-white p-4 shadow-[0_10px_24px_rgba(13,46,24,0.08)]">
+                  <div className="border-y border-[#DCCFB8] py-4 lg:border-y-0 lg:border-l lg:py-1 lg:pl-5">
                     <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                       Reward Mission
                     </p>
-                    <h2 className="mt-1 font-display text-3xl font-bold text-[#0D2E18]">
+                    <h2 className="mt-1 font-display text-3xl font-bold leading-tight text-[#0D2E18]">
                       Got thoughts?
                     </h2>
                     <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
@@ -1689,7 +1979,7 @@ export function CustomerDashboard({
                           handleSectionClick("rewards");
                         }
                       }}
-                      className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
+                      className="mt-4 min-h-12 w-full rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
                     >
                       {feedbackMissionAvailable
                         ? "Rate Last Order"
@@ -1790,18 +2080,18 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "menu" && (
-              <div className="mx-auto w-full max-w-[1440px] space-y-5">
-                <section className="group relative overflow-hidden rounded-[28px] bg-[#123E26] px-4 py-4 text-[#FFF0D8] shadow-[0_14px_32px_rgba(18,62,38,0.18)] sm:px-5">
+              <div className="mx-auto w-full max-w-[1440px] space-y-4">
+                <section className="group relative overflow-hidden rounded-[22px] bg-[#123E26] px-3 py-3 text-[#FFF0D8] shadow-[0_10px_24px_rgba(18,62,38,0.14)] sm:px-4">
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
                         Crafted for You
                       </p>
-                      <h1 className="mt-1 font-display text-3xl font-semibold leading-tight sm:text-4xl">
+                      <h1 className="mt-1 font-display text-2xl font-semibold leading-tight sm:text-3xl">
                         Your next cup, picked smarter.
                       </h1>
                     </div>
-                    <div className="rounded-full bg-[#FFF0D8]/10 px-4 py-2 font-sans text-xs font-bold text-[#FFF0D8]">
+                    <div className="rounded-full bg-[#FFF0D8]/10 px-3 py-1.5 font-sans text-[11px] font-bold text-[#FFF0D8]">
                       Monthly favorite: {monthlyFavorite}
                     </div>
                   </div>
@@ -1826,26 +2116,26 @@ export function CustomerDashboard({
 
                   <div
                     ref={recommendationScrollerRef}
-                    className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    className="mt-3 flex snap-x gap-3 overflow-x-auto pr-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    {recommendedItems.map(({ item, reason, score }) => {
+                    {recommendedItems.slice(0, 3).map(({ item, reason, score }, index) => {
                       const menuImage = getMenuImage(item);
 
                       return (
                         <article
                           key={item.id}
-                          className="relative flex w-[280px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#FFF8EF] text-[#123E26] shadow-[0_12px_24px_rgba(0,0,0,0.14)] sm:w-[310px]"
+                          className="relative flex w-[240px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-[#FFF8EF] text-[#123E26] shadow-[0_8px_18px_rgba(0,0,0,0.12)] sm:w-[270px]"
                         >
                           <button
                             type="button"
                             onClick={() => openCustomizeModal(item)}
                             aria-label={`Customize ${item.name}`}
-                            className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
+                            className="absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
                           >
                             <SlidersHorizontal size={16} />
                           </button>
 
-                          <div className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl">
+                          <div className="flex aspect-[9/16] w-20 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-3xl">
                             {menuImage ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -1858,20 +2148,23 @@ export function CustomerDashboard({
                             )}
                           </div>
 
-                          <div className="flex min-w-0 flex-1 flex-col p-4 pr-12">
+                          <div className="flex min-w-0 flex-1 flex-col p-3 pr-10">
                             <div>
                               <div>
+                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#0D2E18]">
+                                  {recommendationLabels[index]}
+                                </p>
                                 <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
                                   {reason} · {(score * 100).toFixed(0)}
                                 </p>
-                                <h2 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
+                                <h2 className="mt-1 line-clamp-2 font-sans text-base font-black leading-tight">
                                   {item.name}
                                 </h2>
                               </div>
                             </div>
 
                             <div className="mt-auto flex items-center gap-2 pt-4">
-                              <p className="shrink-0 font-sans text-xl font-black text-[#765531]">
+                              <p className="shrink-0 font-sans text-lg font-black text-[#765531]">
                                 {formatPrice(item.base_price)}
                               </p>
                               <button
@@ -1890,171 +2183,104 @@ export function CustomerDashboard({
                   </div>
                 </section>
 
-                {activeOrder ? (
-                  <section className="rounded-[26px] border border-[#DCCFB8] bg-white/88 p-4 shadow-[0_8px_20px_rgba(0,0,0,0.06)] sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                          Active Pulse
-                        </p>
-                        <h2 className="mt-1 font-sans text-2xl font-black text-[#123E26]">
-                          {formatOrderCode(activeOrder.id)} is{" "}
-                          {formatStatus(activeOrder.status).toLowerCase()}
+                <div className="grid grid-cols-[74px_1fr] gap-3 md:grid-cols-[92px_1fr]">
+                  <aside className="sticky top-2 z-30 h-[calc(100dvh-12rem)] self-start overflow-visible rounded-r-[22px] bg-[#0D2E18] px-1.5 py-2 shadow-[8px_0_18px_rgba(13,46,24,0.16)] md:h-[calc(100dvh-9rem)]">
+                    <div className="space-y-1 overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]">
+                      {menuFilters.map((item) => {
+                        const Icon = item.icon;
+
+                        return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => handleFilterSelect(item.value)}
+                          aria-current={
+                            activeMenuFilter === item.value ? "true" : undefined
+                          }
+                          className={`relative flex min-h-[76px] w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-center font-sans text-[10px] font-black leading-tight transition ${
+                            activeMenuFilter === item.value
+                              ? "bg-[#FFF0DA] text-[#0D2E18] shadow-[0_8px_18px_rgba(0,0,0,0.18)]"
+                              : "text-[#F8EBCF] hover:bg-[#164B2A]"
+                          }`}
+                        >
+                          {activeMenuFilter === item.value ? (
+                            <span className="absolute left-0 top-3 h-10 w-1 rounded-r-full bg-[#0D2E18]" />
+                          ) : null}
+                          <Icon size={22} />
+                          <span>{item.label}</span>
+                        </button>
+                        );
+                      })}
+                    </div>
+                  </aside>
+
+                  <div
+                    ref={fullMenuRef}
+                    className="space-y-10 scroll-mt-24 pb-28"
+                  >
+                    {menuGroups.map((group) => (
+                      <section
+                        key={group.value}
+                        ref={(element) => {
+                          menuCategoryRefs.current[group.value] = element;
+                        }}
+                        className="scroll-mt-4"
+                      >
+                        <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
+                          {group.label}
                         </h2>
-                      </div>
-                      <span className="inline-flex items-center gap-2 rounded-full bg-[#E9F5E7] px-3 py-2 font-sans text-xs font-bold text-[#2D7A40]">
-                        <Clock size={14} />
-                        {formatTime(activeOrder.ordered_at)}
-                      </span>
-                    </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+                          {group.items.map((item) => {
+                            const menuImage = getMenuImage(item);
 
-                    <div className="mt-5 grid grid-cols-4 gap-2">
-                      {["Pending", "Preparing", "Ready", "Delivered"].map(
-                        (step, index) => {
-                          const isReached = index <= activeOrderStep;
-                          const isCurrent = index === activeOrderStep;
-
-                          return (
-                            <div key={step}>
-                              <div
-                                className={`h-2 rounded-full transition ${
-                                  isReached ? "bg-[#123E26]" : "bg-[#E6D8BE]"
-                                } ${isCurrent ? "animate-pulse" : ""}`}
+                            return (
+                      <article
+                        key={item.id}
+                        className="min-w-0 text-center"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => item.is_available && openCustomizeModal(item)}
+                          disabled={!item.is_available}
+                          className="group w-full disabled:cursor-not-allowed"
+                          aria-label={`${item.is_available ? "Customize" : "Unavailable"} ${item.name}`}
+                        >
+                          <div className="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center overflow-hidden rounded-full bg-[#F1E7D2] p-2 text-4xl transition group-hover:bg-[#E7F1E6]">
+                            {menuImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={menuImage}
+                                alt={item.name}
+                                className="h-full w-full rounded-full object-cover"
                               />
-                              <p
-                                className={`mt-2 font-sans text-[11px] font-bold ${
-                                  isReached
-                                    ? "text-[#123E26]"
-                                    : "text-[#9A856C]"
-                                }`}
-                              >
-                                {step}
-                              </p>
-                            </div>
-                          );
-                        }
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => openTrackingModal(activeOrder.id)}
-                      className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D] sm:w-auto"
-                    >
-                      Track Order
-                    </button>
-                  </section>
-                ) : null}
-
-                <section className="rounded-[26px] bg-[#FFF8EF]/72 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.55)]">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                        Full Menu
-                      </p>
-                      <h2 className="font-sans text-2xl font-black text-[#123E26]">
-                        Browse by category
-                      </h2>
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-[#E9F5E7] px-3 py-2 font-sans text-xs font-bold text-[#2D7A40]">
-                      <TrendingUp size={14} />
-                      {filteredMenu.length} items
-                    </div>
-                  </div>
-
-                <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {menuFilters.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => handleFilterSelect(item.value)}
-                      className={`min-h-12 shrink-0 snap-start rounded-full border px-5 py-3 text-sm font-bold ${
-                        filter === item.value
-                          ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
-                          : "border-[#57654B] bg-transparent text-[#2E3D2B]"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                </section>
-
-                <div
-                  ref={fullMenuRef}
-                  className="grid grid-cols-1 gap-4 scroll-mt-24 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5"
-                >
-                  {filteredMenu.map((item) => {
-                    const menuImage = getMenuImage(item);
-
-                    return (
-                    <article
-                      key={item.id}
-                      className="flex overflow-hidden rounded-[24px] border border-[#DDD0B7] bg-white/92 shadow-[0_8px_20px_rgba(0,0,0,0.08)] transition hover:shadow-[0_12px_24px_rgba(0,0,0,0.10)]"
-                    >
-                      <div className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl">
-                          {menuImage ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={menuImage}
-                              alt={item.name}
-                              className="h-full w-full rounded-[16px] object-cover"
-                            />
-                          ) : (
-                            getEmoji(item)
-                          )}
-                        </div>
-
-                        <div className="flex min-w-0 flex-1 flex-col p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <span
-                              className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                                item.is_available
-                                  ? "bg-[#E9F5E7] text-[#2D7A40]"
-                                  : "bg-[#FBE9E2] text-[#9C543D]"
-                              }`}
-                            >
-                              {item.is_available ? "Available" : "Unavailable"}
-                            </span>
-                            <p className="shrink-0 text-2xl font-black text-[#765531]">
-                              {formatPrice(item.base_price)}
-                            </p>
-                          </div>
-
-                          <h2 className="mt-2 line-clamp-2 text-lg font-black leading-tight text-[#123E26]">
-                            {item.name}
-                          </h2>
-                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#7D7767]">
-                            {item.description ?? "Freshly prepared drink"}
-                          </p>
-
-                          <div className="mt-auto pt-3">
-                            {item.is_available ? (
-                              <button
-                                type="button"
-                                onClick={() => openCustomizeModal(item)}
-                                aria-label={`Add ${item.name} to cart`}
-                                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-xs font-bold text-white transition hover:bg-[#0D2E18]"
-                              >
-                                <ShoppingCart size={15} />
-                                Customize
-                              </button>
                             ) : (
-                              <button
-                                type="button"
-                                disabled
-                                aria-label={`${item.name} is unavailable`}
-                                className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-[#D8C8A7] px-3 py-2.5 font-sans text-xs font-bold text-[#8A755D]"
-                              >
-                                <ShoppingCart size={15} />
-                                Sold Out
-                              </button>
+                              getEmoji(item)
                             )}
                           </div>
-                        </div>
-                    </article>
-                    );
-                  })}
+
+                          <span
+                            className={`mt-3 inline-flex rounded-full px-2 py-1 font-sans text-[9px] font-bold uppercase tracking-[0.12em] ${
+                              item.is_available
+                                ? "bg-[#E9F5E7] text-[#2D7A40]"
+                                : "bg-[#FBE9E2] text-[#9C543D]"
+                            }`}
+                          >
+                            {item.is_available ? "Available" : "Sold out"}
+                          </span>
+                          <h2 className="mx-auto mt-2 line-clamp-2 max-w-[150px] font-sans text-sm font-black leading-tight text-[#123E26]">
+                            {item.name}
+                          </h2>
+                          <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
+                            {formatPrice(item.base_price)}
+                          </p>
+                        </button>
+                      </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -2328,94 +2554,330 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "rewards" && (
-              <div className="mx-auto w-full max-w-4xl space-y-5">
-                <div>
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8A755D]">
-                    Points Hub
-                  </p>
-                  <h1 className="font-display text-4xl font-bold tracking-tight text-[#123E26]">
-                    Rewards
+              <div className="mx-auto w-full max-w-5xl space-y-4">
+                <div className="sticky top-0 z-20 -mx-3 bg-[#FFF0DA]/95 px-3 pb-3 pt-1 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0 md:pt-0">
+                  <h1 className="text-center font-sans text-2xl font-black text-[#0D2E18] md:text-3xl">
+                    Missions and Rewards
                   </h1>
-                  <p className="mt-1 text-sm text-[#6F634E]">
-                    Earn points by completing orders and helping KadaServe learn
-                    what you enjoy.
-                  </p>
+
+                  <div className="mt-4 grid grid-cols-3 border-b border-[#C8D0C4]">
+                    {[
+                      ["missions", "Missions"],
+                      ["redeem", "Redeem Rewards"],
+                      ["wallet", "My Rewards"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setActiveRewardsTab(value as RewardsTab)}
+                        className={`relative px-2 pb-3 font-sans text-sm font-bold transition sm:text-base ${
+                          activeRewardsTab === value
+                            ? "text-[#0D2E18]"
+                            : "text-[#9B9B9B]"
+                        }`}
+                      >
+                        {label}
+                        {activeRewardsTab === value ? (
+                          <span className="absolute inset-x-2 bottom-0 h-1 rounded-t-full bg-[#0D2E18]" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <section className="rounded-[30px] bg-[linear-gradient(135deg,#0F441D_0%,#0D2E18_72%,#684B35_130%)] p-5 text-[#FFF0D8] shadow-[0_16px_34px_rgba(13,46,24,0.24)] sm:p-6">
-                  <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                        Current Points
-                      </p>
-                      <p className="mt-2 font-display text-6xl font-bold leading-none">
-                        {rewardPoints}
-                      </p>
-                    </div>
-                    <div className="rounded-[22px] bg-[#FFF0D8]/10 p-4">
-                      <p className="font-sans text-sm font-bold">
-                        {rewardMessage}
-                      </p>
-                      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#FFF0D8]/25">
-                        <div
-                          className="h-full rounded-full bg-[#FFF0D8]"
-                          style={{ width: `${rewardProgress}%` }}
-                        />
-                      </div>
-                    </div>
+                {rewardCelebration ? (
+                  <div className="kada-fade-up fixed left-1/2 top-4 z-[95] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-[18px] bg-[#0D2E18] px-4 py-3 text-[#FFF0DA] shadow-[0_18px_40px_rgba(13,46,24,0.24)]">
+                    <PartyPopper className="h-5 w-5 shrink-0" />
+                    <p className="font-sans text-sm font-bold">
+                      {rewardCelebration}
+                    </p>
                   </div>
-                </section>
+                ) : null}
 
-                <section className="rounded-[26px] border border-[#DCCFB8] bg-white p-4 shadow-[0_10px_24px_rgba(13,46,24,0.08)]">
-                  <h2 className="font-display text-3xl font-bold text-[#0D2E18]">
-                    Ways to Earn
-                  </h2>
-
-                  <div className="mt-4 space-y-3">
-                    <article className="flex items-center justify-between gap-4 rounded-[20px] bg-[#FFF8EF] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F8EBCF] text-[#684B35]">
-                          <Star size={20} />
-                        </span>
-                        <div>
-                          <p className="font-sans text-base font-black text-[#0D2E18]">
-                            Submit Feedback
+                {activeRewardsTab === "missions" ? (
+                  <div className="space-y-5 pb-4">
+                    <section className="flex flex-col items-center rounded-[28px] bg-white p-5 shadow-[0_12px_28px_rgba(13,46,24,0.08)]">
+                      <div
+                        className="flex h-56 w-56 items-center justify-center rounded-full p-3"
+                        style={pointsRingStyle}
+                      >
+                        <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center">
+                          <CupSoda className="h-16 w-16 text-[#0D2E18]" />
+                          <p className="mt-3 font-sans text-5xl font-black leading-none text-[#0D2E18]">
+                            {totalRewardPoints}
                           </p>
-                          <p className="font-sans text-sm text-[#6F634E]">
-                            Rate your last order and earn 10 points.
+                          <p className="font-sans text-sm font-bold text-[#684B35]">
+                            points
                           </p>
                         </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_24px_rgba(13,46,24,0.08)]">
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                          Daily Check-in
+                        </h2>
+                        <CalendarCheck className="h-6 w-6 text-[#8C7A64]" />
+                      </div>
+                      <div className="mt-4 grid grid-cols-7 gap-2">
+                        {[1, 1, 1, 3, 1, 1, 21].map((points, index) => (
+                          <div key={`${points}-${index}`} className="text-center">
+                            <div
+                              className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full font-sans text-xs font-bold ${
+                                index === 0 && checkedInToday
+                                  ? "bg-[#0D2E18] text-[#FFF0DA]"
+                                  : "bg-[#F2EFE9] text-[#B5AA9A]"
+                              }`}
+                            >
+                              {points}pt{points === 1 ? "" : "s"}
+                            </div>
+                            <p className="mt-1 font-sans text-[11px] font-semibold text-[#A49786]">
+                              Day {index + 1}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsFeedbackPromptOpen(true)}
-                        disabled={!feedbackMissionAvailable}
-                        className="rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-xs font-bold text-[#FFF0D8] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                        onClick={handleDailyCheckIn}
+                        disabled={checkedInToday}
+                        className="mt-5 w-full rounded-full border-2 border-[#0D2E18] px-5 py-3 font-sans text-base font-black text-[#0D2E18] transition hover:bg-[#0D2E18] hover:text-[#FFF0DA] disabled:border-[#D8C8A7] disabled:text-[#8C7A64] disabled:hover:bg-transparent"
                       >
-                        {feedbackMissionAvailable ? "Earn Now" : "No Order Yet"}
+                        {checkedInToday ? "Checked In Today" : "Check In & Get 1 pt"}
                       </button>
-                    </article>
+                    </section>
 
-                    <article className="flex items-center justify-between gap-4 rounded-[20px] bg-[#FFF8EF] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E9F5E7] text-[#2D7A40]">
-                          <CupSoda size={20} />
-                        </span>
-                        <div>
-                          <p className="font-sans text-base font-black text-[#0D2E18]">
-                            Complete an Order
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        Complete missions & get exclusive rewards
+                      </h2>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <article className="rounded-[22px] border border-[#E8D9BE] bg-white p-4 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#FFF0DA] text-[#684B35]">
+                              <Star size={22} />
+                            </span>
+                            <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-bold text-[#2D7A40]">
+                              +15 pts
+                            </span>
+                          </div>
+                          <h3 className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
+                            Rate 3 orders this week
+                          </h3>
+                          <p className="mt-1 font-sans text-sm text-[#684B35]">
+                            {feedbackMissionProgress}/3 ratings completed.
                           </p>
-                          <p className="font-sans text-sm text-[#6F634E]">
-                            Every completed pickup or delivery adds 20 points.
+                          <button
+                            type="button"
+                            onClick={() => setIsFeedbackPromptOpen(true)}
+                            disabled={!feedbackMissionAvailable || feedbackMissionClaimed}
+                            className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                          >
+                            {feedbackMissionClaimed
+                              ? "Claimed"
+                              : feedbackMissionAvailable
+                                ? "Rate Now"
+                                : "No Order Yet"}
+                          </button>
+                        </article>
+
+                        <article className="rounded-[22px] border border-[#E8D9BE] bg-white p-4 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#E9F5E7] text-[#2D7A40]">
+                              <Gift size={22} />
+                            </span>
+                            <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-bold text-[#2D7A40]">
+                              +10 pts
+                            </span>
+                          </div>
+                          <h3 className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
+                            Try a Pastry from the Hall of Fame
+                          </h3>
+                          <p className="mt-1 font-sans text-sm text-[#684B35]">
+                            Expands your taste profile beyond drinks.
                           </p>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={claimDiversityMission}
+                            disabled={!hasPastryOrder || diversityMissionClaimed}
+                            className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                          >
+                            {diversityMissionClaimed
+                              ? "Claimed"
+                              : hasPastryOrder
+                                ? "Claim Reward"
+                                : "Order Pastry"}
+                          </button>
+                        </article>
                       </div>
-                      <span className="rounded-full bg-[#E9F5E7] px-3 py-1.5 font-sans text-xs font-bold text-[#2D7A40]">
-                        Active
-                      </span>
-                    </article>
+                    </section>
                   </div>
-                </section>
+                ) : null}
+
+                {activeRewardsTab === "redeem" ? (
+                  <div className="space-y-5 pb-4">
+                    <section className="rounded-[24px] bg-[#F8FBF7] p-5">
+                      <p className="font-sans text-sm font-bold text-[#0D2E18]">
+                        KadaServe Points
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-4">
+                        <button className="rounded-[18px] bg-[#0D2E18] px-5 py-4 text-left text-[#FFF0DA]">
+                          <span className="block font-sans text-3xl font-black">
+                            {totalRewardPoints} pts
+                          </span>
+                          <span className="font-sans text-xs font-bold text-[#DCCFB8]">
+                            Ready to redeem
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveRewardsTab("wallet")}
+                          className="rounded-full border-2 border-[#0D2E18] px-5 py-3 font-sans text-sm font-black text-[#0D2E18]"
+                        >
+                          My Rewards
+                        </button>
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        KadaServe Rewards
+                      </h2>
+                      <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {[
+                          {
+                            code: "KADA10",
+                            title: "\u20B110 Discount",
+                            expiresAt: getRewardExpiry(),
+                            value: "\u20B110 off",
+                            cost: 500,
+                          },
+                          {
+                            code: "KADA30",
+                            title: "\u20B130 Discount",
+                            expiresAt: getRewardExpiry(),
+                            value: "\u20B130 off",
+                            cost: 1500,
+                          },
+                        ].map((reward) => (
+                          <article
+                            key={reward.code}
+                            className="min-w-[16rem] snap-start overflow-hidden rounded-[22px] border border-[#E8D9BE] bg-white shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                          >
+                            <div className="bg-[#0D2E18] p-5 text-[#FFF0DA]">
+                              <p className="font-sans text-5xl font-black">
+                                {reward.title}
+                              </p>
+                            </div>
+                            <div className="p-4">
+                              <p className="font-sans text-sm font-bold text-[#684B35]">
+                                Redeem with
+                              </p>
+                              <p className="font-sans text-2xl font-black text-[#0D2E18]">
+                                {reward.cost} pts
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => redeemReward(reward)}
+                                className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA]"
+                              >
+                                Redeem
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        Exclusive Tier Rewards
+                      </h2>
+                      <article className="mt-4 rounded-[22px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                        <div className="flex items-start justify-between gap-3">
+                          <BadgePercent className="h-9 w-9 text-[#0D2E18]" />
+                          {flavorBadges.includes("Loves Creamy") ? (
+                            <CheckCircle2 className="h-6 w-6 text-[#2D7A40]" />
+                          ) : (
+                            <LockKeyhole className="h-6 w-6 text-[#8C7A64]" />
+                          )}
+                        </div>
+                        <h3 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
+                          Free Add-on for Creamy Drinks
+                        </h3>
+                        <p className="mt-2 font-sans text-sm text-[#684B35]">
+                          Unlocks when your taste profile includes Loves Creamy.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={!flavorBadges.includes("Loves Creamy")}
+                          onClick={() =>
+                            redeemReward({
+                              code: "CREAMYADDON",
+                              title: "Free Creamy Add-on",
+                              expiresAt: getRewardExpiry(21),
+                              value: "Free add-on",
+                            })
+                          }
+                          className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                        >
+                          {flavorBadges.includes("Loves Creamy")
+                            ? "Redeem Exclusive"
+                            : "Locked"}
+                        </button>
+                      </article>
+                    </section>
+                  </div>
+                ) : null}
+
+                {activeRewardsTab === "wallet" ? (
+                  <div className="min-h-[26rem] pb-4">
+                    {rewardWallet.length > 0 ? (
+                      <div className="space-y-4">
+                        {rewardWallet.map((voucher) => (
+                          <article
+                            key={voucher.code}
+                            className="rounded-[24px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                                  Active Voucher
+                                </p>
+                                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                  {voucher.title}
+                                </h2>
+                                <p className="mt-1 font-sans text-sm text-[#684B35]">
+                                  Use code {voucher.code} before {voucher.expiresAt}
+                                </p>
+                              </div>
+                              <div className="flex h-20 w-20 items-center justify-center rounded-[18px] bg-[#0D2E18] text-[#FFF0DA]">
+                                <QrCode className="h-10 w-10" />
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[25rem] flex-col items-center justify-center text-center">
+                        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-[#C8D0E4] text-white">
+                          <Ticket className="h-14 w-14" />
+                        </div>
+                        <p className="mt-6 font-sans text-2xl font-bold text-[#B6BDD3]">
+                          No Available Voucher
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveRewardsTab("missions")}
+                          className="mt-5 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA]"
+                        >
+                          Complete missions to earn your first reward!
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -2607,48 +3069,135 @@ export function CustomerDashboard({
       </div>
 
       {isSplashVisible ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#F8F7F2] px-6 text-[#0D2E18]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.92)_0%,_rgba(248,247,242,0.96)_54%,_rgba(239,235,226,0.95)_100%)]" />
-          <div className="relative z-10 flex w-full max-w-[820px] flex-col items-center">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#0D2E18] px-6 text-[#FFF0DA]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,#0F441D_0%,#0D2E18_46%,#06190D_100%)]" />
+          <div className="kada-loading-exit relative z-10 flex w-full max-w-[820px] flex-col items-center">
+            <div className="relative mb-10 flex h-32 w-full max-w-md items-center justify-center text-center sm:mb-16 sm:h-36">
+              <div className="kada-brand-dissolve absolute inset-0 flex flex-col items-center justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_16px_34px_rgba(0,0,0,0.18)]">
+                  <svg
+                    viewBox="0 0 96 96"
+                    aria-hidden="true"
+                    className="h-11 w-11 text-[#0F441D]"
+                  >
+                    <g
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="8"
+                    >
+                      <circle cx="30" cy="58" r="15" />
+                      <circle cx="66" cy="58" r="15" />
+                      <path d="M30 58 48 42 66 58" />
+                      <path d="M48 42 57 26" />
+                      <path d="M55 25 64 43" />
+                    </g>
+                  </svg>
+                </div>
+                <p className="mt-5 font-display text-4xl font-bold text-[#FFF0DA]">
+                  KadaServe
+                </p>
+              </div>
+
+              <p className="kada-brand-emerge absolute inset-x-0 top-1/2 -translate-y-1/2 font-display text-4xl italic leading-tight text-[#FFF0DA]">
+                Every cup tells a story
+              </p>
+            </div>
+
             <div className="w-full max-w-[720px]">
-              <p className="-rotate-1 pl-3 font-sans text-xl font-black uppercase tracking-[0.16em] text-[#0F5A35] drop-shadow-sm sm:text-3xl">
+              <p className="-rotate-0 pl-1 font-sans text-[1.1rem] font-black uppercase tracking-[0.14em] text-[#FFF0DA] drop-shadow-sm sm:pl-3 sm:text-3xl sm:tracking-[0.16em]">
                 Kadaserve Loading...
               </p>
 
-              <div className="relative mt-4 h-9 rounded-full border-[4px] border-[#0F5A35] bg-transparent p-1 shadow-[0_2px_0_rgba(15,68,29,0.18)] sm:h-11">
-                <div className="kada-loading-fill h-full rounded-full bg-[linear-gradient(90deg,#0F441D_0%,#137845_100%)] shadow-[inset_0_2px_8px_rgba(255,255,255,0.18)]" />
-                <span className="kada-loading-spout absolute left-[67%] top-[calc(100%-2px)] h-16 w-3 rounded-b-full bg-[#0F5A35]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+3.8rem)]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+6.5rem)] [animation-delay:180ms]" />
-                <span className="kada-loading-drop absolute left-[66.7%] top-[calc(100%+9.1rem)] [animation-delay:360ms]" />
+              <div className="relative mt-4 h-52 sm:h-72">
+                <svg
+                  viewBox="0 0 700 52"
+                  aria-hidden="true"
+                  className="h-12 w-full overflow-visible"
+                >
+                  <path
+                    d="M26 26 H674"
+                    fill="none"
+                    stroke="#FFF0DA"
+                    strokeLinecap="round"
+                    strokeWidth="30"
+                    opacity="0.95"
+                  />
+                  <path
+                    d="M26 26 H674"
+                    fill="none"
+                    stroke="#0F441D"
+                    strokeLinecap="round"
+                    strokeWidth="22"
+                    pathLength="100"
+                    className="kada-progress-path"
+                  />
+                </svg>
+                <span className="kada-loading-drip-rail absolute left-0 top-0 h-0 w-0">
+                  <span className="kada-loading-spout absolute left-0 top-[1.45rem] h-6 w-2 rounded-b-full bg-[#0F441D]" />
+                  <span className="kada-loading-drop absolute left-0 top-[2.75rem]" />
+                  <span className="kada-loading-drop absolute left-0 top-[3.7rem] [animation-delay:220ms]" />
+                  <span className="kada-loading-drop absolute left-0 top-[4.65rem] [animation-delay:440ms]" />
+                </span>
+
+                <svg
+                  viewBox="0 0 420 260"
+                  role="img"
+                  aria-label="KadaServe spoon bike loading mark"
+                  className="kada-transit-bike absolute top-[5rem] w-32 overflow-visible text-[#FFF0DA] sm:top-[6.4rem] sm:w-60"
+                >
+                  <g
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="18"
+                  >
+                    <path d="M122 178 212 112 296 178" />
+                    <path d="M212 112 258 58" />
+                    <path d="M250 48 286 110" />
+                    <path d="M205 112 168 178" />
+                  </g>
+                  <g className="kada-loading-wheel">
+                    <circle
+                      cx="122"
+                      cy="178"
+                      r="61"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="18"
+                    />
+                    <ellipse
+                      cx="122"
+                      cy="178"
+                      rx="27"
+                      ry="17"
+                      fill="currentColor"
+                      transform="rotate(-38 122 178)"
+                    />
+                  </g>
+                  <g className="kada-loading-wheel">
+                    <circle
+                      cx="296"
+                      cy="178"
+                      r="61"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="18"
+                    />
+                    <ellipse
+                      cx="296"
+                      cy="178"
+                      rx="27"
+                      ry="17"
+                      fill="currentColor"
+                      transform="rotate(48 296 178)"
+                    />
+                  </g>
+                </svg>
               </div>
             </div>
-
-            <svg
-              viewBox="0 0 420 260"
-              role="img"
-              aria-label="KadaServe coffee bicycle loading mark"
-              className="kada-loading-bike mt-20 w-[min(86vw,420px)] overflow-visible text-[#0F5A35] sm:mt-24"
-            >
-              <g
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="18"
-              >
-                <circle cx="122" cy="178" r="61" />
-                <circle cx="296" cy="178" r="61" />
-                <path d="M122 178 212 112 296 178" />
-                <path d="M212 112 258 58" />
-                <path d="M250 48 286 110" />
-                <path d="M205 112 168 178" />
-              </g>
-              <g fill="currentColor">
-                <ellipse cx="122" cy="178" rx="27" ry="17" transform="rotate(-38 122 178)" />
-                <ellipse cx="296" cy="178" rx="27" ry="17" transform="rotate(48 296 178)" />
-              </g>
-            </svg>
           </div>
         </div>
       ) : null}
@@ -2669,44 +3218,122 @@ export function CustomerDashboard({
 
       {isOnboardingOpen && !isTaglineVisible ? (
         <div className="fixed inset-0 z-[85] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-md md:items-center md:p-6">
-          <section className="w-full max-w-lg rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] p-5 shadow-[0_-18px_40px_rgba(13,46,24,0.20)] md:rounded-[30px] md:p-6 lg:max-w-xl">
-            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-[#DCCFB8] md:hidden" />
+          <section className="w-full max-w-lg rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.20)] md:rounded-[30px] lg:max-w-xl">
+            <div className="px-5 pb-5 pt-4 md:p-6">
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#DCCFB8] md:hidden" />
 
-            <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="flex items-center justify-between gap-4">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                  Quick Guide
+                  First Sip Journey
                 </p>
-                <h2 className="mt-1 font-display text-3xl font-bold leading-tight text-[#0D2E18] sm:text-4xl">
-                  {onboardingCards[onboardingStep]?.title}
-                </h2>
+                <button
+                  type="button"
+                  onClick={finishOnboarding}
+                  className="rounded-full border border-[#DCCFB8] bg-white/78 px-3 py-2 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white"
+                >
+                  Skip
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={finishOnboarding}
-                className="rounded-full border border-[#DCCFB8] bg-white px-3 py-2 font-sans text-xs font-bold text-[#684B35]"
-              >
-                Skip
-              </button>
             </div>
 
             <div
-              key={onboardingCards[onboardingStep]?.title}
-              className="kada-fade-up mt-5 rounded-[26px] bg-[#0D2E18] p-5 text-[#FFF0D8] sm:p-6"
+              ref={onboardingScrollerRef}
+              onScroll={(event) => {
+                const { clientWidth, scrollLeft } = event.currentTarget;
+                const nextStep = Math.round(scrollLeft / Math.max(clientWidth, 1));
+
+                if (nextStep !== onboardingStep) {
+                  setOnboardingStep(
+                    Math.min(Math.max(nextStep, 0), onboardingCards.length - 1)
+                  );
+                }
+              }}
+              className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0F441D]">
-                <CurrentOnboardingIcon size={26} />
-              </div>
-              <p className="mt-5 min-h-24 font-sans text-base leading-7 text-[#FFF0D8]/88 sm:min-h-20">
-                {onboardingCards[onboardingStep]?.body}
-              </p>
+              {onboardingCards.map((card) => {
+                const Icon = card.icon;
+
+                return (
+                  <article
+                    key={card.title}
+                    className="min-w-full snap-center px-5 pb-3 md:px-6"
+                  >
+                    <div className="flex min-h-[19rem] flex-col items-center justify-center rounded-[26px] bg-[#0D2E18] p-5 text-center text-[#FFF0D8] sm:min-h-[21rem] sm:p-6">
+                      <div className="relative flex h-32 w-32 items-center justify-center sm:h-36 sm:w-36">
+                        {card.illustration === "discovery" ? (
+                          <>
+                            <div className="absolute inset-4 rounded-full bg-[#FFF0DA]/12" />
+                            <div className="relative flex h-24 w-24 items-center justify-center rounded-[32px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_18px_34px_rgba(0,0,0,0.20)]">
+                              <Coffee className="h-12 w-12 text-[#0F441D]" />
+                            </div>
+                            <Sparkles className="absolute right-4 top-4 h-7 w-7 text-[#FFF0D8]" />
+                          </>
+                        ) : card.illustration === "tracking" ? (
+                          <div className="relative h-full w-full">
+                            <div className="absolute left-4 right-4 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#FFF0D8]/28">
+                              <div className="h-full w-2/3 rounded-full bg-[#FFF0D8]" />
+                            </div>
+                            <svg
+                              viewBox="0 0 96 96"
+                              aria-hidden="true"
+                              className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 text-[#FFF0D8]"
+                            >
+                              <g
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="8"
+                              >
+                                <circle cx="30" cy="60" r="14" />
+                                <circle cx="66" cy="60" r="14" />
+                                <path d="M30 60 48 44 66 60" />
+                                <path d="M48 44 57 28" />
+                                <path d="M55 28 64 45" />
+                              </g>
+                            </svg>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="absolute inset-5 rounded-full border border-[#FFF0D8]/28" />
+                            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#FFF0D8] text-[#0D2E18] shadow-[0_18px_34px_rgba(0,0,0,0.20)]">
+                              <span className="font-sans text-4xl font-black">+1</span>
+                            </div>
+                            <Gift className="absolute right-4 top-4 h-8 w-8 text-[#FFF0D8]" />
+                          </>
+                        )}
+                      </div>
+
+                      <div className="mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#0F441D]">
+                        <Icon size={20} />
+                      </div>
+                      <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-[#FFF0D8] sm:text-4xl">
+                        {card.title}
+                      </h2>
+                      <p className="mt-4 max-w-sm font-sans text-base leading-7 text-[#FFF0D8]/88">
+                        {card.body}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 px-5 pb-5 pt-2 md:px-6 md:pb-6">
               <div className="flex gap-2">
                 {onboardingCards.map((card, index) => (
-                  <span
+                  <button
                     key={card.title}
+                    type="button"
+                    aria-label={`Go to onboarding slide ${index + 1}`}
+                    onClick={() => {
+                      setOnboardingStep(index);
+                      onboardingScrollerRef.current?.scrollTo({
+                        left:
+                          onboardingScrollerRef.current.clientWidth * index,
+                        behavior: "smooth",
+                      });
+                    }}
                     className={`h-2 rounded-full transition-all ${
                       index === onboardingStep
                         ? "w-8 bg-[#0D2E18]"
@@ -2718,24 +3345,23 @@ export function CustomerDashboard({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (onboardingStep >= onboardingCards.length - 1) {
-                    finishOnboarding();
-                    return;
-                  }
-
-                  setOnboardingStep((step) => step + 1);
-                }}
+                onClick={handleOnboardingNext}
                 aria-label={
                   onboardingStep >= onboardingCards.length - 1
                     ? "Enter KadaServe"
                     : "Next onboarding slide"
                 }
-                className="group flex h-14 min-w-14 items-center justify-center rounded-full bg-[#0D2E18] px-5 font-sans text-sm font-bold text-[#FFF0D8] shadow-[0_12px_26px_rgba(13,46,24,0.20)] transition duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#0F441D] hover:shadow-[0_16px_34px_rgba(13,46,24,0.26)]"
+                className="group flex h-14 min-w-14 items-center justify-center rounded-full bg-[#0D2E18] px-5 font-sans text-sm font-bold text-[#FFF0DA] shadow-[0_12px_26px_rgba(13,46,24,0.20)] transition duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#0F441D] hover:shadow-[0_16px_34px_rgba(13,46,24,0.26)]"
               >
-                <span className="hidden sm:inline">
+                <span
+                  className={
+                    onboardingStep >= onboardingCards.length - 1
+                      ? "inline"
+                      : "hidden sm:inline"
+                  }
+                >
                   {onboardingStep >= onboardingCards.length - 1
-                    ? "Enter KadaServe"
+                    ? "Get Started"
                     : "Next"}
                 </span>
                 <ChevronRight className="h-5 w-5 transition group-hover:translate-x-0.5 sm:ml-2" />
@@ -3875,17 +4501,73 @@ export function CustomerDashboard({
         ) : null}
       </aside>
 
-      <Link
-        href={isAuthenticated ? "/customer/cart" : "/login"}
-        className="fixed bottom-24 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] sm:bottom-6 sm:right-6 sm:h-16 sm:w-16"
-      >
-        <ShoppingCart size={24} />
-        {cartCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FFF0D8] px-1 text-[10px] font-bold text-[#123E26]">
-            {cartCount}
-          </span>
-        ) : null}
-      </Link>
+      {isCartTrayOpen ? (
+        <section className="fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px]">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsCartTrayOpen(false)}
+              aria-label="Collapse cart"
+              className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)]"
+            >
+              <ShoppingCart size={20} />
+              <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 font-sans text-[11px] font-black text-white">
+                {cartCount}
+              </span>
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                {latestCartItem ? latestCartItem.name : "Your cart"}
+              </p>
+              <p className="font-sans text-2xl font-black leading-tight text-[#0D2E18]">
+                {formatPrice(cartTotal)}
+              </p>
+              <p className="truncate font-sans text-[11px] font-semibold text-[#684B35]">
+                {cartCount > 0
+                  ? `${cartCount} item${cartCount === 1 ? "" : "s"} ready`
+                  : "Add drinks to enable checkout"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!requireCustomerAccount("Login to checkout.")) {
+                  return;
+                }
+
+                router.push("/customer/cart");
+              }}
+              disabled={cartCount === 0}
+              className="min-h-12 shrink-0 rounded-[18px] bg-[#0D2E18] px-4 font-sans text-sm font-black text-[#FFF0DA] transition hover:bg-[#123E26] disabled:cursor-not-allowed disabled:bg-[#D8D8D8] disabled:text-white"
+            >
+              Checkout
+            </button>
+          </div>
+        </section>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            if (!isAuthenticated) {
+              router.push("/login");
+              return;
+            }
+
+            setIsCartTrayOpen(true);
+          }}
+          aria-label="Open cart"
+          className="fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] sm:bottom-6 sm:right-6"
+        >
+          <ShoppingCart size={25} />
+          {cartCount > 0 ? (
+            <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 text-[11px] font-bold text-white">
+              {cartCount}
+            </span>
+          ) : null}
+        </button>
+      )}
     </main>
   );
 }

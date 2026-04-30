@@ -1,13 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ShoppingCart, Trash2 } from "lucide-react";
-import { useCart } from "@/features/customer/providers/cart-provider";
+import {
+  ArrowLeft,
+  CreditCard,
+  Edit3,
+  Pencil,
+  Plus,
+  ShoppingCart,
+  Ticket,
+  TicketPercent,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
+
+type RewardVoucher = {
+  code: string;
+  title: string;
+  expiresAt: string;
+  value: string;
+};
+
+const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
 
 function peso(value: number) {
-  return `₱${Math.round(value)}`;
+  return `\u20B1${Math.round(value)}`;
 }
 
 function formatAddonLabel(value: string) {
@@ -17,35 +37,117 @@ function formatAddonLabel(value: string) {
     .join(" ");
 }
 
+function getItemTotal(item: CartItem) {
+  return (item.base_price + item.addon_price) * item.quantity;
+}
+
+function getVoucherDiscount(subtotal: number, code: string) {
+  const normalizedCode = code.trim().toUpperCase();
+
+  if (normalizedCode === "KADA10") {
+    return Math.round(subtotal * 0.1);
+  }
+
+  if (normalizedCode === "FIRSTSIP") {
+    return Math.min(50, subtotal);
+  }
+
+  if (normalizedCode === "KADA30") {
+    return Math.min(30, subtotal);
+  }
+
+  if (normalizedCode === "CREAMYADDON") {
+    return Math.min(15, subtotal);
+  }
+
+  return 0;
+}
+
+function readRewardWallet() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(rewardsWalletStorageKey) ?? "[]"
+    ) as RewardVoucher[];
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getCartUpdatePayload(item: CartItem, specialInstructions: string) {
+  return {
+    menu_item_id: item.menu_item_id,
+    name: item.name,
+    base_price: item.base_price,
+    quantity: item.quantity,
+    sugar_level: item.sugar_level,
+    ice_level: item.ice_level,
+    size: item.size,
+    temperature: item.temperature,
+    addons: item.addons,
+    addon_price: item.addon_price,
+    special_instructions: specialInstructions,
+    image_url: item.image_url,
+  };
+}
+
 export default function CartPage() {
   const router = useRouter();
-  const { items, removeItem, clearCart } = useCart();
+  const { items, removeItem, updateItem, clearCart } = useCart();
 
-  const [orderType, setOrderType] = useState<"pickup" | "delivery">("pickup");
+  const [orderType, setOrderType] = useState<"pickup" | "delivery">("delivery");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "gcash">("cash");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherDraft, setVoucherDraft] = useState("");
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
 
-    useEffect(() => {
+  useEffect(() => {
+    setSelectedItemIds((current) => {
+      const existingIds = new Set(items.map((item) => item.id));
+      const retainedIds = current.filter((id) => existingIds.has(id));
+      const newIds = items
+        .map((item) => item.id)
+        .filter((id) => !retainedIds.includes(id));
+
+      return [...retainedIds, ...newIds];
+    });
+  }, [items]);
+
+  useEffect(() => {
+    setRewardWallet(readRewardWallet());
+  }, []);
+
+  useEffect(() => {
     if (orderType === "delivery") {
       setPaymentMethod("cash");
     }
   }, [orderType]);
 
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [deliveryEmail, setDeliveryEmail] = useState("");
-  const [deliveryPhone, setDeliveryPhone] = useState("");
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedItemIds.includes(item.id)),
+    [items, selectedItemIds]
+  );
+  const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
+  const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
+  const grandTotal = Math.max(0, subtotal - voucherDiscount);
+  const pointsEarned = Math.floor(grandTotal / 20);
+  const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const selectedVoucher = rewardWallet.find(
+    (voucher) => voucher.code === voucherCode.trim().toUpperCase()
+  );
 
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [isRedirectingToTracking, setIsRedirectingToTracking] = useState(false);
-
-  
-    useEffect(() => {
-    setSelectedItemIds(items.map((item) => item.id));
-  }, [items]);
-
-    function toggleSelectedItem(id: string) {
+  function toggleSelectedItem(id: string) {
     setSelectedItemIds((current) =>
       current.includes(id)
         ? current.filter((itemId) => itemId !== id)
@@ -53,17 +155,35 @@ export default function CartPage() {
     );
   }
 
-  const selectedItems = items.filter((item) => selectedItemIds.includes(item.id));
+  function handleRemarkChange(item: CartItem, value: string) {
+    updateItem(item.id, getCartUpdatePayload(item, value.slice(0, 220)));
+  }
 
+  function openVoucherModal() {
+    setVoucherDraft(voucherCode);
+    setIsVoucherModalOpen(true);
+  }
 
-  const total = selectedItems.reduce(
-    (sum, item) => sum + (item.base_price + item.addon_price) * item.quantity,
-    0
-  );
+  function applyVoucher(code: string) {
+    setVoucherCode(code.trim().toUpperCase());
+    setVoucherDraft(code.trim().toUpperCase());
+    setIsVoucherModalOpen(false);
+  }
 
   async function handleCheckout() {
     setError("");
     setSuccessMessage("");
+
+    if (selectedItems.length === 0) {
+      setError("Select at least one item before placing your order.");
+      return;
+    }
+
+    if (orderType === "delivery" && !deliveryAddress.trim()) {
+      setError("Delivery address is required.");
+      return;
+    }
+
     setIsCheckingOut(true);
 
     try {
@@ -77,8 +197,7 @@ export default function CartPage() {
           orderType,
           paymentMethod,
           deliveryAddress,
-          deliveryEmail,
-          deliveryPhone,
+          voucherCode,
         }),
       });
 
@@ -94,14 +213,9 @@ export default function CartPage() {
       setSuccessMessage(
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
-      setIsRedirectingToTracking(true);
       clearCart();
 
-      setTimeout(() => {
-        router.replace(`/customer/orders/${orderId}`);
-        router.refresh();
-      }, 900);
-
+      router.replace(`/customer?tab=orders&orderId=${orderId}`);
     } catch {
       setError("Something went wrong during checkout.");
     } finally {
@@ -109,72 +223,84 @@ export default function CartPage() {
     }
   }
 
-  if (isRedirectingToTracking) {
-    return (
-      <main className="min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
-        <div className="mx-auto max-w-2xl">
-          <section className="rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] p-8 text-center shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
-            <h1 className="text-3xl font-black tracking-tight">
-              Redirecting to Order Tracking
-            </h1>
-            <p className="mt-3 text-base text-[#5D694F]">
-              Your order was placed successfully. Please wait a moment.
-            </p>
-          </section>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-5 flex items-center justify-between gap-4">
+    <main className="min-h-screen bg-[#FFF0DA] px-4 pb-28 pt-5 text-[#0D2E18]">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-5 flex items-center justify-between gap-3">
           <Link
-            href="/customer"
-            className="inline-flex items-center gap-2 rounded-full bg-[#0B3F22] px-4 py-2 text-sm font-semibold text-[#FFF0D8]"
+            href="/customer?tab=menu"
+            className="inline-flex items-center gap-2 rounded-full border border-[#0D2E18]/20 bg-white/75 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm transition hover:bg-white"
           >
             <ArrowLeft size={16} />
             Back to Menu
           </Link>
 
-          {items.length > 0 ? (
-            <button
-              type="button"
-              onClick={clearCart}
-              className="rounded-full border border-[#0B3F22] px-4 py-2 text-sm font-semibold text-[#0B3F22]"
-            >
-              Clear Cart
-            </button>
-          ) : null}
-        </div>
+          <Link
+            href="/customer?tab=menu"
+            className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-sm font-bold text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.18)] transition hover:bg-[#0F441D]"
+          >
+            <Plus size={16} />
+            Add Item
+          </Link>
+        </header>
 
-        <section className="rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] p-6 shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
-          <div className="flex items-center gap-3">
-            <ShoppingCart className="text-[#0B3F22]" />
-            <h1 className="text-4xl font-black tracking-tight">My Cart</h1>
+        <section className="space-y-5">
+          <div className="flex flex-col gap-4 border-b border-[#D8C8A7] pb-5 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                Delivery Address
+              </p>
+              <div className="mt-2 flex items-start gap-2">
+                <textarea
+                  value={deliveryAddress}
+                  onChange={(event) => setDeliveryAddress(event.target.value)}
+                  placeholder="Enter full delivery address"
+                  className="min-h-16 w-full min-w-0 rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] md:w-[34rem]"
+                />
+                <Pencil className="mt-3 h-4 w-4 shrink-0 text-[#0D2E18]" />
+              </div>
+              <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                Estimated delivery time: 25-40mins
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(["pickup", "delivery"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setOrderType(type)}
+                  className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${
+                    orderType === type
+                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                      : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                  }`}
+                >
+                  {type === "pickup" ? "Pickup" : "Delivery"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {items.length === 0 ? (
-            <div className="mt-6 rounded-[24px] bg-white/80 p-6">
-              <p className="text-xl font-bold">Your cart is empty</p>
-              <p className="mt-2 text-[#5D694F]">
+            <div className="py-16 text-center">
+              <ShoppingCart className="mx-auto h-9 w-9 text-[#0D2E18]" />
+              <p className="mt-3 font-sans text-xl font-bold">Your cart is empty</p>
+              <p className="mt-1 font-sans text-sm text-[#684B35]">
                 Add a drink from the menu to see it here.
               </p>
             </div>
           ) : (
-            <>
-              <div className="mt-6 space-y-4">
-                                {items.map((item) => {
+            <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+              <div className="divide-y divide-[#E8D9BE]">
+                {items.map((item) => {
                   const isSelected = selectedItemIds.includes(item.id);
 
                   return (
                     <article
                       key={item.id}
-                      className={`rounded-[24px] p-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)] ${
-                        isSelected
-                          ? "border-2 border-[#123E26] bg-white/95"
-                          : "border border-[#E6D8BD] bg-white/80"
+                      className={`py-4 ${
+                        isSelected ? "border-l-4 border-[#0D2E18] pl-3" : ""
                       }`}
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -182,181 +308,325 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => toggleSelectedItem(item.id)}
-                            className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+                            aria-label={`Select ${item.name}`}
+                            className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border font-sans text-xs font-bold ${
                               isSelected
-                                ? "border-[#123E26] bg-[#123E26] text-white"
-                                : "border-[#A9997C] bg-white text-transparent"
+                                ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                                : "border-[#BDAE92] bg-white text-transparent"
                             }`}
                           >
                             ✓
                           </button>
 
                           <div>
-                            <h2 className="text-2xl font-bold">{item.name}</h2>
-                            <p className="mt-1 text-sm text-[#6F634E]">
-                              Qty {item.quantity} • {item.size} • {item.temperature}
-                            </p>
-                            <p className="mt-1 text-sm text-[#6F634E]">
-                              Sugar {item.sugar_level}%
-                              {item.ice_level ? ` • Ice ${item.ice_level}` : ""}
-                            </p>
-
+                            <h2 className="font-sans text-xl font-black text-[#0D2E18]">
+                              {item.name}
+                            </h2>
+                            <ul className="mt-2 list-disc space-y-1 pl-5 font-sans text-sm text-[#684B35]">
+                              <li>Size: {item.size}</li>
+                              <li>Sugar level: {item.sugar_level}%</li>
+                              <li>Ice level: {item.ice_level ?? "None"}</li>
+                              <li>Temperature: {item.temperature}</li>
+                              <li>Quantity: {item.quantity}</li>
+                            </ul>
                             {item.addons.length > 0 ? (
-                              <p className="mt-1 text-sm text-[#6F634E]">
-                                Add-ons:{" "}
-                                {item.addons.map(formatAddonLabel).join(", ")}
-                              </p>
-                            ) : null}
-
-                            {item.special_instructions ? (
-                              <p className="mt-1 text-sm text-[#6F634E]">
-                                Note: {item.special_instructions}
+                              <p className="mt-2 font-sans text-sm text-[#684B35]">
+                                Add-ons: {item.addons.map(formatAddonLabel).join(", ")}
                               </p>
                             ) : null}
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-3">
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          <Link
+                            href={`/customer/menu/${item.menu_item_id}?cartItemId=${item.id}`}
+                          className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1.5 font-sans text-xs font-bold text-[#0D2E18]"
+                          >
+                            <Edit3 size={13} />
+                            Edit
+                          </Link>
                           <button
                             type="button"
                             onClick={() => removeItem(item.id)}
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FBE9E2] text-[#9C543D]"
+                            aria-label={`Remove ${item.name}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/60 text-[#9C543D]"
                           >
-                            <Trash2 size={18} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
 
-                      <div className="mt-4 text-right text-2xl font-black text-[#765531]">
-                        {peso((item.base_price + item.addon_price) * item.quantity)}
+                      <label className="mt-4 block">
+                        <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                          Special Remarks
+                        </span>
+                        <textarea
+                          value={item.special_instructions}
+                          onChange={(event) => handleRemarkChange(item, event.target.value)}
+                          placeholder="Let us know if you have any special request. eg. I need sugar sachet"
+                          className="mt-2 min-h-24 w-full rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                        />
+                      </label>
+
+                      <div className="mt-3 text-right font-sans text-xl font-black text-[#765531]">
+                        {peso(getItemTotal(item))}
                       </div>
                     </article>
                   );
-                })}``
+                })}
               </div>
 
-              <div className="mt-6 rounded-[24px] bg-white/80 p-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
-                <h2 className="text-xl font-bold">Order Details</h2>
+              <aside className="h-fit space-y-4">
+                <section className="border-t border-[#D8C8A7] pt-5 lg:border-t-0 lg:pt-0">
+                  <div className="flex items-center gap-2">
+                    <TicketPercent className="h-5 w-5 text-[#0D2E18]" />
+                    <h2 className="font-sans text-lg font-black">Rewards</h2>
+                  </div>
 
-                <div className="mt-4">
-                  <p className="text-sm font-semibold text-[#5D694F]">Order Type</p>
-                  <div className="mt-2 flex gap-3">
-                    {(["pickup", "delivery"] as const).map((type) => (
+                  <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                          Voucher
+                        </p>
+                        <p className="mt-1 truncate font-sans text-sm font-black text-[#0D2E18]">
+                          {voucherCode
+                            ? selectedVoucher?.title ?? voucherCode
+                            : "No voucher selected"}
+                        </p>
+                        {voucherCode ? (
+                          <p className="font-sans text-xs font-semibold text-[#684B35]">
+                            Code: {voucherCode}
+                          </p>
+                        ) : null}
+                      </div>
                       <button
-                        key={type}
                         type="button"
-                        onClick={() => setOrderType(type)}
-                        className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                          orderType === type
-                            ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                            : "border-[#708061] bg-transparent text-[#123E26]"
-                        }`}
+                        onClick={openVoucherModal}
+                        className="shrink-0 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-bold text-[#FFF0DA]"
                       >
-                        {type === "pickup" ? "Pickup" : "Delivery"}
+                        Add Voucher
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-sm font-semibold text-[#5D694F]">Payment Method</p>
-
-                  <div className="mt-2 flex gap-3">
-                    {(orderType === "pickup"
-                      ? (["cash", "gcash"] as const)
-                      : (["cash"] as const)
-                    ).map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                          paymentMethod === method
-                            ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                            : "border-[#708061] bg-transparent text-[#123E26]"
-                        }`}
-                      >
-                        {method.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-
-                {orderType === "delivery" ? (
-                  <div className="mt-5 space-y-4">
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
-                        Delivery Address
-                      </label>
-                      <textarea
-                        value={deliveryAddress}
-                        onChange={(event) => setDeliveryAddress(event.target.value)}
-                        className="min-h-24 w-full rounded-[18px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
-                        placeholder="Enter full delivery address"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={deliveryEmail}
-                        onChange={(event) => setDeliveryEmail(event.target.value)}
-                        className="w-full rounded-[18px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
-                        placeholder="Enter delivery email"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
-                        Phone Number
-                      </label>
-                      <input
-                        type="text"
-                        value={deliveryPhone}
-                        onChange={(event) => setDeliveryPhone(event.target.value)}
-                        className="w-full rounded-[18px] border border-[#D8C8A7] bg-white px-4 py-3 outline-none"
-                        placeholder="Enter contact number"
-                      />
                     </div>
                   </div>
-                ) : null}
-              </div>
 
-              <div className="mt-6 rounded-[24px] bg-[#0B3F22] p-5 text-[#FFF0D8]">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold">Total</span>
-                  <span className="text-3xl font-black">{peso(total)}</span>
-                </div>
-
-                {error ? (
-                  <p className="mt-4 rounded-xl bg-red-100 px-4 py-3 text-sm text-red-700">
-                    {error}
+                  <p className="mt-4 font-sans text-sm font-semibold text-[#2D7A40]">
+                    You will earn {pointsEarned} points
                   </p>
-                ) : null}
-
-                {successMessage ? (
-                  <p className="mt-4 rounded-xl bg-green-100 px-4 py-3 text-sm text-green-700">
-                    {successMessage}
+                  <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
+                    Adds {cupCount} cup{cupCount === 1 ? "" : "s"} to your goal
                   </p>
-                ) : null}
+                </section>
 
-                <button
-                  type="button"
-                  onClick={handleCheckout}
-                  disabled={isCheckingOut}
-                  className="mt-4 w-full rounded-[18px] bg-[#FFF0D8] px-5 py-4 text-lg font-bold text-[#0B3F22] disabled:opacity-60"
-                >
-                  {isCheckingOut ? "Processing..." : "Proceed to Checkout"}
-                </button>
-              </div>
-            </>
+                <section className="border-t border-[#D8C8A7] pt-5">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-[#0D2E18]" />
+                    <h2 className="font-sans text-lg font-black">Payment Details</h2>
+                  </div>
+
+                  <div className="mt-4 space-y-3 font-sans text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[#684B35]">Amount</span>
+                      <span className="font-bold">{peso(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[#684B35]">Voucher Discount</span>
+                      <span className="font-bold">-{peso(voucherDiscount)}</span>
+                    </div>
+                    <div className="border-t border-[#EFE2C9] pt-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="font-sans text-sm font-bold text-[#684B35]">
+                          Grand Total
+                        </span>
+                        <span className="font-display text-3xl font-bold text-[#0D2E18]">
+                          {peso(grandTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <p className="font-sans text-sm font-bold text-[#684B35]">
+                      Payment Method
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      {(orderType === "pickup"
+                        ? (["cash", "gcash"] as const)
+                        : (["cash"] as const)
+                      ).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => setPaymentMethod(method)}
+                          className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
+                            paymentMethod === method
+                              ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                              : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                          }`}
+                        >
+                          {method.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {error ? (
+                    <p className="mt-4 rounded-[14px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-semibold text-[#9C543D]">
+                      {error}
+                    </p>
+                  ) : null}
+
+                  {successMessage ? (
+                    <p className="mt-4 rounded-[14px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold text-[#0F7A40]">
+                      {successMessage}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={handleCheckout}
+                    disabled={isCheckingOut || selectedItems.length === 0}
+                    className="fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
+                  >
+                    {isCheckingOut ? "Processing..." : "Place Order"}
+                  </button>
+                </section>
+              </aside>
+            </div>
           )}
         </section>
       </div>
+
+      {isVoucherModalOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-sm md:items-center md:p-6">
+          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                  Voucher
+                </p>
+                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Add a voucher
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVoucherModalOpen(false)}
+                aria-label="Close voucher modal"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFF0DA] text-[#0D2E18]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="font-sans text-sm font-bold text-[#684B35]">
+                Add a voucher code
+              </span>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={voucherDraft}
+                  onChange={(event) => setVoucherDraft(event.target.value)}
+                  placeholder="Enter voucher code"
+                  className="min-w-0 flex-1 rounded-[16px] border border-[#D8C8A7] bg-[#FFF0DA] px-4 py-3 font-sans text-sm font-bold uppercase text-[#0D2E18] outline-none placeholder:normal-case placeholder:text-[#9B8A74]"
+                />
+                <button
+                  type="button"
+                  onClick={() => applyVoucher(voucherDraft)}
+                  disabled={!voucherDraft.trim()}
+                  className="rounded-[16px] bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7]"
+                >
+                  Apply
+                </button>
+              </div>
+            </label>
+
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-[#EFE2C9]" />
+              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#9B8A74]">
+                Or
+              </span>
+              <span className="h-px flex-1 bg-[#EFE2C9]" />
+            </div>
+
+            <div>
+              <h3 className="font-sans text-lg font-black text-[#0D2E18]">
+                Redeem Vouchers with KadaServe Points
+              </h3>
+
+              {rewardWallet.length > 0 ? (
+                <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                  {rewardWallet.map((voucher) => (
+                    <button
+                      key={voucher.code}
+                      type="button"
+                      onClick={() => applyVoucher(voucher.code)}
+                      className={`w-full rounded-[18px] border p-4 text-left transition ${
+                        voucherCode === voucher.code
+                          ? "border-[#0D2E18] bg-[#FFF0DA]"
+                          : "border-[#E8D9BE] bg-[#FFF8EF]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-sans text-base font-black text-[#0D2E18]">
+                            {voucher.title}
+                          </p>
+                          <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
+                            Code: {voucher.code}
+                          </p>
+                          <p className="font-sans text-xs text-[#8C7A64]">
+                            Expires {voucher.expiresAt}
+                          </p>
+                        </div>
+                        <TicketPercent className="h-6 w-6 text-[#0D2E18]" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-[20px] bg-[#FFF8EF] px-5 py-8 text-center">
+                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#E1E6D9] text-white">
+                    <Ticket className="h-10 w-10" />
+                  </div>
+                  <p className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
+                    No Available Voucher
+                  </p>
+                  <p className="mt-1 font-sans text-sm leading-6 text-[#684B35]">
+                    Complete missions or redeem rewards with points to unlock your first voucher.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVoucherModalOpen(false);
+                      router.push("/customer?tab=rewards");
+                    }}
+                    className="mt-4 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA]"
+                  >
+                    Go to Rewards
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {voucherCode ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setVoucherCode("");
+                  setVoucherDraft("");
+                  setIsVoucherModalOpen(false);
+                }}
+                className="mt-4 w-full rounded-full border border-[#D8C8A7] px-4 py-3 font-sans text-sm font-bold text-[#684B35]"
+              >
+                Remove selected voucher
+              </button>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

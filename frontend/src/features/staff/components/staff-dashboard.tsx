@@ -2,10 +2,28 @@
 
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, RefreshCw, Search, Truck, X } from "lucide-react";
+import {
+  ClipboardList,
+  LogOut,
+  Mail,
+  Phone,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Truck,
+  UserRound,
+  X,
+} from "lucide-react";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
+type StationStatus = "accepting" | "busy";
+type StaffProfile = {
+  fullName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+};
 type BoardOrderStatus = Exclude<
   OrderStatus,
   "completed" | "delivered" | "cancelled"
@@ -45,9 +63,19 @@ function formatNameFromEmail(email: string | null) {
 function getOrderDisplayName(order: StaffOrder) {
   return (
     order.walkin_name?.trim() ||
+    order.customer_profile?.full_name?.trim() ||
     formatNameFromEmail(order.delivery_email) ||
+    formatNameFromEmail(order.customer_profile?.email ?? null) ||
     (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
   );
+}
+
+function getOrderEmail(order: StaffOrder) {
+  return order.delivery_email || order.customer_profile?.email || null;
+}
+
+function getOrderPhone(order: StaffOrder) {
+  return order.delivery_phone || order.customer_profile?.phone || null;
 }
 
 function formatTime(value: string) {
@@ -64,6 +92,19 @@ function formatDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatElapsed(value: string, now: Date) {
+  const elapsedMs = Math.max(0, now.getTime() - new Date(value).getTime());
+  const totalMinutes = Math.floor(elapsedMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  return `${Math.max(1, minutes)}m`;
 }
 
 function peso(value: number) {
@@ -156,13 +197,13 @@ function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
 function getStatusBadgeStyle(status: OrderStatus) {
   switch (status) {
     case "pending":
-      return "bg-[#EEF2F6] text-[#516274]";
+      return "bg-[#FFF0E5] text-[#B76522]";
     case "preparing":
       return "bg-[#E6F2E8] text-[#1E7A3D]";
     case "ready":
       return "bg-[#FFF0DA] text-[#684B35]";
     case "out_for_delivery":
-      return "bg-[#FFF0E5] text-[#B76522]";
+      return "bg-[#E8F0FF] text-[#2454C5]";
     case "completed":
       return "bg-[#E6F2E8] text-[#1E7A3D]";
     case "delivered":
@@ -224,14 +265,20 @@ export function StaffDashboard() {
   const router = useRouter();
 
   const [orders, setOrders] = useState<StaffOrder[]>(fallbackOrders);
+  const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
   const [search, setSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [stationStatus, setStationStatus] =
+    useState<StationStatus>("accepting");
+  const [now, setNow] = useState(() => new Date());
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [error, setError] = useState("");
@@ -249,6 +296,20 @@ export function StaffDashboard() {
           new Date(first.ordered_at).getTime()
       )
       .slice(0, 8);
+  }, [orders]);
+
+  const ordersHandledToday = useMemo(() => {
+    const today = new Date();
+
+    return orders.filter((order) => {
+      const orderedAt = new Date(order.ordered_at);
+      return (
+        finalStatuses.includes(order.status) &&
+        orderedAt.getFullYear() === today.getFullYear() &&
+        orderedAt.getMonth() === today.getMonth() &&
+        orderedAt.getDate() === today.getDate()
+      );
+    }).length;
   }, [orders]);
 
 
@@ -313,9 +374,23 @@ export function StaffDashboard() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNow(new Date());
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
     setIsConfirmingCancel(false);
+  }
+
+  function toggleOrderCard(orderId: string) {
+    setExpandedOrderId((currentOrderId) =>
+      currentOrderId === orderId ? null : orderId
+    );
   }
 
   function closeOrder() {
@@ -348,6 +423,7 @@ export function StaffDashboard() {
 
       startTransition(() => {
         setOrders(result.orders ?? []);
+        setStaffProfile(result.staffProfile ?? null);
         setIsBootstrapped(true);
         setLastSyncedAt(new Date());
         setSelectedOrder((currentSelectedOrder) => {
@@ -468,107 +544,179 @@ export function StaffDashboard() {
     }
   }
 
+  async function handleLogout() {
+    setIsLoggingOut(true);
+
+    try {
+      await fetch("/api/logout", {
+        method: "POST",
+      });
+
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
       <header className="border-b border-[#DCCFB8] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <div>
-            <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-5">
+          <div className="flex items-start gap-2">
+            <div>
+            <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
               Order Queue
             </p>
-            <h1 className="font-sans text-4xl font-bold text-[#0D2E18]">
+            <h1 className="font-sans text-2xl font-bold text-[#0D2E18] lg:text-3xl">
               Active orders
             </h1>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadOrders({ showLoading: true })}
+              disabled={isLoading}
+              title="Force refresh order queue"
+              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-[#F4EEE6] disabled:opacity-60"
+            >
+              <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+              <span className="sr-only">
+                {isLoading ? "Syncing latest orders" : "Sync latest orders"}
+              </span>
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex min-w-[260px] items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-4 py-3">
-              <Search size={18} className="text-[#8C7A64]" />
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+            <label className="flex min-w-full items-center gap-2 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2 sm:min-w-[220px] sm:max-w-[280px]">
+              <Search size={16} className="text-[#8C7A64]" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search orders..."
-                className="w-full bg-transparent font-sans text-base text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
               />
             </label>
 
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 rounded-2xl border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2 sm:w-auto">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F441D] font-sans text-xs font-bold text-[#FFF0DA]">
+                {(staffProfile?.fullName || "Staff User")
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+              <div className="min-w-[120px]">
+                <p className="font-sans text-sm font-semibold leading-tight text-[#0D2E18]">
+                  {staffProfile?.fullName || "Staff Chrizelda"}
+                </p>
+                <p className="font-sans text-xs capitalize text-[#8C7A64]">
+                  {staffProfile?.role?.replace("_", " ") || "Head Barista"}
+                </p>
+              </div>
+
+              <div className="h-8 w-px bg-[#DCCFB8]" />
+
+              <div className="min-w-[82px]">
+                <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#8C7A64]">
+                  Handled
+                </p>
+                <p className="font-sans text-sm font-bold text-[#0D2E18]">
+                  {ordersHandledToday} today
+                </p>
+              </div>
+
               <button
                 type="button"
-                onClick={() => loadOrders({ showLoading: true })}
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-semibold text-[#FFF0DA] disabled:opacity-60"
+                onClick={() =>
+                  setStationStatus((currentStatus) =>
+                    currentStatus === "accepting" ? "busy" : "accepting"
+                  )
+                }
+                className={`inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold transition ${
+                  stationStatus === "accepting"
+                    ? "bg-[#E6F2E8] text-[#0F441D]"
+                    : "bg-[#FFF0E5] text-[#B76522]"
+                }`}
               >
-                <RefreshCw size={16} />
-                {isLoading ? "Syncing..." : "Sync latest"}
+                <span className="h-2 w-2 rounded-full bg-current" />
+                {stationStatus === "accepting" ? "Accepting" : "Busy"}
               </button>
 
-              <p className="font-sans text-[11px] text-[#8C7A64]">
-                Auto-syncs every 15s
+              <button
+                type="button"
+                title="Security settings"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#F4EEE6]"
+              >
+                <ShieldCheck size={15} />
+                <span className="sr-only">Security settings</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-[#0D2E18] px-3 font-sans text-xs font-semibold text-[#FFF0DA] disabled:opacity-60"
+              >
+                <LogOut size={14} />
+                {isLoggingOut ? "Leaving" : "Logout"}
+              </button>
+
+              <div className="basis-full font-sans text-[11px] text-[#8C7A64] sm:basis-auto">
+                Auto-sync 15s
                 {lastSyncedAt
                   ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
                       hour: "numeric",
                       minute: "2-digit",
                     })}`
                   : ""}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0F441D] font-sans text-lg font-bold text-[#FFF0DA]">
-                ST
-              </div>
-              <div>
-                <p className="font-sans text-lg font-semibold text-[#0D2E18]">
-                  Staff User
-                </p>
-                <p className="font-sans text-sm text-[#8C7A64]">Staff</p>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <section className="px-6 py-5">
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-            <p className="font-sans text-sm text-[#8C7A64]">Pending</p>
-            <p className="mt-2 font-sans text-5xl font-semibold text-[#B44C1E]">
+      <section className="px-4 py-4 lg:px-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
+            <p className="font-sans text-xs text-[#8C7A64]">Pending</p>
+            <p className="mt-1 font-sans text-3xl font-semibold text-[#B44C1E]">
               {summary.pending}
             </p>
           </div>
 
-          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-            <p className="font-sans text-sm text-[#8C7A64]">Preparing</p>
-            <p className="mt-2 font-sans text-5xl font-semibold text-[#B76522]">
+          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
+            <p className="font-sans text-xs text-[#8C7A64]">Preparing</p>
+            <p className="mt-1 font-sans text-3xl font-semibold text-[#B76522]">
               {summary.preparing}
             </p>
           </div>
 
-          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-            <p className="font-sans text-sm text-[#8C7A64]">Ready</p>
-            <p className="mt-2 font-sans text-5xl font-semibold text-[#0F7A40]">
+          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
+            <p className="font-sans text-xs text-[#8C7A64]">Ready</p>
+            <p className="mt-1 font-sans text-3xl font-semibold text-[#0F7A40]">
               {summary.ready}
             </p>
           </div>
 
-          <div className="rounded-[22px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-            <p className="font-sans text-sm text-[#8C7A64]">
+          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
+            <p className="font-sans text-xs text-[#8C7A64]">
               Out for delivery
             </p>
-            <p className="mt-2 font-sans text-5xl font-semibold text-[#684B35]">
+            <p className="mt-1 font-sans text-3xl font-semibold text-[#2454C5]">
               {summary.outForDelivery}
             </p>
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap gap-2">
           {(["all", "pickup", "delivery"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setOrderFilter(value)}
-              className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${orderFilter === value
+              className={`rounded-full px-3 py-1.5 font-sans text-xs font-semibold transition ${orderFilter === value
                 ? "bg-[#0D2E18] text-[#FFF0DA]"
                 : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
                 }`}
@@ -583,43 +731,43 @@ export function StaffDashboard() {
         </div>
 
         {error ? (
-          <div className="mt-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
+          <div className="mt-4 rounded-[16px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
             {error}
           </div>
         ) : null}
 
         {!isBootstrapped ? (
-          <div className="mt-5 rounded-[24px] border border-[#DCCFB8] bg-white p-6 shadow-[0_8px_20px_rgba(104,75,53,0.06)]">
-            <p className="font-sans text-xl font-semibold text-[#0D2E18]">
+          <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
+            <p className="font-sans text-lg font-semibold text-[#0D2E18]">
               Load staff orders
             </p>
-            <p className="mt-2 font-sans text-[#6E5D49]">
+            <p className="mt-1 font-sans text-sm text-[#6E5D49]">
               Click Refresh Orders to fetch live active orders from Supabase.
             </p>
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {boardColumns.map((column) => {
             const columnOrders = groupedOrders[column.key] ?? [];
 
             return (
               <section
                 key={column.key}
-                className="rounded-[24px] border border-[#DCCFB8] bg-[#F9F1E4] p-4"
+                className="rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-3"
               >
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="font-sans text-[1.35rem] font-semibold uppercase tracking-[0.06em] text-[#8C7A64]">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.06em] text-[#8C7A64]">
                     {column.label}
                   </h2>
-                  <span className="rounded-full bg-[#EFE3CF] px-3 py-1 font-sans text-sm font-semibold text-[#684B35]">
+                  <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
                     {columnOrders.length}
                   </span>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {columnOrders.length === 0 ? (
-                    <div className="rounded-[20px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+                    <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-3 py-5 text-center font-sans text-sm text-[#8C7A64]">
                       No orders here
                     </div>
                   ) : null}
@@ -632,25 +780,31 @@ export function StaffDashboard() {
                     );
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
                     const isUpdatingOrder = updatingOrderIds.includes(order.id);
+                    const isExpanded = expandedOrderId === order.id;
+                    const orderEmail = getOrderEmail(order);
+                    const orderPhone = getOrderPhone(order);
+                    const specialRemarks = order.order_items
+                      .map((item) => item.special_instructions?.trim())
+                      .filter((remark): remark is string => Boolean(remark));
 
                     return (
                       <article
                         key={order.id}
-                        onClick={() => openOrder(order)}
-                        className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
+                        onClick={() => toggleOrderCard(order.id)}
+                        className="cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="font-sans text-[1.9rem] font-bold leading-none text-[#0D2E18]">
+                            <p className="font-sans text-[1.2rem] font-bold leading-none text-[#0D2E18]">
                               {formatOrderCode(order.id)}
                             </p>
-                            <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                            <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
                               {getOrderDisplayName(order)}
                             </p>
                           </div>
 
                           <span
-                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getStatusBadgeStyle(
                               order.status
                             )}`}
                           >
@@ -658,9 +812,13 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex rounded-full bg-[#F4EEE6] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
+                            {formatElapsed(order.ordered_at, now)}
+                          </span>
+
                           <span
-                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
                               order.order_type
                             )}`}
                           >
@@ -670,7 +828,7 @@ export function StaffDashboard() {
                           </span>
 
                           <span
-                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStyle(
                               order.payment_method
                             )}`}
                           >
@@ -678,7 +836,7 @@ export function StaffDashboard() {
                           </span>
 
                           <span
-                            className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
                               order.payment_status
                             )}`}
                           >
@@ -686,32 +844,97 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div className="mt-4 space-y-1">
-                          {items.map((item, index) => (
-                            <p
-                              key={`${order.id}-${index}-${item}`}
-                              className="font-sans text-[1.15rem] text-[#3C332A]"
-                            >
-                              {item}
+                        <div className="mt-3 flex items-center justify-between gap-3 font-sans">
+                          <p className="truncate text-sm text-[#3C332A]">
+                            {items[0] ?? "No item summary"}
+                            {items.length > 1 ? ` +${items.length - 1}` : ""}
+                          </p>
+                          <div className="text-right">
+                            <p className="text-[11px] text-[#9A856C]">
+                              {formatTime(order.ordered_at)}
                             </p>
-                          ))}
+                            <p className="text-base font-semibold text-[#684B35]">
+                              {peso(order.total_amount)}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="mt-4 flex items-center justify-between gap-3">
-                          <p className="font-sans text-lg text-[#9A856C]">
-                            {formatTime(order.ordered_at)}
-                          </p>
-                          <p className="font-sans text-2xl font-semibold text-[#684B35]">
-                            {peso(order.total_amount)}
-                          </p>
-                        </div>
+                        {isExpanded ? (
+                          <div className="mt-3 space-y-3 border-t border-[#EFE3CF] pt-3">
+                            <div className="space-y-1">
+                              {items.map((item, index) => (
+                                <p
+                                  key={`${order.id}-${index}-${item}`}
+                                  className="font-sans text-xs text-[#3C332A]"
+                                >
+                                  {item}
+                                </p>
+                              ))}
+                            </div>
 
-                        <div className="mt-5 flex items-center justify-between gap-3">
-                          <div className="inline-flex items-center gap-2 font-sans text-sm text-[#6E5D49]">
+                            <div className="flex flex-wrap gap-2">
+                              {orderPhone ? (
+                                <a
+                                  href={`tel:${orderPhone}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35]"
+                                >
+                                  <Phone size={14} />
+                                  Call
+                                </a>
+                              ) : null}
+
+                              {orderEmail ? (
+                                <a
+                                  href={`mailto:${orderEmail}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35]"
+                                >
+                                  <Mail size={14} />
+                                  Email
+                                </a>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openOrder(order);
+                                }}
+                                className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-semibold text-[#684B35]"
+                              >
+                                <UserRound size={14} />
+                                Details
+                              </button>
+                            </div>
+
+                            <div className="rounded-xl bg-[#FFF8EF] p-3 font-sans text-xs text-[#5F5346]">
+                              <p className="font-semibold text-[#0D2E18]">
+                                Special remarks
+                              </p>
+                              {specialRemarks.length > 0 ? (
+                                <ul className="mt-1 space-y-1">
+                                  {specialRemarks.map((remark, index) => (
+                                    <li key={`${order.id}-remark-${index}`}>
+                                      {remark}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-1 text-[#8C7A64]">
+                                  No special request
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <div className="inline-flex items-center gap-1.5 font-sans text-xs text-[#6E5D49]">
                             {order.order_type === "delivery" ? (
-                              <Truck size={16} />
+                              <Truck size={14} />
                             ) : (
-                              <ClipboardList size={16} />
+                              <ClipboardList size={14} />
                             )}
                             {order.order_type === "delivery"
                               ? "Delivery flow"
@@ -731,7 +954,7 @@ export function StaffDashboard() {
                                 handleAdvance(order.id, order.status);
                               }}
                               disabled={isUpdatingOrder}
-                              className={`rounded-[14px] px-4 py-3 font-sans text-base font-semibold transition ${
+                              className={`rounded-xl px-3 py-2 font-sans text-xs font-semibold transition ${
                                 paymentRequired
                                   ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
                                   : `text-white ${getColumnActionStyle(order.status)}`
@@ -758,25 +981,25 @@ export function StaffDashboard() {
           })}
         </div>
 
-        <div className="mt-8 rounded-[24px] border border-[#DCCFB8] bg-[#F9F1E4] p-5">
+        <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
+              <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
                 Order History
               </p>
-              <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
+              <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
                 Recent finished and cancelled orders
               </h2>
             </div>
 
-            <span className="rounded-full bg-[#EFE3CF] px-3 py-1 font-sans text-sm font-semibold text-[#684B35]">
+            <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
               {historyOrders.length} shown
             </span>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {historyOrders.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+              <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-5 text-center font-sans text-sm text-[#8C7A64]">
                 No finished orders yet
               </div>
             ) : null}
@@ -788,20 +1011,20 @@ export function StaffDashboard() {
                 <article
                   key={order.id}
                   onClick={() => openOrder(order)}
-                  className="cursor-pointer rounded-[22px] border border-[#DCCFB8] bg-white p-5 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:shadow-[0_12px_24px_rgba(104,75,53,0.10)]"
+                  className="cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-sans text-[1.5rem] font-bold leading-none text-[#0D2E18]">
+                      <p className="font-sans text-[1.15rem] font-bold leading-none text-[#0D2E18]">
                         {formatOrderCode(order.id)}
                       </p>
-                      <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                      <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
                         {getOrderDisplayName(order)}
                       </p>
                     </div>
 
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getStatusBadgeStyle(
                         order.status
                       )}`}
                     >
@@ -809,9 +1032,9 @@ export function StaffDashboard() {
                     </span>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
                         order.order_type
                       )}`}
                     >
@@ -819,7 +1042,7 @@ export function StaffDashboard() {
                     </span>
 
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStyle(
                         order.payment_method
                       )}`}
                     >
@@ -827,7 +1050,7 @@ export function StaffDashboard() {
                     </span>
 
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
                         order.payment_status
                       )}`}
                     >
@@ -835,22 +1058,22 @@ export function StaffDashboard() {
                     </span>
                   </div>
 
-                  <div className="mt-4 space-y-1">
+                  <div className="mt-3 space-y-1">
                     {items.slice(0, 2).map((item, index) => (
                       <p
                         key={`${order.id}-${index}-${item}`}
-                        className="font-sans text-[1rem] text-[#3C332A]"
+                        className="font-sans text-sm text-[#3C332A]"
                       >
                         {item}
                       </p>
                     ))}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="mt-3 flex items-center justify-between gap-3">
                     <p className="font-sans text-sm text-[#9A856C]">
                       {formatDateTime(order.ordered_at)}
                     </p>
-                    <p className="font-sans text-xl font-semibold text-[#684B35]">
+                    <p className="font-sans text-lg font-semibold text-[#684B35]">
                       {peso(order.total_amount)}
                     </p>
                   </div>
@@ -868,13 +1091,13 @@ export function StaffDashboard() {
             onClick={closeOrder}
           />
 
-          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
-            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-6 py-5">
+          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-lg flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
               <div>
-                <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
+                <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
                   Order Details
                 </p>
-                <h2 className="mt-2 font-sans text-4xl font-bold text-[#0D2E18]">
+                <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
                   {formatOrderCode(selectedOrder.id)}
                 </h2>
               </div>
@@ -888,10 +1111,10 @@ export function StaffDashboard() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
+                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
                     selectedOrder.order_type
                   )}`}
                 >
@@ -901,7 +1124,7 @@ export function StaffDashboard() {
                 </span>
 
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
+                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStyle(
                     selectedOrder.payment_method
                   )}`}
                 >
@@ -909,7 +1132,7 @@ export function StaffDashboard() {
                 </span>
 
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
+                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
                     selectedOrder.payment_status
                   )}`}
                 >
@@ -917,7 +1140,7 @@ export function StaffDashboard() {
                 </span>
 
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusBadgeStyle(
+                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getStatusBadgeStyle(
                     selectedOrder.status
                   )}`}
                 >
@@ -925,25 +1148,25 @@ export function StaffDashboard() {
                 </span>
               </div>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
-                  <p className="font-sans text-sm text-[#8C7A64]">Placed at</p>
-                  <p className="mt-2 font-sans text-lg font-semibold text-[#0D2E18]">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs text-[#8C7A64]">Placed at</p>
+                  <p className="mt-1 font-sans text-sm font-semibold text-[#0D2E18]">
                     {formatDateTime(selectedOrder.ordered_at)}
                   </p>
                 </div>
 
-                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
-                  <p className="font-sans text-sm text-[#8C7A64]">Total</p>
-                  <p className="mt-2 font-sans text-lg font-semibold text-[#684B35]">
+                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs text-[#8C7A64]">Total</p>
+                  <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
                     {peso(selectedOrder.total_amount)}
                   </p>
                 </div>
               </div>
 
               {selectedOrder.order_type === "delivery" ? (
-                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
-                  <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
+                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
                     Delivery Info
                   </p>
 
@@ -965,29 +1188,29 @@ export function StaffDashboard() {
               ) : null}
 
               {getOrderDisplayName(selectedOrder) ? (
-                <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
-                  <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
+                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
                     Walk-in Customer
                   </p>
-                  <p className="mt-2 font-sans text-base font-semibold text-[#0D2E18]">
+                  <p className="mt-1 font-sans text-sm font-semibold text-[#0D2E18]">
                     {getOrderDisplayName(selectedOrder)}
                   </p>
                 </div>
               ) : null}
 
-              <div className="mt-5 space-y-4">
-                <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
+              <div className="mt-4 space-y-3">
+                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
                   Order Items
                 </p>
 
                 {selectedOrder.order_items.map((item) => (
                   <div
                     key={item.id}
-                    className="rounded-[20px] border border-[#DCCFB8] bg-white p-4"
+                    className="rounded-[16px] border border-[#DCCFB8] bg-white p-3"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-sans text-lg font-semibold text-[#0D2E18]">
+                        <p className="font-sans text-base font-semibold text-[#0D2E18]">
                           {item.menu_items?.name ?? "Menu item"} ×{" "}
                           {item.quantity}
                         </p>
@@ -1014,7 +1237,7 @@ export function StaffDashboard() {
                         </div>
                       </div>
 
-                      <p className="font-sans text-lg font-semibold text-[#684B35]">
+                      <p className="font-sans text-base font-semibold text-[#684B35]">
                         {peso(item.unit_price * item.quantity)}
                       </p>
                     </div>
@@ -1023,10 +1246,10 @@ export function StaffDashboard() {
               </div>
             </div>
 
-            <div className="border-t border-[#DCCFB8] px-6 py-5">
+            <div className="border-t border-[#DCCFB8] px-5 py-4">
               {isConfirmingCancel ? (
-                <div className="rounded-[18px] border border-[#E8B8A8] bg-[#FFF1EC] p-4">
-                  <p className="font-sans text-base font-semibold text-[#9C543D]">
+                <div className="rounded-[16px] border border-[#E8B8A8] bg-[#FFF1EC] p-3">
+                  <p className="font-sans text-sm font-semibold text-[#9C543D]">
                     Cancel this order?
                   </p>
                   <p className="mt-1 font-sans text-sm text-[#9C543D]">
@@ -1034,11 +1257,11 @@ export function StaffDashboard() {
                     active board.
                   </p>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setIsConfirmingCancel(false)}
-                      className="rounded-[14px] border border-[#D6C6AC] bg-white px-4 py-2 font-sans text-sm font-semibold text-[#684B35]"
+                      className="rounded-xl border border-[#D6C6AC] bg-white px-3 py-2 font-sans text-xs font-semibold text-[#684B35]"
                     >
                       Keep Order
                     </button>
@@ -1047,16 +1270,16 @@ export function StaffDashboard() {
                       type="button"
                       onClick={() => handleCancel(selectedOrder.id)}
                       disabled={isCancelling}
-                      className="rounded-[14px] bg-[#C55432] px-4 py-2 font-sans text-sm font-semibold text-white disabled:opacity-60"
+                      className="rounded-xl bg-[#C55432] px-3 py-2 font-sans text-xs font-semibold text-white disabled:opacity-60"
                     >
                       {isCancelling ? "Cancelling..." : "Yes, Cancel"}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-sans text-lg font-semibold text-[#0D2E18]">
+                    <p className="font-sans text-base font-semibold text-[#0D2E18]">
                       Order actions
                     </p>
                     {getFinalStatusMessage(selectedOrder.status) ? (
@@ -1066,14 +1289,14 @@ export function StaffDashboard() {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     {selectedOrder.payment_status === "unpaid" &&
                     !["cancelled"].includes(selectedOrder.status) ? (
                       <button
                         type="button"
                         onClick={() => handleMarkPaid(selectedOrder.id)}
                         disabled={isMarkingPaid}
-                        className="rounded-[14px] border border-[#0F441D]/25 bg-[#FFF8EF] px-5 py-3 font-sans text-base font-semibold text-[#0F441D] transition hover:bg-[#F4EEE6] disabled:opacity-60"
+                        className="rounded-xl border border-[#0F441D]/25 bg-[#FFF8EF] px-3 py-2 font-sans text-sm font-semibold text-[#0F441D] transition hover:bg-[#F4EEE6] disabled:opacity-60"
                       >
                         {isMarkingPaid ? "Marking..." : "Mark Paid"}
                       </button>
@@ -1085,7 +1308,7 @@ export function StaffDashboard() {
                       <button
                         type="button"
                         onClick={() => setIsConfirmingCancel(true)}
-                        className="rounded-[14px] border border-[#C55432] px-5 py-3 font-sans text-base font-semibold text-[#C55432] transition hover:bg-[#FFF1EC]"
+                        className="rounded-xl border border-[#C55432] px-3 py-2 font-sans text-sm font-semibold text-[#C55432] transition hover:bg-[#FFF1EC]"
                       >
                         Cancel Order
                       </button>
@@ -1109,7 +1332,7 @@ export function StaffDashboard() {
                           );
                         }}
                         disabled={updatingOrderIds.includes(selectedOrder.id)}
-                        className={`rounded-[14px] px-5 py-3 font-sans text-base font-semibold transition ${
+                        className={`rounded-xl px-3 py-2 font-sans text-sm font-semibold transition ${
                           requiresPaymentBeforeNextAction(selectedOrder)
                             ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
                             : `text-white ${getColumnActionStyle(
@@ -1127,7 +1350,7 @@ export function StaffDashboard() {
                             )}
                       </button>
                     ) : (
-                      <span className="rounded-[14px] bg-[#F4EEE6] px-4 py-3 font-sans text-sm font-semibold text-[#684B35]">
+                      <span className="rounded-xl bg-[#F4EEE6] px-3 py-2 font-sans text-sm font-semibold text-[#684B35]">
                         Final Status
                       </span>
                     )}

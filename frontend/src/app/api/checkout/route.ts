@@ -16,6 +16,28 @@ type CheckoutItem = {
   image_url: string | null;
 };
 
+function getVoucherDiscount(subtotal: number, code: string) {
+  const normalizedCode = code.trim().toUpperCase();
+
+  if (normalizedCode === "KADA10") {
+    return Math.round(subtotal * 0.1);
+  }
+
+  if (normalizedCode === "FIRSTSIP") {
+    return Math.min(50, subtotal);
+  }
+
+  if (normalizedCode === "KADA30") {
+    return Math.min(30, subtotal);
+  }
+
+  if (normalizedCode === "CREAMYADDON") {
+    return Math.min(15, subtotal);
+  }
+
+  return 0;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -36,9 +58,15 @@ export async function POST(request: Request) {
     const items = body.items as CheckoutItem[];
     const orderType = body.orderType as "pickup" | "delivery";
     const paymentMethod = body.paymentMethod as "cash" | "gcash";
-    const deliveryAddress = body.deliveryAddress as string;
-    const deliveryEmail = body.deliveryEmail as string;
-    const deliveryPhone = body.deliveryPhone as string;
+    const deliveryAddress =
+      typeof body.deliveryAddress === "string" ? body.deliveryAddress.trim() : "";
+    const voucherCode = typeof body.voucherCode === "string" ? body.voucherCode : "";
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, phone")
+      .eq("id", user.id)
+      .maybeSingle();
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
@@ -59,17 +87,18 @@ export async function POST(request: Request) {
     }
 
     if (orderType === "delivery") {
-      if (!deliveryAddress || !deliveryEmail || !deliveryPhone) {
+      if (!deliveryAddress) {
         return NextResponse.json(
-          { error: "Delivery address, email, and phone are required." },
+          { error: "Delivery address is required." },
           { status: 400 }
         );
       }
     }
 
-    const totalAmount = items.reduce((sum, item) => {
+    const subtotal = items.reduce((sum, item) => {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
+    const totalAmount = Math.max(0, subtotal - getVoucherDiscount(subtotal, voucherCode));
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -81,8 +110,9 @@ export async function POST(request: Request) {
         payment_status: "unpaid",
         total_amount: totalAmount,
         delivery_address: orderType === "delivery" ? deliveryAddress : null,
-        delivery_email: orderType === "delivery" ? deliveryEmail : null,
-        delivery_phone: orderType === "delivery" ? deliveryPhone : null,
+        delivery_email:
+          orderType === "delivery" ? profile?.email || user.email || null : null,
+        delivery_phone: orderType === "delivery" ? profile?.phone || null : null,
       })
       .select("id")
       .single();

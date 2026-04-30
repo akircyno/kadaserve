@@ -30,6 +30,7 @@ export type StaffOrderItem = {
 
 export type StaffOrder = {
   id: string;
+  customer_id: string | null;
   order_type: OrderType;
   status: OrderStatus;
   payment_method: PaymentMethod | null;
@@ -40,6 +41,11 @@ export type StaffOrder = {
   delivery_address: string | null;
   delivery_email: string | null;
   delivery_phone: string | null;
+  customer_profile: {
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   order_items: StaffOrderItem[];
 };
 

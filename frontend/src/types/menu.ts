@@ -1,4 +1,5 @@
 export type MenuCategory =
+  | "coffee"
   | "non-coffee"
   | "pastries"
   | "latte-series"
