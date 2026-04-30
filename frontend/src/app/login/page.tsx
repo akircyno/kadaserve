@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -22,8 +22,9 @@ const inputClass =
 const emailPattern =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const [email, setEmail] = useState("");
@@ -36,6 +37,12 @@ export default function LoginPage() {
   const isEmailValid = emailPattern.test(normalizedEmail);
   const isPasswordValid = password.length > 0;
   const canSubmit = isEmailValid && isPasswordValid && !isLoading;
+  const callbackUrl = searchParams.get("callbackUrl");
+  const loginIntent = searchParams.get("intent");
+  const safeCallbackUrl =
+    callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//")
+      ? callbackUrl
+      : null;
 
   useEffect(() => {
     emailInputRef.current?.focus();
@@ -72,6 +79,8 @@ export default function LoginPage() {
         router.push("/admin");
       } else if (result.role === "staff") {
         router.push("/staff");
+      } else if (safeCallbackUrl) {
+        router.push(safeCallbackUrl);
       } else {
         router.push("/customer");
       }
@@ -158,8 +167,15 @@ export default function LoginPage() {
                 Welcome back
               </h2>
               <p className="mt-1.5 font-sans text-base text-[#684B35]">
-                Sign in to order, track, and enjoy your favorites
+                {loginIntent === "login-to-order"
+                  ? "Login to order, earn rewards, and keep your taste profile accurate."
+                  : "Sign in to order, track, and enjoy your favorites"}
               </p>
+              {loginIntent === "login-to-order" ? (
+                <p className="mt-3 rounded-xl border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-bold text-[#0D2E18] shadow-sm">
+                  Login to Order
+                </p>
+              ) : null}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -298,5 +314,13 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

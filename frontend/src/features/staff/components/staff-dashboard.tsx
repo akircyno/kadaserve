@@ -6,13 +6,17 @@ import { ClipboardList, RefreshCw, Search, Truck, X } from "lucide-react";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
+type BoardOrderStatus = Exclude<
+  OrderStatus,
+  "completed" | "delivered" | "cancelled"
+>;
 
 const fallbackOrders: StaffOrder[] = [];
 const finalStatuses: OrderStatus[] = ["completed", "delivered", "cancelled"];
 
 
 const boardColumns: Array<{
-  key: OrderStatus;
+  key: BoardOrderStatus;
   label: string;
 }> = [
     { key: "pending", label: "Pending" },
@@ -125,13 +129,25 @@ function getOrderTypeStyle(orderType: "pickup" | "delivery") {
     : "bg-[#FFF0E5] text-[#B76522]";
 }
 
-function getPaymentStyle(paymentMethod: "cash" | "gcash") {
+function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
+  if (!paymentMethod) {
+    return "border border-[#DCCFB8] bg-[#FFF8EF]/70 text-[#8A755D]";
+  }
+
   return paymentMethod === "cash"
     ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
     : "border border-[#684B35]/20 bg-[#FFF8EF]/70 text-[#684B35]";
 }
 
-function getPaymentStatusStyle(paymentStatus: "unpaid" | "paid") {
+function getPaymentLabel(paymentMethod: StaffOrder["payment_method"]) {
+  if (!paymentMethod) {
+    return "Payment pending";
+  }
+
+  return paymentMethod === "cash" ? "Cash" : "GCash";
+}
+
+function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
   return paymentStatus === "paid"
     ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
     : "border border-[#B76522]/25 bg-[#FFF8EF]/70 text-[#B76522]";
@@ -658,7 +674,7 @@ export function StaffDashboard() {
                               order.payment_method
                             )}`}
                           >
-                            {order.payment_method === "cash" ? "Cash" : "GCash"}
+                            {getPaymentLabel(order.payment_method)}
                           </span>
 
                           <span
@@ -807,7 +823,7 @@ export function StaffDashboard() {
                         order.payment_method
                       )}`}
                     >
-                      {order.payment_method === "cash" ? "Cash" : "GCash"}
+                      {getPaymentLabel(order.payment_method)}
                     </span>
 
                     <span
@@ -889,7 +905,7 @@ export function StaffDashboard() {
                     selectedOrder.payment_method
                   )}`}
                 >
-                  {selectedOrder.payment_method === "cash" ? "Cash" : "GCash"}
+                  {getPaymentLabel(selectedOrder.payment_method)}
                 </span>
 
                 <span

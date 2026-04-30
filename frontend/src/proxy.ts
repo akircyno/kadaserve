@@ -33,16 +33,38 @@ export async function proxy(request: NextRequest) {
   const isLoginPage = pathname === "/login";
   const isPublicHome = pathname === "/";
   const isCustomerRoute = pathname.startsWith("/customer");
+  const isGuestCustomerRoute = pathname === "/customer";
+  const isProtectedCustomerRoute =
+    pathname.startsWith("/customer/cart") ||
+    pathname.startsWith("/customer/orders") ||
+    pathname.startsWith("/customer/menu") ||
+    (pathname === "/customer" &&
+      ["orders", "rewards"].includes(
+        request.nextUrl.searchParams.get("tab") ?? ""
+      ));
   const isStaffRoute = pathname.startsWith("/staff");
   const isAdminRoute = pathname.startsWith("/admin");
 
   if (!user) {
-    if (isPublicHome || isLoginPage) {
+    if (
+      isPublicHome ||
+      isLoginPage ||
+      (isCustomerRoute && isGuestCustomerRoute && !isProtectedCustomerRoute)
+    ) {
       return response;
     }
 
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`
+    );
+
+    if (isProtectedCustomerRoute) {
+      loginUrl.searchParams.set("intent", "login-to-order");
+    }
+
     return NextResponse.redirect(loginUrl);
   }
 

@@ -72,9 +72,11 @@ export default async function CustomerPage({ searchParams }: PageProps) {
   const initialSection =
     resolvedSearchParams.tab === "orders"
       ? "orders"
-      : resolvedSearchParams.tab === "feedback"
-      ? "feedback"
-      : "menu";
+      : resolvedSearchParams.tab === "menu"
+      ? "menu"
+      : resolvedSearchParams.tab === "rewards"
+      ? "rewards"
+      : "home";
 
   const supabase = await createClient();
 
@@ -93,18 +95,23 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
   let orders: CustomerOrder[] = fallbackOrders;
   let feedbackItems: FeedbackItem[] = [];
+  let preferenceSignals: Array<{
+    menuItemId: string;
+    overallRating: number;
+  }> = [];
   let customerProfile = {
     fullName: "KadaServe Customer",
     email: user?.email ?? null,
     phone: null as string | null,
     defaultDeliveryAddress: null as string | null,
+    avatarUrl: null as string | null,
     satisfactionAverage: null as number | null,
   };
 
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, email, phone")
+      .select("full_name, email, phone, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
     const { data: deliveryProfile } = await supabase
@@ -123,6 +130,11 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       phone: profile?.phone || null,
       defaultDeliveryAddress:
         deliveryProfile?.default_delivery_address ?? null,
+      avatarUrl:
+        profile?.avatar_url ||
+        (typeof user.user_metadata?.avatar_url === "string"
+          ? user.user_metadata.avatar_url
+          : null),
       satisfactionAverage: null,
     };
 
@@ -168,13 +180,20 @@ export default async function CustomerPage({ searchParams }: PageProps) {
         .filter((order) => eligibleStatuses.includes(order.status))
         .flatMap((order) =>
           order.order_items
-            .filter((item) => item.menu_items?.id && item.menu_items?.name)
-            .map((item) => ({
-              order_id: order.id,
-              order_item_id: item.id,
-              menu_item_id: item.menu_items!.id,
-              item_name: item.menu_items!.name,
-            }))
+            .flatMap((item) => {
+              if (!item.menu_items?.id || !item.menu_items.name) {
+                return [];
+              }
+
+              return [
+                {
+                  order_id: order.id,
+                  order_item_id: item.id,
+                  menu_item_id: item.menu_items.id,
+                  item_name: item.menu_items.name,
+                },
+              ];
+            })
         ) ?? [];
 
     if (eligibleOrderItems.length > 0) {
@@ -194,8 +213,21 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
     const { data: submittedFeedback } = await supabase
       .from("feedback")
-      .select("overall_rating")
+      .select("menu_item_id, overall_rating")
       .eq("customer_id", user.id);
+
+    preferenceSignals =
+      submittedFeedback
+        ?.map((item) => ({
+          menuItemId: String(item.menu_item_id),
+          overallRating: Number(item.overall_rating),
+        }))
+        .filter(
+          (item) =>
+            item.menuItemId &&
+            item.menuItemId !== "null" &&
+            Number.isFinite(item.overallRating)
+        ) ?? [];
 
     const ratings =
       submittedFeedback
@@ -213,8 +245,10 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       menuItems={menuItems}
       orders={orders}
       feedbackItems={feedbackItems}
+      preferenceSignals={preferenceSignals}
       initialSection={initialSection}
       customerProfile={customerProfile}
+      isAuthenticated={Boolean(user)}
     />
   );
 }

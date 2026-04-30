@@ -115,7 +115,7 @@ export function LandingPage() {
 
               <div className="mt-9 flex flex-col gap-4 sm:flex-row">
                 <Link
-                  href="/login"
+                  href="/customer"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0F441D] px-8 py-4 text-base font-bold text-white shadow-xl shadow-[#0F441D]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
                 >
                   Open KadaServe
