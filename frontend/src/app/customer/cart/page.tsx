@@ -108,7 +108,6 @@ export default function CartPage() {
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [isRedirectingToTracking, setIsRedirectingToTracking] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
@@ -214,35 +213,14 @@ export default function CartPage() {
       setSuccessMessage(
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
-      setIsRedirectingToTracking(true);
       clearCart();
 
-      setTimeout(() => {
-        router.replace(`/customer/orders/${orderId}`);
-        router.refresh();
-      }, 900);
+      router.replace(`/customer?tab=orders&orderId=${orderId}`);
     } catch {
       setError("Something went wrong during checkout.");
     } finally {
       setIsCheckingOut(false);
     }
-  }
-
-  if (isRedirectingToTracking) {
-    return (
-      <main className="min-h-screen bg-[#FFF0DA] px-4 py-6 text-[#0D2E18]">
-        <div className="mx-auto max-w-2xl">
-          <section className="rounded-[28px] border border-[#D8C8A7] bg-white p-8 text-center shadow-[0_20px_60px_rgba(13,46,24,0.12)]">
-            <h1 className="font-display text-3xl font-bold tracking-tight">
-              Redirecting to Order Tracking
-            </h1>
-            <p className="mt-3 font-sans text-base text-[#684B35]">
-              Your order was placed successfully. Please wait a moment.
-            </p>
-          </section>
-        </div>
-      </main>
-    );
   }
 
   return (

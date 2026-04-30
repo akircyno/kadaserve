@@ -43,6 +43,67 @@ function getNextStatus(
   }
 }
 
+async function triggerDispatchNotification(
+  orderId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>
+) {
+  const smtpWebhookUrl = process.env.SMTPJS_WEBHOOK_URL;
+
+  if (!smtpWebhookUrl) {
+    return;
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        delivery_email,
+        delivery_phone,
+        walkin_name,
+        order_items (
+          quantity,
+          menu_items (
+            name
+          )
+        )
+      `
+    )
+    .eq("id", orderId)
+    .single();
+
+  if (!order?.delivery_email) {
+    return;
+  }
+
+  const orderSummary =
+    order.order_items
+      ?.map((item) => {
+        const name = item.menu_items?.name ?? "Menu item";
+        return `${name} x ${item.quantity}`;
+      })
+      .join("\n") ?? "";
+
+  try {
+    await fetch(smtpWebhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: order.delivery_email,
+        phone: order.delivery_phone,
+        orderId: order.id,
+        customerName: order.walkin_name,
+        orderSummary,
+        status: "out_for_delivery",
+      }),
+    });
+  } catch {
+    // Status transitions should not fail if the notification service is offline.
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -155,6 +216,10 @@ export async function POST(request: Request) {
         { error: updateError.message },
         { status: 500 }
       );
+    }
+
+    if (nextStatus === "out_for_delivery") {
+      await triggerDispatchNotification(orderId, supabase);
     }
 
     return NextResponse.json({
