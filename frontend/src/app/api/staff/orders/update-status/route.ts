@@ -79,7 +79,10 @@ async function triggerDispatchNotification(
   const orderSummary =
     order.order_items
       ?.map((item) => {
-        const name = item.menu_items?.name ?? "Menu item";
+        const menuItem = Array.isArray(item.menu_items)
+          ? item.menu_items[0]
+          : item.menu_items;
+        const name = menuItem?.name ?? "Menu item";
         return `${name} x ${item.quantity}`;
       })
       .join("\n") ?? "";

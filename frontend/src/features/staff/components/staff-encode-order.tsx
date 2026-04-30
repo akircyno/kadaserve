@@ -19,6 +19,7 @@ type CartItem = {
 
 const categoryButtons: Array<{ key: MenuFilterCategory; label: string }> = [
     { key: "all", label: "All" },
+    { key: "coffee", label: "Coffee" },
     { key: "non-coffee", label: "Non-Coffee" },
     { key: "pastries", label: "Pastries" },
     { key: "latte-series", label: "Latte Series" },
@@ -32,6 +33,8 @@ function formatPrice(value: number) {
 
 function formatCategory(category: MenuCategory) {
     switch (category) {
+        case "coffee":
+            return "Coffee";
         case "non-coffee":
             return "Non-Coffee";
         case "pastries":
@@ -50,6 +53,8 @@ function formatCategory(category: MenuCategory) {
 
 function getCategoryBadgeStyle(category: MenuCategory) {
     switch (category) {
+        case "coffee":
+            return "bg-[#E8F0FF] text-[#2454C5]";
         case "non-coffee":
             return "bg-[#E7F4EA] text-[#0F441D]";
         case "pastries":
@@ -111,6 +116,7 @@ export function StaffEncodeOrder() {
             },
             {
                 all: 0,
+                coffee: 0,
                 "non-coffee": 0,
                 pastries: 0,
                 "latte-series": 0,

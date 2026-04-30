@@ -121,30 +121,31 @@ const mobileTabs: Array<
 const menuFilters: Array<{
   value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
   label: string;
+  icon: typeof CupSoda;
 }> = [
-  { value: "coffee", label: "Coffee" },
-  { value: "non-coffee", label: "Non-Coffee" },
-  { value: "pastries", label: "Pastries" },
-  { value: "best-deals", label: "Best Deals" },
+  { value: "coffee", label: "Coffee", icon: Coffee },
+  { value: "non-coffee", label: "Non-Coffee", icon: CupSoda },
+  { value: "pastries", label: "Pastries", icon: Gift },
+  { value: "best-deals", label: "Best Deals", icon: BadgePercent },
 ];
 
 const localMenuImages: Record<string, string> = {
   "brown sugar choco latte":
-    "/images/menu/Latte-Series/Brown Sugar Choco Latte.png",
-  "brown sugar latte": "/images/menu/Latte-Series/Brown Sugar Latte.png",
-  "french vanilla latte": "/images/menu/Latte-Series/French Vanilla Latte.png",
-  matcha: "/images/menu/Latte-Series/Matcha.JPG",
-  "matcha latte": "/images/menu/Latte-Series/Matcha.JPG",
-  "spanish latte": "/images/menu/Latte-Series/Spanish Latte.png",
-  "choco milk": "/images/menu/Non-Coffee/Choco Milk Drink.png",
-  "choco milk drink": "/images/menu/Non-Coffee/Choco Milk Drink.png",
-  "strawberry latte": "/images/menu/Non-Coffee/Strawberry Latte.JPG",
-  macchiato: "/images/menu/Premium-Blends/Caramel Machiato.png",
-  machiato: "/images/menu/Premium-Blends/Caramel Machiato.png",
-  "caramel macchiato": "/images/menu/Premium-Blends/Caramel Machiato.png",
-  "caramel machiato": "/images/menu/Premium-Blends/Caramel Machiato.png",
-  mocha: "/images/menu/Premium-Blends/Mocha.png",
-  "strawberry matcha": "/images/menu/Premium-Blends/Strawberry Matcha.JPG",
+    "/images/menu/coffee/Brown Suagr Choco Latte.png",
+  "brown sugar latte": "/images/menu/coffee/Brown Sugar Latte.png",
+  "french vanilla latte": "/images/menu/coffee/French Vanilla Latte.png",
+  matcha: "/images/menu/coffee/Matcha Latte.png",
+  "matcha latte": "/images/menu/coffee/Matcha Latte.png",
+  "spanish latte": "/images/menu/coffee/Spanish Latte.png",
+  "choco milk": "/images/menu/non-coffee/Choco Milk Drink.png",
+  "choco milk drink": "/images/menu/non-coffee/Choco Milk Drink.png",
+  "strawberry latte": "/images/menu/non-coffee/Strawberry Latte.png",
+  macchiato: "/images/menu/premium-blends/Caramel Macchiato.png",
+  machiato: "/images/menu/premium-blends/Caramel Macchiato.png",
+  "caramel macchiato": "/images/menu/premium-blends/Caramel Macchiato.png",
+  "caramel machiato": "/images/menu/premium-blends/Caramel Macchiato.png",
+  mocha: "/images/menu/premium-blends/mocha.png",
+  "strawberry matcha": "/images/menu/premium-blends/strawberry matcha.png",
 };
 
 const sugarLevels = [
@@ -1132,17 +1133,17 @@ export function CustomerDashboard({
     {
       title: "Spanish Latte Spotlight",
       body: "Creamy, balanced, and ranked high by Kada regulars this week.",
-      image: "/images/menu/Latte-Series/Spanish Latte.png",
+      image: "/images/menu/coffee/Spanish Latte.png",
     },
     {
       title: "Strawberry Matcha Mood",
       body: "A bright matcha layer for slow afternoons and study breaks.",
-      image: "/images/menu/Premium-Blends/Strawberry Matcha.JPG",
+      image: "/images/menu/premium-blends/strawberry matcha.png",
     },
     {
       title: rewardMessage,
       body: "Every completed order moves you closer to your next reward.",
-      image: "/images/menu/Premium-Blends/Caramel Machiato.png",
+      image: "/images/menu/premium-blends/Caramel Macchiato.png",
     },
   ];
   const activePromo = promoCards[activePromoIndex] ?? promoCards[0];
@@ -1187,6 +1188,79 @@ export function CustomerDashboard({
     "All Time Favorite",
     "High Rating",
   ];
+
+  useEffect(() => {
+    if (activeSection !== "menu") {
+      return;
+    }
+
+    const scroller = contentScrollerRef.current;
+
+    if (!scroller || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const menuValues = menuFilters.map((item) => item.value);
+    const chooseActiveCategory = () => {
+      const scrollerRect = scroller.getBoundingClientRect();
+      const activeLine = scrollerRect.top + Math.max(72, scrollerRect.height * 0.2);
+      const sectionPositions = menuValues
+        .map((value) => {
+          const section = menuCategoryRefs.current[value];
+
+          if (!section) {
+            return null;
+          }
+
+          const rect = section.getBoundingClientRect();
+
+          return {
+            value,
+            top: rect.top,
+            bottom: rect.bottom,
+          };
+        })
+        .filter(Boolean) as Array<{
+        value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
+        top: number;
+        bottom: number;
+      }>;
+
+      const categoryAtGuideLine = sectionPositions.find(
+        (section) => section.top <= activeLine && section.bottom > activeLine
+      );
+      const nearestPassedCategory = [...sectionPositions]
+        .filter((section) => section.top <= activeLine)
+        .sort((first, second) => second.top - first.top)[0];
+      const nextCategory =
+        categoryAtGuideLine?.value ??
+        nearestPassedCategory?.value ??
+        menuValues[0];
+
+      setFilter((current) => (current === nextCategory ? current : nextCategory));
+    };
+
+    const observer = new IntersectionObserver(chooseActiveCategory, {
+      root: scroller,
+      rootMargin: "-18% 0px -68% 0px",
+      threshold: [0, 0.15, 0.4, 0.7],
+    });
+
+    menuValues.forEach((value) => {
+      const section = menuCategoryRefs.current[value];
+
+      if (section) {
+        observer.observe(section);
+      }
+    });
+
+    const animationFrameId = window.requestAnimationFrame(chooseActiveCategory);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      observer.disconnect();
+    };
+  }, [activeSection, debouncedQuery, filteredMenu.length]);
 
   const selectedSize = sizes.find((item) => item.value === size);
   const selectedAddonRows = addons.filter((item) =>
@@ -1608,31 +1682,20 @@ export function CustomerDashboard({
     value: Exclude<Filter, "all" | "latte-series" | "premium-blends">
   ) {
     setFilter(value);
-    menuCategoryRefs.current[value]?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }
+    const scroller = contentScrollerRef.current;
+    const section = menuCategoryRefs.current[value];
 
-  function syncMenuCategoryFromScroll() {
-    if (activeSection !== "menu") {
+    if (!scroller || !section) {
       return;
     }
 
-    const currentCategory =
-      menuFilters
-        .map((item) => ({
-          value: item.value,
-          top:
-            menuCategoryRefs.current[item.value]?.getBoundingClientRect().top ??
-            Number.POSITIVE_INFINITY,
-        }))
-        .filter((item) => item.top <= 170)
-        .sort((a, b) => b.top - a.top)[0]?.value ?? menuFilters[0].value;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const sectionRect = section.getBoundingClientRect();
 
-    if (currentCategory !== filter) {
-      setFilter(currentCategory);
-    }
+    scroller.scrollTo({
+      top: Math.max(0, scroller.scrollTop + sectionRect.top - scrollerRect.top - 12),
+      behavior: "smooth",
+    });
   }
 
   function scrollRecommendations(direction: "left" | "right") {
@@ -1763,7 +1826,6 @@ export function CustomerDashboard({
 
           <div
             ref={contentScrollerRef}
-            onScroll={syncMenuCategoryFromScroll}
             className="flex-1 overflow-y-auto px-4 py-5 pb-28 sm:px-5 2xl:px-8"
           >
             {activeSection === "home" && (
@@ -2122,26 +2184,33 @@ export function CustomerDashboard({
                 </section>
 
                 <div className="grid grid-cols-[74px_1fr] gap-3 md:grid-cols-[92px_1fr]">
-                  <aside className="sticky top-3 z-20 self-start border-r border-[#E3D6BC] bg-[#F8EBCF]/95 pr-2">
-                    <div className="max-h-[calc(100vh-8rem)] space-y-1 overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {menuFilters.map((item) => (
+                  <aside className="sticky top-2 z-30 h-[calc(100dvh-12rem)] self-start overflow-visible rounded-r-[22px] bg-[#0D2E18] px-1.5 py-2 shadow-[8px_0_18px_rgba(13,46,24,0.16)] md:h-[calc(100dvh-9rem)]">
+                    <div className="space-y-1 overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]">
+                      {menuFilters.map((item) => {
+                        const Icon = item.icon;
+
+                        return (
                         <button
                           key={item.value}
                           type="button"
                           onClick={() => handleFilterSelect(item.value)}
+                          aria-current={
+                            activeMenuFilter === item.value ? "true" : undefined
+                          }
                           className={`relative flex min-h-[76px] w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-center font-sans text-[10px] font-black leading-tight transition ${
                             activeMenuFilter === item.value
-                              ? "bg-white text-[#0D2E18] shadow-[0_8px_18px_rgba(13,46,24,0.10)]"
-                              : "text-[#6F634E] hover:bg-[#FFF8EF]/70"
+                              ? "bg-[#FFF0DA] text-[#0D2E18] shadow-[0_8px_18px_rgba(0,0,0,0.18)]"
+                              : "text-[#F8EBCF] hover:bg-[#164B2A]"
                           }`}
                         >
                           {activeMenuFilter === item.value ? (
                             <span className="absolute left-0 top-3 h-10 w-1 rounded-r-full bg-[#0D2E18]" />
                           ) : null}
-                          <CupSoda size={22} />
+                          <Icon size={22} />
                           <span>{item.label}</span>
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </aside>
 

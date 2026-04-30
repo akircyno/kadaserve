@@ -12,6 +12,7 @@ type MenuItemRow = {
 };
 
 type StaffMenuCategory =
+  | "coffee"
   | "non-coffee"
   | "pastries"
   | "latte-series"
@@ -19,6 +20,7 @@ type StaffMenuCategory =
   | "best-deals";
 
 const categoryOrder: StaffMenuCategory[] = [
+  "coffee",
   "non-coffee",
   "pastries",
   "latte-series",
@@ -44,7 +46,7 @@ function normalizeCategory(category: string | null): StaffMenuCategory | null {
     normalizedCategory === "iced-coffee" ||
     normalizedCategory === "coffee"
   ) {
-    return "non-coffee";
+    return "coffee";
   }
 
   if (
