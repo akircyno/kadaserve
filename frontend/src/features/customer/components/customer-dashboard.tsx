@@ -10,10 +10,13 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BadgePercent,
   Camera,
+  CalendarCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   ClipboardList,
   Clock,
   Coffee,
@@ -23,6 +26,9 @@ import {
   History,
   House,
   Languages,
+  LockKeyhole,
+  PartyPopper,
+  QrCode,
   Search,
   Settings,
   ShoppingCart,
@@ -30,6 +36,7 @@ import {
   Sparkles,
   Star,
   ShieldCheck,
+  Ticket,
   TrendingUp,
   X,
   Minus,
@@ -45,6 +52,7 @@ import type { FeedbackItem } from "@/types/feedback";
 
 type Section = "home" | "menu" | "orders" | "rewards" | "feedback";
 type ProfileFaq = "order" | "delivery";
+type RewardsTab = "missions" | "redeem" | "wallet";
 type Filter =
   | "all"
   | "coffee"
@@ -72,6 +80,13 @@ type CustomerDashboardProps = {
     satisfactionAverage: number | null;
   };
   isAuthenticated?: boolean;
+};
+
+type RewardVoucher = {
+  code: string;
+  title: string;
+  expiresAt: string;
+  value: string;
 };
 
 
@@ -163,6 +178,35 @@ const temperatures = [
 ];
 
 const onboardingStorageKey = "kadaserve_first_sip_onboarding_seen";
+const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
+const checkInStorageKey = "kadaserve_daily_check_in";
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getRewardExpiry(daysFromNow = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function readRewardWallet() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(rewardsWalletStorageKey) ?? "[]"
+    ) as RewardVoucher[];
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 const addons = [
   { label: "Extra Sugar", value: "extra_sugar", price: 10 },
@@ -683,6 +727,13 @@ export function CustomerDashboard({
   const [feedbackComment, setFeedbackComment] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [activeRewardsTab, setActiveRewardsTab] =
+    useState<RewardsTab>("missions");
+  const [bonusRewardPoints, setBonusRewardPoints] = useState(0);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+  const [claimedMissionIds, setClaimedMissionIds] = useState<string[]>([]);
+  const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
+  const [rewardCelebration, setRewardCelebration] = useState("");
   const profileName = customerProfile?.fullName || "KadaServe Customer";
   const profileEmail = customerProfile?.email;
   const [displayProfileName, setDisplayProfileName] = useState(profileName);
@@ -804,6 +855,20 @@ export function CustomerDashboard({
   }, [orders]);
 
   useEffect(() => {
+    setCheckedInToday(
+      window.localStorage.getItem(checkInStorageKey) === getTodayKey()
+    );
+    setRewardWallet(readRewardWallet());
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      rewardsWalletStorageKey,
+      JSON.stringify(rewardWallet)
+    );
+  }, [rewardWallet]);
+
+  useEffect(() => {
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
       .channel("customer-order-status")
@@ -861,6 +926,11 @@ export function CustomerDashboard({
       setStrengthRating(3);
       setOverallRating(0);
       setFeedbackComment("");
+      setClaimedMissionIds((current) =>
+        current.includes("feedback") ? current : [...current, "feedback"]
+      );
+      setBonusRewardPoints((current) => current + 15);
+      setRewardCelebration("Feedback mission claimed. +15 points!");
       router.refresh();
     } catch {
       setFeedbackMessage("Something went wrong while submitting feedback.");
@@ -894,6 +964,18 @@ export function CustomerDashboard({
 
     return () => window.clearTimeout(timeoutId);
   }, [guestActionMessage]);
+
+  useEffect(() => {
+    if (!rewardCelebration) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRewardCelebration("");
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [rewardCelebration]);
 
 
   const uniqueMenuItems = useMemo(() => dedupeMenuItems(menuItems), [menuItems]);
@@ -962,12 +1044,12 @@ export function CustomerDashboard({
   const hasOrderAttention =
     activeOrder &&
     ["preparing", "ready", "out_for_delivery"].includes(activeOrder.status);
-  const completedOrderCount = customerOrders.filter((order) =>
-    ["completed", "delivered"].includes(order.status)
+  const rewardOrderCount = customerOrders.filter(
+    (order) => order.status !== "cancelled"
   ).length;
   const rewardCycleSize = 10;
-  const completedInRewardCycle = completedOrderCount % rewardCycleSize;
-  const hasVoucherReady = completedOrderCount > 0 && completedInRewardCycle === 0;
+  const completedInRewardCycle = rewardOrderCount % rewardCycleSize;
+  const hasVoucherReady = rewardOrderCount > 0 && completedInRewardCycle === 0;
   const ordersUntilVoucher = hasVoucherReady
     ? 0
     : rewardCycleSize - completedInRewardCycle;
@@ -1016,8 +1098,30 @@ export function CustomerDashboard({
       : currentHour < 18
       ? "Good afternoon"
       : "Good evening";
-  const rewardPoints = completedOrderCount * 20;
+  const rewardPoints = rewardOrderCount * 20;
+  const totalRewardPoints = rewardPoints + bonusRewardPoints;
   const feedbackMissionAvailable = feedbackItems.length > 0;
+  const feedbackMissionProgress = Math.min(3, preferenceSignals.length);
+  const hasPastryOrder = customerOrders.some((order) =>
+    order.order_items.some((item) => {
+      const text = `${item.menu_items?.name ?? ""} ${
+        item.menu_items?.category ?? ""
+      }`.toLowerCase();
+
+      return (
+        text.includes("pastry") ||
+        text.includes("cookie") ||
+        text.includes("panini") ||
+        text.includes("sandwich")
+      );
+    })
+  );
+  const diversityMissionClaimed = claimedMissionIds.includes("diversity");
+  const feedbackMissionClaimed = claimedMissionIds.includes("feedback");
+  const pointsProgress = Math.min(100, Math.round((totalRewardPoints / 500) * 100));
+  const pointsRingStyle = {
+    background: `conic-gradient(#0D2E18 ${pointsProgress}%, #E8D9BE ${pointsProgress}% 100%)`,
+  };
   const promoCards = [
     {
       title: "Spanish Latte Spotlight",
@@ -1442,6 +1546,38 @@ export function CustomerDashboard({
       left: onboardingScrollerRef.current.clientWidth * nextStep,
       behavior: "smooth",
     });
+  }
+
+  function handleDailyCheckIn() {
+    if (checkedInToday) {
+      return;
+    }
+
+    window.localStorage.setItem(checkInStorageKey, getTodayKey());
+    setCheckedInToday(true);
+    setBonusRewardPoints((current) => current + 1);
+    setRewardCelebration("Daily check-in complete. +1 point!");
+  }
+
+  function claimDiversityMission() {
+    if (!hasPastryOrder || diversityMissionClaimed) {
+      return;
+    }
+
+    setClaimedMissionIds((current) => [...current, "diversity"]);
+    setBonusRewardPoints((current) => current + 10);
+    setRewardCelebration("Diversity mission claimed. +10 points!");
+  }
+
+  function redeemReward(reward: RewardVoucher) {
+    if (rewardWallet.some((item) => item.code === reward.code)) {
+      setActiveRewardsTab("wallet");
+      return;
+    }
+
+    setRewardWallet((current) => [reward, ...current]);
+    setActiveRewardsTab("wallet");
+    setRewardCelebration(`${reward.title} added to My Rewards.`);
   }
 
   function handleFilterSelect(value: Filter) {
@@ -2347,94 +2483,330 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "rewards" && (
-              <div className="mx-auto w-full max-w-4xl space-y-5">
-                <div>
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8A755D]">
-                    Points Hub
-                  </p>
-                  <h1 className="font-display text-4xl font-bold tracking-tight text-[#123E26]">
-                    Rewards
+              <div className="mx-auto w-full max-w-5xl space-y-4">
+                <div className="sticky top-0 z-20 -mx-3 bg-[#FFF0DA]/95 px-3 pb-3 pt-1 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0 md:pt-0">
+                  <h1 className="text-center font-sans text-2xl font-black text-[#0D2E18] md:text-3xl">
+                    Missions and Rewards
                   </h1>
-                  <p className="mt-1 text-sm text-[#6F634E]">
-                    Earn points by completing orders and helping KadaServe learn
-                    what you enjoy.
-                  </p>
+
+                  <div className="mt-4 grid grid-cols-3 border-b border-[#C8D0C4]">
+                    {[
+                      ["missions", "Missions"],
+                      ["redeem", "Redeem Rewards"],
+                      ["wallet", "My Rewards"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setActiveRewardsTab(value as RewardsTab)}
+                        className={`relative px-2 pb-3 font-sans text-sm font-bold transition sm:text-base ${
+                          activeRewardsTab === value
+                            ? "text-[#0D2E18]"
+                            : "text-[#9B9B9B]"
+                        }`}
+                      >
+                        {label}
+                        {activeRewardsTab === value ? (
+                          <span className="absolute inset-x-2 bottom-0 h-1 rounded-t-full bg-[#0D2E18]" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <section className="rounded-[30px] bg-[linear-gradient(135deg,#0F441D_0%,#0D2E18_72%,#684B35_130%)] p-5 text-[#FFF0D8] shadow-[0_16px_34px_rgba(13,46,24,0.24)] sm:p-6">
-                  <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                        Current Points
-                      </p>
-                      <p className="mt-2 font-sans text-6xl font-bold leading-none">
-                        {rewardPoints}
-                      </p>
-                    </div>
-                    <div className="rounded-[22px] bg-[#FFF0D8]/10 p-4">
-                      <p className="font-sans text-sm font-bold">
-                        {rewardMessage}
-                      </p>
-                      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#FFF0D8]/25">
-                        <div
-                          className="h-full rounded-full bg-[#FFF0D8]"
-                          style={{ width: `${rewardProgress}%` }}
-                        />
-                      </div>
-                    </div>
+                {rewardCelebration ? (
+                  <div className="kada-fade-up fixed left-1/2 top-4 z-[95] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-[18px] bg-[#0D2E18] px-4 py-3 text-[#FFF0DA] shadow-[0_18px_40px_rgba(13,46,24,0.24)]">
+                    <PartyPopper className="h-5 w-5 shrink-0" />
+                    <p className="font-sans text-sm font-bold">
+                      {rewardCelebration}
+                    </p>
                   </div>
-                </section>
+                ) : null}
 
-                <section className="rounded-[26px] border border-[#DCCFB8] bg-white p-4 shadow-[0_10px_24px_rgba(13,46,24,0.08)]">
-                  <h2 className="font-display text-3xl font-bold text-[#0D2E18]">
-                    Ways to Earn
-                  </h2>
-
-                  <div className="mt-4 space-y-3">
-                    <article className="flex items-center justify-between gap-4 rounded-[20px] bg-[#FFF8EF] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F8EBCF] text-[#684B35]">
-                          <Star size={20} />
-                        </span>
-                        <div>
-                          <p className="font-sans text-base font-black text-[#0D2E18]">
-                            Submit Feedback
+                {activeRewardsTab === "missions" ? (
+                  <div className="space-y-5 pb-4">
+                    <section className="flex flex-col items-center rounded-[28px] bg-white p-5 shadow-[0_12px_28px_rgba(13,46,24,0.08)]">
+                      <div
+                        className="flex h-56 w-56 items-center justify-center rounded-full p-3"
+                        style={pointsRingStyle}
+                      >
+                        <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center">
+                          <CupSoda className="h-16 w-16 text-[#0D2E18]" />
+                          <p className="mt-3 font-sans text-5xl font-black leading-none text-[#0D2E18]">
+                            {totalRewardPoints}
                           </p>
-                          <p className="font-sans text-sm text-[#6F634E]">
-                            Rate your last order and earn 10 points.
+                          <p className="font-sans text-sm font-bold text-[#684B35]">
+                            points
                           </p>
                         </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_24px_rgba(13,46,24,0.08)]">
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                          Daily Check-in
+                        </h2>
+                        <CalendarCheck className="h-6 w-6 text-[#8C7A64]" />
+                      </div>
+                      <div className="mt-4 grid grid-cols-7 gap-2">
+                        {[1, 1, 1, 3, 1, 1, 21].map((points, index) => (
+                          <div key={`${points}-${index}`} className="text-center">
+                            <div
+                              className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full font-sans text-xs font-bold ${
+                                index === 0 && checkedInToday
+                                  ? "bg-[#0D2E18] text-[#FFF0DA]"
+                                  : "bg-[#F2EFE9] text-[#B5AA9A]"
+                              }`}
+                            >
+                              {points}pt{points === 1 ? "" : "s"}
+                            </div>
+                            <p className="mt-1 font-sans text-[11px] font-semibold text-[#A49786]">
+                              Day {index + 1}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsFeedbackPromptOpen(true)}
-                        disabled={!feedbackMissionAvailable}
-                        className="rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-xs font-bold text-[#FFF0D8] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                        onClick={handleDailyCheckIn}
+                        disabled={checkedInToday}
+                        className="mt-5 w-full rounded-full border-2 border-[#0D2E18] px-5 py-3 font-sans text-base font-black text-[#0D2E18] transition hover:bg-[#0D2E18] hover:text-[#FFF0DA] disabled:border-[#D8C8A7] disabled:text-[#8C7A64] disabled:hover:bg-transparent"
                       >
-                        {feedbackMissionAvailable ? "Earn Now" : "No Order Yet"}
+                        {checkedInToday ? "Checked In Today" : "Check In & Get 1 pt"}
                       </button>
-                    </article>
+                    </section>
 
-                    <article className="flex items-center justify-between gap-4 rounded-[20px] bg-[#FFF8EF] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E9F5E7] text-[#2D7A40]">
-                          <CupSoda size={20} />
-                        </span>
-                        <div>
-                          <p className="font-sans text-base font-black text-[#0D2E18]">
-                            Complete an Order
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        Complete missions & get exclusive rewards
+                      </h2>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <article className="rounded-[22px] border border-[#E8D9BE] bg-white p-4 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#FFF0DA] text-[#684B35]">
+                              <Star size={22} />
+                            </span>
+                            <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-bold text-[#2D7A40]">
+                              +15 pts
+                            </span>
+                          </div>
+                          <h3 className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
+                            Rate 3 orders this week
+                          </h3>
+                          <p className="mt-1 font-sans text-sm text-[#684B35]">
+                            {feedbackMissionProgress}/3 ratings completed.
                           </p>
-                          <p className="font-sans text-sm text-[#6F634E]">
-                            Every completed pickup or delivery adds 20 points.
+                          <button
+                            type="button"
+                            onClick={() => setIsFeedbackPromptOpen(true)}
+                            disabled={!feedbackMissionAvailable || feedbackMissionClaimed}
+                            className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                          >
+                            {feedbackMissionClaimed
+                              ? "Claimed"
+                              : feedbackMissionAvailable
+                                ? "Rate Now"
+                                : "No Order Yet"}
+                          </button>
+                        </article>
+
+                        <article className="rounded-[22px] border border-[#E8D9BE] bg-white p-4 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#E9F5E7] text-[#2D7A40]">
+                              <Gift size={22} />
+                            </span>
+                            <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-bold text-[#2D7A40]">
+                              +10 pts
+                            </span>
+                          </div>
+                          <h3 className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
+                            Try a Pastry from the Hall of Fame
+                          </h3>
+                          <p className="mt-1 font-sans text-sm text-[#684B35]">
+                            Expands your taste profile beyond drinks.
                           </p>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={claimDiversityMission}
+                            disabled={!hasPastryOrder || diversityMissionClaimed}
+                            className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                          >
+                            {diversityMissionClaimed
+                              ? "Claimed"
+                              : hasPastryOrder
+                                ? "Claim Reward"
+                                : "Order Pastry"}
+                          </button>
+                        </article>
                       </div>
-                      <span className="rounded-full bg-[#E9F5E7] px-3 py-1.5 font-sans text-xs font-bold text-[#2D7A40]">
-                        Active
-                      </span>
-                    </article>
+                    </section>
                   </div>
-                </section>
+                ) : null}
+
+                {activeRewardsTab === "redeem" ? (
+                  <div className="space-y-5 pb-4">
+                    <section className="rounded-[24px] bg-[#F8FBF7] p-5">
+                      <p className="font-sans text-sm font-bold text-[#0D2E18]">
+                        KadaServe Points
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-4">
+                        <button className="rounded-[18px] bg-[#0D2E18] px-5 py-4 text-left text-[#FFF0DA]">
+                          <span className="block font-sans text-3xl font-black">
+                            {totalRewardPoints} pts
+                          </span>
+                          <span className="font-sans text-xs font-bold text-[#DCCFB8]">
+                            Ready to redeem
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveRewardsTab("wallet")}
+                          className="rounded-full border-2 border-[#0D2E18] px-5 py-3 font-sans text-sm font-black text-[#0D2E18]"
+                        >
+                          My Rewards
+                        </button>
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        KadaServe Rewards
+                      </h2>
+                      <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {[
+                          {
+                            code: "KADA10",
+                            title: "\u20B110 Discount",
+                            expiresAt: getRewardExpiry(),
+                            value: "\u20B110 off",
+                            cost: 500,
+                          },
+                          {
+                            code: "KADA30",
+                            title: "\u20B130 Discount",
+                            expiresAt: getRewardExpiry(),
+                            value: "\u20B130 off",
+                            cost: 1500,
+                          },
+                        ].map((reward) => (
+                          <article
+                            key={reward.code}
+                            className="min-w-[16rem] snap-start overflow-hidden rounded-[22px] border border-[#E8D9BE] bg-white shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                          >
+                            <div className="bg-[#0D2E18] p-5 text-[#FFF0DA]">
+                              <p className="font-sans text-5xl font-black">
+                                {reward.title}
+                              </p>
+                            </div>
+                            <div className="p-4">
+                              <p className="font-sans text-sm font-bold text-[#684B35]">
+                                Redeem with
+                              </p>
+                              <p className="font-sans text-2xl font-black text-[#0D2E18]">
+                                {reward.cost} pts
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => redeemReward(reward)}
+                                className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA]"
+                              >
+                                Redeem
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                        Exclusive Tier Rewards
+                      </h2>
+                      <article className="mt-4 rounded-[22px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_22px_rgba(13,46,24,0.08)]">
+                        <div className="flex items-start justify-between gap-3">
+                          <BadgePercent className="h-9 w-9 text-[#0D2E18]" />
+                          {flavorBadges.includes("Loves Creamy") ? (
+                            <CheckCircle2 className="h-6 w-6 text-[#2D7A40]" />
+                          ) : (
+                            <LockKeyhole className="h-6 w-6 text-[#8C7A64]" />
+                          )}
+                        </div>
+                        <h3 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
+                          Free Add-on for Creamy Drinks
+                        </h3>
+                        <p className="mt-2 font-sans text-sm text-[#684B35]">
+                          Unlocks when your taste profile includes Loves Creamy.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={!flavorBadges.includes("Loves Creamy")}
+                          onClick={() =>
+                            redeemReward({
+                              code: "CREAMYADDON",
+                              title: "Free Creamy Add-on",
+                              expiresAt: getRewardExpiry(21),
+                              value: "Free add-on",
+                            })
+                          }
+                          className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                        >
+                          {flavorBadges.includes("Loves Creamy")
+                            ? "Redeem Exclusive"
+                            : "Locked"}
+                        </button>
+                      </article>
+                    </section>
+                  </div>
+                ) : null}
+
+                {activeRewardsTab === "wallet" ? (
+                  <div className="min-h-[26rem] pb-4">
+                    {rewardWallet.length > 0 ? (
+                      <div className="space-y-4">
+                        {rewardWallet.map((voucher) => (
+                          <article
+                            key={voucher.code}
+                            className="rounded-[24px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                                  Active Voucher
+                                </p>
+                                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                  {voucher.title}
+                                </h2>
+                                <p className="mt-1 font-sans text-sm text-[#684B35]">
+                                  Use code {voucher.code} before {voucher.expiresAt}
+                                </p>
+                              </div>
+                              <div className="flex h-20 w-20 items-center justify-center rounded-[18px] bg-[#0D2E18] text-[#FFF0DA]">
+                                <QrCode className="h-10 w-10" />
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[25rem] flex-col items-center justify-center text-center">
+                        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-[#C8D0E4] text-white">
+                          <Ticket className="h-14 w-14" />
+                        </div>
+                        <p className="mt-6 font-sans text-2xl font-bold text-[#B6BDD3]">
+                          No Available Voucher
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveRewardsTab("missions")}
+                          className="mt-5 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA]"
+                        >
+                          Complete missions to earn your first reward!
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -2663,7 +3035,7 @@ export function CustomerDashboard({
             </div>
 
             <div className="w-full max-w-[720px]">
-              <p className="-rotate-1 pl-1 font-sans text-[1.1rem] font-black uppercase tracking-[0.14em] text-[#FFF0DA] drop-shadow-sm sm:pl-3 sm:text-3xl sm:tracking-[0.16em]">
+              <p className="-rotate-0 pl-1 font-sans text-[1.1rem] font-black uppercase tracking-[0.14em] text-[#FFF0DA] drop-shadow-sm sm:pl-3 sm:text-3xl sm:tracking-[0.16em]">
                 Kadaserve Loading...
               </p>
 
