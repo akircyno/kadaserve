@@ -222,7 +222,7 @@ export default async function OrderTrackingPage({ params }: PageProps) {
     notFound();
   }
 
-  const typedOrder = order as Order;
+  const typedOrder = order as unknown as Order;
   const displayStatus = normalizeTrackingStatus(typedOrder);
   const steps = getOrderSteps(typedOrder.order_type);
   const currentStepIndex = getCurrentStepIndex(typedOrder);

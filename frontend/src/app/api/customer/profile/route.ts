@@ -15,6 +15,10 @@ function isValidPhilippinePhone(value: string) {
   return /^09\d{9}$/.test(getPhoneDigits(value));
 }
 
+function isValidFullName(value: string) {
+  return /^[A-Za-z\s.'-]{2,80}$/.test(value.trim());
+}
+
 export async function PATCH(request: Request) {
   try {
     const supabase = await createClient();
@@ -28,32 +32,61 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
+    const fullName =
+      typeof body.fullName === "string" ? body.fullName.trim() : "";
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const defaultDeliveryAddress =
       typeof body.defaultDeliveryAddress === "string"
         ? body.defaultDeliveryAddress.trim()
         : "";
 
-    if (!phone || !isValidPhilippinePhone(phone)) {
+    if (fullName && !isValidFullName(fullName)) {
+      return NextResponse.json(
+        { error: "Use a valid full name." },
+        { status: 400 }
+      );
+    }
+
+    if (phone && !isValidPhilippinePhone(phone)) {
       return NextResponse.json(
         { error: "Use a valid Philippine mobile number." },
         { status: 400 }
       );
     }
 
-    if (!defaultDeliveryAddress) {
+    if (defaultDeliveryAddress.length > 180) {
       return NextResponse.json(
-        { error: "Default delivery address is required." },
+        { error: "Default delivery address is too long." },
+        { status: 400 }
+      );
+    }
+
+    const updates: {
+      full_name?: string;
+      phone?: string;
+      default_delivery_address?: string;
+    } = {};
+
+    if (fullName) {
+      updates.full_name = fullName;
+    }
+
+    if (phone) {
+      updates.phone = getPhoneDigits(phone);
+    }
+
+    updates.default_delivery_address = defaultDeliveryAddress;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "No profile changes were provided." },
         { status: 400 }
       );
     }
 
     const { error } = await supabase
       .from("profiles")
-      .update({
-        phone: getPhoneDigits(phone),
-        default_delivery_address: defaultDeliveryAddress,
-      })
+      .update(updates)
       .eq("id", user.id);
 
     if (error) {
@@ -62,7 +95,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       profile: {
-        phone: getPhoneDigits(phone),
+        fullName: fullName || null,
+        phone: phone ? getPhoneDigits(phone) : null,
         defaultDeliveryAddress,
       },
     });
