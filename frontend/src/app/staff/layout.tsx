@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardList, Pencil } from "lucide-react";
+import { ArrowLeft, ClipboardList, History, Pencil } from "lucide-react";
 import { useState } from "react";
 
 export default function StaffLayout({
@@ -24,6 +24,11 @@ export default function StaffLayout({
       href: "/staff/encode-order",
       label: "Encode Order",
       icon: Pencil,
+    },
+    {
+      href: "/staff/order-history",
+      label: "Order History",
+      icon: History,
     },
   ];
 
@@ -55,12 +60,14 @@ export default function StaffLayout({
             <span className="shrink-0">KadaServe</span>
           </Link>
 
-          <nav className="mt-[84px] flex w-full flex-col">
+          <nav className="mt-[84px] flex w-full flex-col gap-2">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive =
                 pathname === item.href ||
-                (item.href !== "/staff" && pathname.startsWith(item.href));
+                (item.href !== "/staff" &&
+                  !item.href.includes("#") &&
+                  pathname.startsWith(item.href));
 
               return (
                 <Link
