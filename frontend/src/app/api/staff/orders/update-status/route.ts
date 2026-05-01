@@ -232,6 +232,165 @@ Thank you for ordering from Kada Cafe PH.`;
   }
 }
 
+async function triggerPaymentReceiptNotification(
+  orderId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  origin: string
+) {
+  const smtpConfig = getSmtpConfig();
+
+  if (!smtpConfig) {
+    return false;
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        customer_id,
+        order_type,
+        total_amount,
+        payment_method,
+        delivery_email,
+        walkin_name,
+        order_items (
+          quantity,
+          unit_price,
+          menu_items (
+            name
+          )
+        )
+      `
+    )
+    .eq("id", orderId)
+    .single();
+
+  if (!order) {
+    return false;
+  }
+
+  let customerProfile: {
+    full_name: string | null;
+    email: string | null;
+  } | null = null;
+
+  if (order.customer_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", order.customer_id)
+      .single();
+
+    customerProfile = profile ?? null;
+  }
+
+  const customerEmail = order.delivery_email || customerProfile?.email;
+
+  if (!customerEmail) {
+    return false;
+  }
+
+  const customerName =
+    order.walkin_name ||
+    customerProfile?.full_name ||
+    customerEmail.split("@")[0] ||
+    "Customer";
+
+  const orderSummary =
+    order.order_items
+      ?.map((item) => {
+        const menuItem = Array.isArray(item.menu_items)
+          ? item.menu_items[0]
+          : item.menu_items;
+        const name = menuItem?.name ?? "Menu item";
+        return `${name} x ${item.quantity} - ${peso(
+          item.unit_price * item.quantity
+        )}`;
+      })
+      .join("\n") ?? "";
+
+  const deliveryFee = order.order_type === "delivery" ? getFixedDeliveryFee() : 0;
+  const totalPaid = order.total_amount + deliveryFee;
+  const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
+  const paymentMethod =
+    order.payment_method === "gcash"
+      ? "GCash"
+      : order.payment_method === "cash"
+      ? "Cash"
+      : "Payment";
+  const text = `Hi ${customerName},
+
+Payment received. Thank you for paying for your Kada Cafe PH order.
+
+Receipt:
+${orderSummary || "Order details unavailable"}
+
+Price: ${peso(order.total_amount)}
+Delivery Fee: ${peso(deliveryFee)}
+Total Paid: ${peso(totalPaid)}
+Payment Method: ${paymentMethod}
+
+Track your order here:
+${trackingLink}
+
+Thank you for ordering from Kada Cafe PH.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0D2E18; line-height: 1.5;">
+      <h2 style="color: #0D2E18;">Payment received for your Kada Cafe PH order</h2>
+      <p>Hi ${escapeHtml(customerName)},</p>
+      <p>Payment received. Thank you for paying for your Kada Cafe PH order.</p>
+      <div style="background: #FFF0DA; padding: 14px; border-radius: 10px; margin: 16px 0;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Receipt:</p>
+        <pre style="font-family: Arial, sans-serif; margin: 0; white-space: pre-wrap;">${escapeHtml(
+          orderSummary || "Order details unavailable"
+        )}</pre>
+        <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
+          <p style="margin: 0;">Price: <strong>${peso(order.total_amount)}</strong></p>
+          <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
+          <p style="margin: 8px 0 0; font-size: 16px;">Total Paid: <strong>${peso(
+            totalPaid
+          )}</strong></p>
+          <p style="margin: 4px 0 0;">Payment Method: <strong>${escapeHtml(
+            paymentMethod
+          )}</strong></p>
+        </div>
+      </div>
+      <p>
+        <a href="${trackingLink}" style="display: inline-block; background: #0D2E18; color: #FFF0DA; padding: 10px 14px; border-radius: 999px; text-decoration: none; font-weight: 700;">
+          Track your order
+        </a>
+      </p>
+      <p>Thank you for ordering from Kada Cafe PH.</p>
+    </div>
+  `;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: smtpConfig.from,
+      to: customerEmail,
+      subject: "Payment received for your Kada Cafe PH order",
+      text,
+      html,
+    });
+
+    return true;
+  } catch {
+    // Payment updates should not fail if the notification service is offline.
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -280,6 +439,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "mark_paid") {
+      const shouldSendReceipt = order.payment_status !== "paid";
       const { error: paymentError } = await supabase
         .from("orders")
         .update({ payment_status: "paid" })
@@ -292,9 +452,18 @@ export async function POST(request: Request) {
         );
       }
 
+      const receiptSent = shouldSendReceipt
+        ? await triggerPaymentReceiptNotification(
+            orderId,
+            supabase,
+            new URL(request.url).origin
+          )
+        : false;
+
       return NextResponse.json({
         success: true,
         paymentStatus: "paid",
+        receiptSent,
       });
     }
 

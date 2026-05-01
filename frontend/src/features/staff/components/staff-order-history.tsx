@@ -84,6 +84,10 @@ function getCustomerPhone(order: StaffOrder) {
   return order.delivery_phone || order.customer_profile?.phone || "No phone";
 }
 
+function getCustomerEmail(order: StaffOrder) {
+  return order.delivery_email || order.customer_profile?.email || "No email";
+}
+
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString("en-PH", {
     hour: "numeric",
@@ -100,14 +104,35 @@ function formatDate(value: string) {
 }
 
 function peso(value: number) {
-  return `₱${Math.round(value)}`;
+  return `\u20B1${Math.round(value)}`;
 }
 
-function formatOrderSummary(order: StaffOrder) {
-  return order.order_items.map((item) => {
-    const label = item.menu_items?.name ?? "Menu item";
-    return `${label} x ${item.quantity}`;
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
+}
+
+function getPaymentMethodLabel(order: StaffOrder) {
+  if (order.payment_method === "gcash") return "GCash";
+  if (order.payment_method === "cash") return "Cash";
+  return "Payment pending";
+}
+
+function getPaymentStatusLabel(order: StaffOrder) {
+  return order.payment_status === "paid" ? "Paid" : "Unpaid";
+}
+
+function getDeliveryFee(order: StaffOrder) {
+  return order.order_type === "delivery" ? 50 : 0;
+}
+
+function getHistoryGrandTotal(order: StaffOrder) {
+  return order.total_amount + getDeliveryFee(order);
 }
 
 function getSpecialRemarks(order: StaffOrder) {
@@ -487,13 +512,26 @@ export function StaffOrderHistory() {
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                <p className="font-sans text-sm font-bold text-[#0D2E18]">
-                  {getCustomerName(selectedOrder)}
-                </p>
-                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-                  {getCustomerPhone(selectedOrder)}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                      Customer & Contact
+                    </p>
+                    <p className="mt-2 font-sans text-base font-bold text-[#0D2E18]">
+                      {getCustomerName(selectedOrder)}
+                    </p>
+                    <div className="mt-2 grid gap-1 font-sans text-sm text-[#5F5346]">
+                      <p>Phone: {getCustomerPhone(selectedOrder)}</p>
+                      <p>Email: {getCustomerEmail(selectedOrder)}</p>
+                      {selectedOrder.order_type === "delivery" ? (
+                        <p>
+                          Address:{" "}
+                          {selectedOrder.delivery_address || "No address"}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
                   <span
                     className={`rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getStatusStyle(
                       selectedOrder.status
@@ -501,9 +539,60 @@ export function StaffOrderHistory() {
                   >
                     {formatStatus(selectedOrder.status)}
                   </span>
-                  <span className="rounded-full bg-[#FFF0DA] px-2.5 py-1 font-sans text-xs font-bold text-[#684B35]">
-                    {peso(selectedOrder.total_amount)}
-                  </span>
+                </div>
+              </section>
+
+              <section className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                    Payment
+                  </p>
+                  <p className="mt-2 font-sans text-sm font-semibold text-[#0D2E18]">
+                    {getPaymentMethodLabel(selectedOrder)}
+                  </p>
+                  <p className="mt-1 font-sans text-sm text-[#5F5346]">
+                    Status: {getPaymentStatusLabel(selectedOrder)}
+                  </p>
+                </div>
+
+                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                    Timestamp
+                  </p>
+                  <p className="mt-2 font-sans text-sm font-semibold tabular-nums text-[#0D2E18]">
+                    {formatDateTime(selectedOrder.ordered_at)}
+                  </p>
+                  <p className="mt-1 font-sans text-sm text-[#5F5346]">
+                    {selectedOrder.order_type === "delivery"
+                      ? "Delivery"
+                      : "Pickup"}
+                  </p>
+                </div>
+              </section>
+
+              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                  Financial Summary
+                </p>
+                <div className="mt-3 space-y-2 font-sans text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5F5346]">Order Price</span>
+                    <span className="font-bold tabular-nums text-[#0D2E18]">
+                      {peso(selectedOrder.total_amount)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5F5346]">Delivery Fee</span>
+                    <span className="font-bold tabular-nums text-[#0D2E18]">
+                      {peso(getDeliveryFee(selectedOrder))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 border-t border-[#EFE3CF] pt-2">
+                    <span className="font-bold text-[#684B35]">Final Total</span>
+                    <span className="font-bold tabular-nums text-[#684B35]">
+                      {peso(getHistoryGrandTotal(selectedOrder))}
+                    </span>
+                  </div>
                 </div>
               </section>
 
@@ -512,13 +601,31 @@ export function StaffOrderHistory() {
                   Order Items
                 </p>
                 <div className="mt-3 space-y-2">
-                  {formatOrderSummary(selectedOrder).map((item) => (
-                    <p
-                      key={item}
+                  {selectedOrder.order_items.map((item) => (
+                    <div
+                      key={item.id}
                       className="rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#3C332A]"
                     >
-                      {item}
-                    </p>
+                      <div className="flex justify-between gap-3">
+                        <p className="font-bold text-[#0D2E18]">
+                          {item.menu_items?.name ?? "Menu item"} x{" "}
+                          {item.quantity}
+                        </p>
+                        <p className="font-bold tabular-nums text-[#684B35]">
+                          {peso(item.unit_price * item.quantity)}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs text-[#5F5346]">
+                        Size: {item.size} | Temp: {item.temperature} | Sugar:{" "}
+                        {item.sugar_level}%
+                        {item.ice_level ? ` | Ice: ${item.ice_level}` : ""}
+                      </p>
+                      {item.addons && item.addons.length > 0 ? (
+                        <p className="mt-1 text-xs text-[#5F5346]">
+                          Add-ons: {item.addons.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </section>
@@ -547,10 +654,10 @@ export function StaffOrderHistory() {
 
               <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                  Point Deductions
+                  Voucher & Point Deductions
                 </p>
                 <p className="mt-3 rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#8C7A64]">
-                  No point deductions recorded for this order.
+                  No voucher or point deductions are recorded for this order.
                 </p>
               </section>
             </div>
@@ -560,3 +667,4 @@ export function StaffOrderHistory() {
     </main>
   );
 }
+

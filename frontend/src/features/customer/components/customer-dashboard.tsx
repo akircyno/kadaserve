@@ -3943,68 +3943,6 @@ export function CustomerDashboard({
                   </span>
                 </div>
 
-                <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                        Payment Status
-                      </p>
-                      <p className="mt-1 font-sans text-xl font-black text-[#0D2E18]">
-                        {trackingOrder.payment_status === "paid"
-                          ? "Paid"
-                          : "Unpaid"}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-3 py-1.5 font-sans text-xs font-bold ${
-                        trackingOrder.payment_status === "paid"
-                          ? "bg-[#E9F5E7] text-[#0F441D]"
-                          : "bg-[#FFF0DA] text-[#684B35]"
-                      }`}
-                    >
-                      {trackingOrder.payment_method === "gcash"
-                        ? "GCash"
-                        : trackingOrder.payment_method === "cash"
-                        ? "Cash"
-                        : "Payment pending"}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border font-sans text-[11px] font-black ${
-                        trackingOrder.payment_status === "paid"
-                          ? "border-[#0F441D] bg-[#0F441D] text-[#FFF0DA]"
-                          : "border-[#684B35] bg-[#684B35] text-[#FFF0DA]"
-                      }`}
-                    >
-                      1
-                    </span>
-                    <span
-                      className={`h-1 rounded-full ${
-                        trackingOrder.payment_status === "paid"
-                          ? "bg-[#0F441D]"
-                          : "bg-[#DCCFB8]"
-                      }`}
-                    />
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border font-sans text-[11px] font-black ${
-                        trackingOrder.payment_status === "paid"
-                          ? "border-[#0F441D] bg-[#0F441D] text-[#FFF0DA]"
-                          : "border-[#DCCFB8] bg-white text-[#9A856C]"
-                      }`}
-                    >
-                      2
-                    </span>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-2 font-sans text-xs font-bold text-[#6F634E]">
-                    <span>Unpaid</span>
-                    <span className="text-right">Paid</span>
-                  </div>
-                </div>
-
                 <div className="mt-5 grid grid-cols-5 gap-2">
                   {getTrackingSteps(trackingOrder.order_type).map(
                     (step, index) => {
@@ -4105,6 +4043,30 @@ export function CustomerDashboard({
                       {formatStatus(trackingOrder.status)}
                     </span>
                   </div>
+
+                  <div
+                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${
+                      trackingOrder.payment_status === "paid"
+                        ? "bg-[#E9F5E7] text-[#2D7A40]"
+                        : "bg-[#FFF0DA] text-[#684B35]"
+                    }`}
+                  >
+                    Payment status:{" "}
+                    <span className="font-black">
+                      {trackingOrder.payment_status === "paid"
+                        ? "Paid"
+                        : "Unpaid"}
+                    </span>
+                  </div>
+
+                  {trackingOrder.payment_status === "paid" ||
+                  ["out_for_delivery", "delivered"].includes(
+                    trackingOrder.status
+                  ) ? (
+                    <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">
+                      Check your email for the latest Kada Cafe PH update.
+                    </div>
+                  ) : null}
                 </section>
               </div>
             </div>

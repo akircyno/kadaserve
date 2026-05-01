@@ -10,12 +10,10 @@ import type {
 } from "@/lib/store-status";
 import {
   ClipboardList,
-  Mail,
   RefreshCw,
   Search,
   ShieldCheck,
   Truck,
-  UserRound,
   X,
 } from "lucide-react";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
@@ -259,6 +257,12 @@ function formatOrderSummary(order: StaffOrder) {
     .filter(Boolean);
 }
 
+function getOrderSpecialRemarks(order: StaffOrder) {
+  return order.order_items
+    .map((item) => item.special_instructions?.trim())
+    .filter((remark): remark is string => Boolean(remark));
+}
+
 function formatAddonLabel(value: string) {
   return value
     .split("_")
@@ -287,7 +291,6 @@ export function StaffDashboard() {
   const [search, setSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [stationStatus, setStationStatus] =
     useState<StationStatus>("accepting");
   const [storeOverrideStatus, setStoreOverrideStatus] =
@@ -304,6 +307,7 @@ export function StaffDashboard() {
   const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [dispatchToast, setDispatchToast] = useState("");
+  const [staffToast, setStaffToast] = useState("");
   const [error, setError] = useState("");
 
   const activeOrders = useMemo(() => {
@@ -512,15 +516,21 @@ export function StaffDashboard() {
     return () => window.clearTimeout(timeoutId);
   }, [dispatchToast]);
 
+  useEffect(() => {
+    if (!staffToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setStaffToast("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [staffToast]);
+
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
     setIsConfirmingCancel(false);
-  }
-
-  function toggleOrderCard(orderId: string) {
-    setExpandedOrderId((currentOrderId) =>
-      currentOrderId === orderId ? null : orderId
-    );
   }
 
   function closeOrder() {
@@ -675,6 +685,12 @@ export function StaffDashboard() {
         setError(result.error || "Failed to mark order as paid.");
         return;
       }
+
+      setStaffToast(
+        result.receiptSent
+          ? "Receipt Sent"
+          : "Payment marked paid. Receipt not sent."
+      );
 
       await loadOrders();
       router.refresh();
@@ -897,6 +913,12 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
+        {staffToast ? (
+          <div className="mt-4 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold text-[#0F7A40]">
+            {staffToast}
+          </div>
+        ) : null}
+
         {!isBootstrapped ? (
           <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
             <p className="font-sans text-lg font-semibold text-[#0D2E18]">
@@ -959,17 +981,13 @@ export function StaffDashboard() {
                     );
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
                     const isUpdatingOrder = updatingOrderIds.includes(order.id);
-                    const isExpanded = expandedOrderId === order.id;
                     const orderEmail = getOrderEmail(order);
                     const orderPhone = getOrderPhone(order);
-                    const specialRemarks = order.order_items
-                      .map((item) => item.special_instructions?.trim())
-                      .filter((remark): remark is string => Boolean(remark));
 
                     return (
                       <article
                         key={order.id}
-                        onClick={() => toggleOrderCard(order.id)}
+                        onClick={() => openOrder(order)}
                         className="group/order cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -1042,65 +1060,6 @@ export function StaffDashboard() {
                             </p>
                           </div>
                         </div>
-
-                        {isExpanded ? (
-                          <div className="mt-3 space-y-3 border-t border-[#EFE3CF] pt-3">
-                            <div className="space-y-1">
-                              {items.map((item, index) => (
-                                <p
-                                  key={`${order.id}-${index}-${item}`}
-                                  className="font-sans text-xs text-[#3C332A]"
-                                >
-                                  {item}
-                                </p>
-                              ))}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {orderEmail ? (
-                                <a
-                                  href={`mailto:${orderEmail}`}
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35]"
-                                >
-                                  <Mail size={14} />
-                                  Email
-                                </a>
-                              ) : null}
-
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openOrder(order);
-                                }}
-                                className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-semibold text-[#684B35]"
-                              >
-                                <UserRound size={14} />
-                                Details
-                              </button>
-                            </div>
-
-                            <div className="rounded-xl bg-[#FFF8EF] p-3 font-sans text-xs text-[#5F5346]">
-                              <p className="font-semibold text-[#0D2E18]">
-                                Special remarks
-                              </p>
-                              {specialRemarks.length > 0 ? (
-                                <ul className="mt-1 space-y-1">
-                                  {specialRemarks.map((remark, index) => (
-                                    <li key={`${order.id}-remark-${index}`}>
-                                      {remark}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="mt-1 text-[#8C7A64]">
-                                  No special request
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2">
                           <div className="inline-flex items-center gap-1.5 font-sans text-xs text-[#6E5D49]">
@@ -1428,9 +1387,6 @@ export function StaffDashboard() {
                             </p>
                           ) : null}
 
-                          {item.special_instructions ? (
-                            <p>Note: {item.special_instructions}</p>
-                          ) : null}
                         </div>
                       </div>
 
@@ -1440,6 +1396,29 @@ export function StaffDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
+                  Special Remarks
+                </p>
+
+                <div className="mt-3 space-y-2">
+                  {getOrderSpecialRemarks(selectedOrder).length > 0 ? (
+                    getOrderSpecialRemarks(selectedOrder).map((remark, index) => (
+                      <p
+                        key={`${selectedOrder.id}-remark-${index}`}
+                        className="rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#3C332A]"
+                      >
+                        {remark}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#8C7A64]">
+                      No special remarks recorded.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus, RefreshCw, Search, ShoppingCart, Trash2 } from "lucide-react";
+import {
+    Minus,
+    Plus,
+    RefreshCw,
+    Search,
+    ShieldCheck,
+    ShoppingCart,
+    Trash2,
+} from "lucide-react";
 import type { MenuCategory, MenuFilterCategory, StaffMenuItem } from "@/types/menu";
 import type { OrderType, PaymentMethod, PaymentStatus } from "@/types/orders";
 
@@ -15,6 +23,13 @@ type CartItem = {
     imageUrl: string | null;
     size: Size;
     quantity: number;
+};
+
+type StaffProfile = {
+    fullName: string | null;
+    email: string | null;
+    phone: string | null;
+    role: string | null;
 };
 
 const categoryButtons: Array<{ key: MenuFilterCategory; label: string }> = [
@@ -72,6 +87,7 @@ function getCategoryBadgeStyle(category: MenuCategory) {
 
 export function StaffEncodeOrder() {
     const [menuItems, setMenuItems] = useState<StaffMenuItem[]>([]);
+    const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
     const [search, setSearch] = useState("");
     const [activeCategory, setActiveCategory] = useState<MenuFilterCategory>("all");
     const [orderType, setOrderType] = useState<OrderType>("pickup");
@@ -85,6 +101,7 @@ export function StaffEncodeOrder() {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isLoadingMenu, setIsLoadingMenu] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [lastMenuSyncedAt, setLastMenuSyncedAt] = useState<Date | null>(null);
     const [error, setError] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
 
@@ -139,6 +156,25 @@ export function StaffEncodeOrder() {
     const cartCount = useMemo(() => {
         return cart.reduce((sum, item) => sum + item.quantity, 0);
     }, [cart]);
+    const rawStaffName = staffProfile?.fullName?.trim() || "Chrizelda";
+    const normalizedStaffName =
+        rawStaffName.replace(/^staff\s+/i, "").trim() || "Chrizelda";
+    const staffFirstName = normalizedStaffName.split(/\s+/)[0] || "Chrizelda";
+    const staffRole =
+        staffProfile?.role?.replace("_", " ").replace(/\b\w/g, (letter) =>
+            letter.toUpperCase()
+        ) || "Staff";
+    const staffChipLabel = `Staff ${staffFirstName}`;
+    const menuSyncMeta = isLoadingMenu
+        ? "Syncing..."
+        : `Menu sync${
+            lastMenuSyncedAt
+                ? ` - Last ${lastMenuSyncedAt.toLocaleTimeString("en-PH", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                })}`
+                : ""
+        }`;
 
     useEffect(() => {
         loadMenuItems();
@@ -161,6 +197,8 @@ export function StaffEncodeOrder() {
             }
 
             setMenuItems(result.menuItems ?? []);
+            setStaffProfile(result.staffProfile ?? null);
+            setLastMenuSyncedAt(new Date());
         } catch {
             setError("Something went wrong while loading menu items.");
         } finally {
@@ -316,39 +354,71 @@ export function StaffEncodeOrder() {
 
     return (
         <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-            <header className="border-b border-[#DCCFB8] bg-white">
-                <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
-                    <label className="flex w-full max-w-[520px] items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3">
-                        <Search size={18} className="text-[#6F7F69]" />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search menu items..."
-                            className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8D9C87]"
-                        />
-                    </label>
+            <header className="border-b border-[#DCCFB8] bg-[#FFF0DA]">
+                <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 lg:flex-nowrap lg:px-5">
+                    <div className="flex min-w-[230px] items-end gap-3">
+                        <div>
+                            <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
+                                Staff POS
+                            </p>
+                            <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                                Encode Order
+                            </h1>
+                        </div>
 
-                    <div className="flex items-center gap-4">
                         <button
                             type="button"
                             onClick={loadMenuItems}
                             disabled={isLoadingMenu}
-                            className="inline-flex items-center gap-2 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#EDF6EA] disabled:opacity-60"
+                            title="Refresh menu"
+                            className="mb-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
                         >
-                            <RefreshCw size={16} />
-                            {isLoadingMenu ? "Loading..." : "Refresh Menu"}
+                            <RefreshCw
+                                size={15}
+                                className={isLoadingMenu ? "animate-spin" : ""}
+                            />
+                            <span className="sr-only">
+                                {isLoadingMenu ? "Syncing menu" : "Refresh menu"}
+                            </span>
                         </button>
+                    </div>
 
-                        <div className="hidden items-center gap-3 sm:flex">
-                            <div className="h-11 w-11 rounded-full bg-[#D9D9D9]" />
-                            <div className="font-sans">
-                                <p className="text-sm font-semibold text-[#3C332A]">
-                                    Chrizelda P. Norial
-                                </p>
-                                <p className="text-[11px] text-[#8C7A64]">
-                                    chrizeldanorial@gmail.com
-                                </p>
-                            </div>
+                    <div className="flex items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F441D] font-sans text-xs font-bold text-[#FFF0DA]">
+                            SC
+                        </div>
+                        <div className="min-w-[132px]">
+                            <p className="font-sans text-sm font-normal leading-tight text-[#0D2E18]">
+                                {staffChipLabel}
+                            </p>
+                            <p className="font-sans text-xs text-[#8C7A64]">{staffRole}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-1 flex-wrap items-center justify-end gap-3 lg:flex-nowrap">
+                        <label className="flex h-10 min-w-full items-center gap-2 rounded-xl bg-[#FFF8EF] px-3 sm:min-w-[260px] sm:max-w-[340px]">
+                            <Search size={16} className="text-[#8C7A64]" />
+                            <input
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                                placeholder="Search menu items..."
+                                className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                            />
+                        </label>
+
+                        <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+                            <button
+                                type="button"
+                                title="System integrity"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white"
+                            >
+                                <ShieldCheck size={15} />
+                                <span className="sr-only">System integrity</span>
+                            </button>
+
+                            <p className="font-sans text-[11px] text-[#8C7A64]">
+                                {menuSyncMeta}
+                            </p>
                         </div>
                     </div>
                 </div>
