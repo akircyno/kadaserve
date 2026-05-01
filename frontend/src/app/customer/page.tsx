@@ -89,6 +89,8 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           id,
           order_type,
           status,
+          payment_method,
+          payment_status,
           total_amount,
           ordered_at,
           delivery_address,

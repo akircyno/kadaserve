@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  normalizeStoreOverride,
+  resolveStoreStatus,
+  STORE_STATUS_SETTING_KEY,
+} from "@/lib/store-status";
 
 type CheckoutItem = {
   menu_item_id: string;
@@ -38,6 +43,13 @@ function getVoucherDiscount(subtotal: number, code: string) {
   return 0;
 }
 
+function isMissingStoreSettingsTable(error: { message?: string; code?: string } | null) {
+  return (
+    error?.code === "42P01" ||
+    Boolean(error?.message?.toLowerCase().includes("store_settings"))
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -50,6 +62,35 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "You must be logged in to checkout." },
         { status: 401 }
+      );
+    }
+
+    const { data: storeSetting, error: storeSettingError } = await supabase
+      .from("store_settings")
+      .select("value")
+      .eq("key", STORE_STATUS_SETTING_KEY)
+      .maybeSingle();
+
+    if (storeSettingError && !isMissingStoreSettingsTable(storeSettingError)) {
+      return NextResponse.json(
+        { error: storeSettingError.message },
+        { status: 500 }
+      );
+    }
+
+    const storeStatus = resolveStoreStatus(
+      normalizeStoreOverride(storeSetting?.value)
+    );
+
+    if (storeStatus.effectiveStatus !== "open") {
+      return NextResponse.json(
+        {
+          error:
+            storeStatus.checkoutBlockedMessage ||
+            "Kada Cafe PH is not accepting orders right now.",
+          storeStatus,
+        },
+        { status: 409 }
       );
     }
 

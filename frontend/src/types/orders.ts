@@ -64,6 +64,8 @@ export type CustomerOrder = {
   id: string;
   order_type: OrderType;
   status: OrderStatus;
+  payment_method?: PaymentMethod | null;
+  payment_status?: PaymentStatus | null;
   total_amount: number;
   ordered_at: string;
   delivery_address?: string | null;

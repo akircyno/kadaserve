@@ -54,7 +54,7 @@ function formatCategory(category: MenuCategory) {
 function getCategoryBadgeStyle(category: MenuCategory) {
     switch (category) {
         case "coffee":
-            return "bg-[#E8F0FF] text-[#2454C5]";
+            return "bg-[#E6F2E8] text-[#0D2E18]";
         case "non-coffee":
             return "bg-[#E7F4EA] text-[#0F441D]";
         case "pastries":
@@ -62,7 +62,7 @@ function getCategoryBadgeStyle(category: MenuCategory) {
         case "latte-series":
             return "bg-[#F1E3FF] text-[#7A3FB4]";
         case "premium-blends":
-            return "bg-[#E8F0FF] text-[#2454C5]";
+            return "bg-[#FFF0DA] text-[#684B35]";
         case "best-deals":
             return "bg-[#FFF0DA] text-[#684B35]";
         default:
@@ -133,6 +133,8 @@ export function StaffEncodeOrder() {
     const hasRequiredDeliveryInfo =
         orderType !== "delivery" ||
         (deliveryAddress.trim().length > 0 && deliveryPhone.trim().length > 0);
+    const hasRequiredCustomerName =
+        orderType !== "pickup" || walkinName.trim().length > 0;
 
     const cartCount = useMemo(() => {
         return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -252,6 +254,11 @@ export function StaffEncodeOrder() {
 
     async function handleSubmitOrderQueue() {
         if (cart.length === 0 || isSubmitting) return;
+
+        if (!hasRequiredCustomerName) {
+            setError("Customer name is required for walk-in pickup.");
+            return;
+        }
 
         if (!hasRequiredDeliveryInfo) {
             setError("Delivery address and phone are required.");
@@ -517,7 +524,10 @@ export function StaffEncodeOrder() {
 
                     <label className="mt-4 block">
                         <span className="font-sans text-sm font-semibold text-[#684B35]">
-                            Customer name
+                            Customer name{" "}
+                            {orderType === "pickup" ? (
+                                <span className="text-[#C55432]">*</span>
+                            ) : null}
                         </span>
                         <input
                             value={walkinName}
@@ -741,6 +751,7 @@ export function StaffEncodeOrder() {
                             disabled={
                                 cart.length === 0 ||
                                 isSubmitting ||
+                                !hasRequiredCustomerName ||
                                 !hasRequiredDeliveryInfo
                             }
                             className="mt-5 w-full rounded-[16px] border border-[#0D2E18] bg-[#0D2E18] px-4 py-4 font-sans text-base font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#BFD0B8] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"

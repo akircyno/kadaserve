@@ -104,6 +104,13 @@ export async function POST(request: Request) {
       }
     }
 
+    if (body.orderType === "pickup" && !body.walkinName?.trim()) {
+      return NextResponse.json(
+        { error: "Customer name is required for walk-in pickup." },
+        { status: 400 }
+      );
+    }
+
 
     const calculatedTotal = body.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
         payment_method: paymentMethod,
         payment_status: paymentStatus,
         total_amount: calculatedTotal,
-        walkin_name: body.walkinName?.trim() || "Walk-in Customer",
+        walkin_name: body.walkinName?.trim() || null,
         delivery_address:
           body.orderType === "delivery" ? body.deliveryAddress?.trim() : null,
         delivery_email:

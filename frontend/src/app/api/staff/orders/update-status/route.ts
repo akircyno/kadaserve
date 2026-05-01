@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 import { createClient } from "@/lib/supabase/server";
 
 type OrderStatus =
@@ -11,6 +12,46 @@ type OrderStatus =
   | "cancelled";
 
 type PaymentStatus = "unpaid" | "paid";
+
+function getSmtpConfig() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 465);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM || user;
+
+  if (!host || !user || !pass || !from) {
+    return null;
+  }
+
+  return {
+    host,
+    port,
+    secure: port === 465,
+    user,
+    pass,
+    from,
+  };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function getFixedDeliveryFee() {
+  const value = Number(process.env.DELIVERY_FEE || 0);
+
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function peso(value: number) {
+  return `₱${Math.round(value)}`;
+}
 
 function getNextStatus(
   orderType: "pickup" | "delivery",
@@ -45,12 +86,13 @@ function getNextStatus(
 
 async function triggerDispatchNotification(
   orderId: string,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  origin: string
 ) {
-  const smtpWebhookUrl = process.env.SMTPJS_WEBHOOK_URL;
+  const smtpConfig = getSmtpConfig();
 
-  if (!smtpWebhookUrl) {
-    return;
+  if (!smtpConfig) {
+    return false;
   }
 
   const { data: order } = await supabase
@@ -58,8 +100,12 @@ async function triggerDispatchNotification(
     .select(
       `
         id,
+        customer_id,
+        order_type,
+        total_amount,
         delivery_email,
         delivery_phone,
+        delivery_address,
         walkin_name,
         order_items (
           quantity,
@@ -72,9 +118,37 @@ async function triggerDispatchNotification(
     .eq("id", orderId)
     .single();
 
-  if (!order?.delivery_email) {
-    return;
+  if (!order) {
+    return false;
   }
+
+  let customerProfile: {
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null = null;
+
+  if (order.customer_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email, phone")
+      .eq("id", order.customer_id)
+      .single();
+
+    customerProfile = profile ?? null;
+  }
+
+  const customerEmail = order.delivery_email || customerProfile?.email;
+
+  if (!customerEmail) {
+    return false;
+  }
+
+  const customerName =
+    order.walkin_name ||
+    customerProfile?.full_name ||
+    customerEmail.split("@")[0] ||
+    "Customer";
 
   const orderSummary =
     order.order_items
@@ -87,23 +161,74 @@ async function triggerDispatchNotification(
       })
       .join("\n") ?? "";
 
+  const deliveryFee = order.order_type === "delivery" ? getFixedDeliveryFee() : 0;
+  const totalAmountDue = order.total_amount + deliveryFee;
+  const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
+  const text = `Hi ${customerName},
+
+Good news! Your order is now out for delivery.
+
+Order:
+${orderSummary || "Order details unavailable"}
+
+Price: ${peso(order.total_amount)}
+Delivery Fee: ${peso(deliveryFee)}
+Total Amount Due: ${peso(totalAmountDue)}
+
+Track your order here:
+${trackingLink}
+
+Thank you for ordering from Kada Cafe PH.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0D2E18; line-height: 1.5;">
+      <h2 style="color: #0D2E18;">Your Kada Cafe PH order is on the way</h2>
+      <p>Hi ${escapeHtml(customerName)},</p>
+      <p>Good news! Your order is now out for delivery.</p>
+      <div style="background: #FFF0DA; padding: 14px; border-radius: 10px; margin: 16px 0;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Order:</p>
+        <pre style="font-family: Arial, sans-serif; margin: 0; white-space: pre-wrap;">${escapeHtml(
+          orderSummary || "Order details unavailable"
+        )}</pre>
+        <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
+          <p style="margin: 0;">Price: <strong>${peso(order.total_amount)}</strong></p>
+          <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
+          <p style="margin: 8px 0 0; font-size: 16px;">Total Amount Due: <strong>${peso(
+            totalAmountDue
+          )}</strong></p>
+        </div>
+      </div>
+      <p>
+        <a href="${trackingLink}" style="display: inline-block; background: #0D2E18; color: #FFF0DA; padding: 10px 14px; border-radius: 999px; text-decoration: none; font-weight: 700;">
+          Track your order here
+        </a>
+      </p>
+      <p>Thank you for ordering from Kada Cafe PH.</p>
+    </div>
+  `;
+
   try {
-    await fetch(smtpWebhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
       },
-      body: JSON.stringify({
-        email: order.delivery_email,
-        phone: order.delivery_phone,
-        orderId: order.id,
-        customerName: order.walkin_name,
-        orderSummary,
-        status: "out_for_delivery",
-      }),
     });
+
+    await transporter.sendMail({
+      from: smtpConfig.from,
+      to: customerEmail,
+      subject: "Your Kada Cafe PH order is on the way",
+      text,
+      html,
+    });
+
+    return true;
   } catch {
     // Status transitions should not fail if the notification service is offline.
+    return false;
   }
 }
 
@@ -221,13 +346,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (nextStatus === "out_for_delivery") {
-      await triggerDispatchNotification(orderId, supabase);
-    }
+    const notificationSent =
+      nextStatus === "out_for_delivery"
+        ? await triggerDispatchNotification(
+            orderId,
+            supabase,
+            new URL(request.url).origin
+          )
+        : false;
 
     return NextResponse.json({
       success: true,
       nextStatus,
+      notificationSent,
     });
   } catch {
     return NextResponse.json(

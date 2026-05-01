@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
+import type { StoreStatusPayload } from "@/lib/store-status";
 
 type RewardVoucher = {
   code: string;
@@ -108,6 +109,8 @@ export default function CartPage() {
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
+  const [isStoreStatusLoading, setIsStoreStatusLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
@@ -134,6 +137,33 @@ export default function CartPage() {
     }
   }, [orderType]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadStoreStatus() {
+      try {
+        const response = await fetch("/api/store-status");
+        const result = (await response.json()) as StoreStatusPayload;
+
+        if (isMounted && response.ok) {
+          setStoreStatus(result);
+        }
+      } finally {
+        if (isMounted) {
+          setIsStoreStatusLoading(false);
+        }
+      }
+    }
+
+    loadStoreStatus();
+    const intervalId = window.setInterval(loadStoreStatus, 60000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const selectedItems = useMemo(
     () => items.filter((item) => selectedItemIds.includes(item.id)),
     [items, selectedItemIds]
@@ -146,6 +176,8 @@ export default function CartPage() {
   const selectedVoucher = rewardWallet.find(
     (voucher) => voucher.code === voucherCode.trim().toUpperCase()
   );
+  const isCheckoutBlocked =
+    Boolean(storeStatus) && storeStatus?.effectiveStatus !== "open";
 
   function toggleSelectedItem(id: string) {
     setSelectedItemIds((current) =>
@@ -181,6 +213,14 @@ export default function CartPage() {
 
     if (orderType === "delivery" && !deliveryAddress.trim()) {
       setError("Delivery address is required.");
+      return;
+    }
+
+    if (isCheckoutBlocked) {
+      setError(
+        storeStatus?.checkoutBlockedMessage ||
+          "Kada Cafe PH is not accepting orders right now."
+      );
       return;
     }
 
@@ -470,6 +510,20 @@ export default function CartPage() {
                     </div>
                   </div>
 
+                  {storeStatus ? (
+                    <div
+                      className={`mt-4 rounded-[14px] px-4 py-3 font-sans text-sm font-semibold ${
+                        storeStatus.effectiveStatus === "open"
+                          ? "bg-[#E7F4EA] text-[#0F7A40]"
+                          : "bg-[#FFF1EC] text-[#9C543D]"
+                      }`}
+                    >
+                      {storeStatus.effectiveStatus === "open"
+                        ? `Kada Cafe PH is accepting orders. Store hours: ${storeStatus.hoursLabel}.`
+                        : storeStatus.checkoutBlockedMessage}
+                    </div>
+                  ) : null}
+
                   {error ? (
                     <p className="mt-4 rounded-[14px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-semibold text-[#9C543D]">
                       {error}
@@ -485,10 +539,21 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={handleCheckout}
-                    disabled={isCheckingOut || selectedItems.length === 0}
+                    disabled={
+                      isCheckingOut ||
+                      isStoreStatusLoading ||
+                      isCheckoutBlocked ||
+                      selectedItems.length === 0
+                    }
                     className="fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
                   >
-                    {isCheckingOut ? "Processing..." : "Place Order"}
+                    {isCheckingOut
+                      ? "Processing..."
+                      : isStoreStatusLoading
+                      ? "Checking store..."
+                      : isCheckoutBlocked
+                      ? "Ordering Closed"
+                      : "Place Order"}
                   </button>
                 </section>
               </aside>

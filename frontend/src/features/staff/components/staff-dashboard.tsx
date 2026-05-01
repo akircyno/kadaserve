@@ -1,12 +1,16 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import type {
+  StoreOverrideStatus,
+  StoreStatusPayload,
+} from "@/lib/store-status";
 import {
   ClipboardList,
-  LogOut,
   Mail,
-  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -17,7 +21,7 @@ import {
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
-type StationStatus = "accepting" | "busy";
+type StationStatus = "accepting" | "busy" | "closed";
 type StaffProfile = {
   fullName: string | null;
   email: string | null;
@@ -166,8 +170,8 @@ function getNextActionLabel(
 
 function getOrderTypeStyle(orderType: "pickup" | "delivery") {
   return orderType === "pickup"
-    ? "bg-[#F1E3FF] text-[#7A3FB4]"
-    : "bg-[#FFF0E5] text-[#B76522]";
+    ? "bg-[#E6F2E8] text-[#0D2E18]"
+    : "bg-[#FFF0E5] text-[#684B35]";
 }
 
 function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
@@ -191,23 +195,23 @@ function getPaymentLabel(paymentMethod: StaffOrder["payment_method"]) {
 function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
   return paymentStatus === "paid"
     ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
-    : "border border-[#B76522]/25 bg-[#FFF8EF]/70 text-[#B76522]";
+    : "border border-[#684B35]/30 bg-[#FFF0DA] text-[#684B35]";
 }
 
 function getStatusBadgeStyle(status: OrderStatus) {
   switch (status) {
     case "pending":
-      return "bg-[#FFF0E5] text-[#B76522]";
+      return "bg-[#E6F2E8] text-[#0D2E18]";
     case "preparing":
-      return "bg-[#E6F2E8] text-[#1E7A3D]";
+      return "bg-[#E6F2E8] text-[#0D2E18]";
     case "ready":
-      return "bg-[#FFF0DA] text-[#684B35]";
+      return "bg-[#E6F2E8] text-[#0F441D]";
     case "out_for_delivery":
-      return "bg-[#E8F0FF] text-[#2454C5]";
+      return "bg-[#FFF0DA] text-[#684B35]";
     case "completed":
-      return "bg-[#E6F2E8] text-[#1E7A3D]";
+      return "bg-[#E6F2E8] text-[#0F441D]";
     case "delivered":
-      return "bg-[#E8F0FF] text-[#2454C5]";
+      return "bg-[#FFF0DA] text-[#684B35]";
     case "cancelled":
       return "bg-[#FFF1EC] text-[#C55432]";
     default:
@@ -216,8 +220,12 @@ function getStatusBadgeStyle(status: OrderStatus) {
 }
 
 function getColumnActionStyle(status: OrderStatus) {
-  if (status === "ready" || status === "out_for_delivery") {
-    return "bg-[#C96A12] hover:bg-[#B65D0D]";
+  if (status === "out_for_delivery") {
+    return "bg-[#684B35] hover:bg-[#5A3F2D]";
+  }
+
+  if (status === "ready") {
+    return "bg-[#0F441D] hover:bg-[#0D2E18]";
   }
 
   return "bg-[#0D2E18] hover:bg-[#123821]";
@@ -230,6 +238,16 @@ function requiresPaymentBeforeNextAction(order: StaffOrder) {
     order.payment_status === "unpaid" &&
     (nextAction === "Complete" || nextAction === "Mark Delivered")
   );
+}
+
+function getDrawerActionLabel(order: StaffOrder) {
+  const nextAction = getNextActionLabel(order.order_type, order.status);
+
+  if (nextAction === "Complete") {
+    return "Complete Order";
+  }
+
+  return nextAction;
 }
 
 function formatOrderSummary(order: StaffOrder) {
@@ -272,15 +290,20 @@ export function StaffDashboard() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [stationStatus, setStationStatus] =
     useState<StationStatus>("accepting");
+  const [storeOverrideStatus, setStoreOverrideStatus] =
+    useState<StoreOverrideStatus>("auto");
+  const [isStoreStatusUpdating, setIsStoreStatusUpdating] = useState(false);
+  const [storeStatusError, setStoreStatusError] = useState("");
   const [now, setNow] = useState(() => new Date());
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [dispatchToast, setDispatchToast] = useState("");
   const [error, setError] = useState("");
 
   const activeOrders = useMemo(() => {
@@ -362,9 +385,104 @@ export function StaffDashboard() {
     };
   }, [activeOrders]);
 
+  const rawStaffName = staffProfile?.fullName?.trim() || "Chrizelda";
+  const normalizedStaffName =
+    rawStaffName.replace(/^staff\s+/i, "").trim() || "Chrizelda";
+  const staffFirstName = normalizedStaffName.split(/\s+/)[0] || "Chrizelda";
+  const staffRole =
+    staffProfile?.role?.replace("_", " ").replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
+    ) || "Staff";
+  const staffChipLabel = `Staff ${staffFirstName}`;
+  const syncMeta = isLoading || isSyncing
+    ? "Syncing..."
+    : `Auto-sync 15s${
+        lastSyncedAt
+          ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}`
+          : ""
+      }`;
+
+  const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
+    setStoreOverrideStatus(status.overrideStatus);
+    setStationStatus(
+      status.effectiveStatus === "open" ? "accepting" : status.effectiveStatus
+    );
+    setStoreStatusError(
+      status.setupRequired
+        ? "Store status table is not set up yet. Schedule still works, but manual override needs Supabase setup."
+        : ""
+    );
+  }, []);
+
+  const loadStoreStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/store-status");
+      const result = (await response.json()) as StoreStatusPayload & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setStoreStatusError(result.error || "Failed to load store status.");
+        return;
+      }
+
+      applyStoreStatus(result);
+    } catch {
+      setStoreStatusError("Something went wrong while loading store status.");
+    }
+  }, [applyStoreStatus]);
+
   useEffect(() => {
     loadOrders({ showLoading: true });
-  }, []);
+    loadStoreStatus();
+  }, [loadStoreStatus]);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel("staff-order-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          void loadOrders({ showLoading: false });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "order_items",
+        },
+        () => {
+          void loadOrders({ showLoading: false });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "store_settings",
+        },
+        () => {
+          void loadStoreStatus();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadStoreStatus]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -382,6 +500,18 @@ export function StaffDashboard() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!dispatchToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDispatchToast("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [dispatchToast]);
+
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
     setIsConfirmingCancel(false);
@@ -398,6 +528,35 @@ export function StaffDashboard() {
     setIsConfirmingCancel(false);
   }
 
+  async function handleStoreOverrideChange(overrideStatus: StoreOverrideStatus) {
+    setIsStoreStatusUpdating(true);
+    setStoreStatusError("");
+
+    try {
+      const response = await fetch("/api/store-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ overrideStatus }),
+      });
+      const result = (await response.json()) as StoreStatusPayload & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setStoreStatusError(result.error || "Failed to update store status.");
+        return;
+      }
+
+      applyStoreStatus(result);
+    } catch {
+      setStoreStatusError("Something went wrong while updating store status.");
+    } finally {
+      setIsStoreStatusUpdating(false);
+    }
+  }
+
   async function loadOrders({
     showLoading = true,
   }: {
@@ -406,6 +565,8 @@ export function StaffDashboard() {
     if (showLoading) {
       setIsLoading(true);
       setError("");
+    } else {
+      setIsSyncing(true);
     }
 
     try {
@@ -443,6 +604,8 @@ export function StaffDashboard() {
     } finally {
       if (showLoading) {
         setIsLoading(false);
+      } else {
+        setIsSyncing(false);
       }
     }
   }
@@ -472,6 +635,14 @@ export function StaffDashboard() {
           await loadOrders();
         }
         return;
+      }
+
+      if (result.nextStatus === "out_for_delivery") {
+        setDispatchToast(
+          result.notificationSent
+            ? "Email Sent"
+            : "Out for delivery. Email not configured."
+        );
       }
 
       await loadOrders();
@@ -544,33 +715,18 @@ export function StaffDashboard() {
     }
   }
 
-  async function handleLogout() {
-    setIsLoggingOut(true);
-
-    try {
-      await fetch("/api/logout", {
-        method: "POST",
-      });
-
-      router.push("/login");
-      router.refresh();
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <header className="border-b border-[#DCCFB8] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-5">
-          <div className="flex items-start gap-2">
+      <header className="border-b border-[#DCCFB8] bg-[#FFF0DA]">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 lg:flex-nowrap lg:px-5">
+          <div className="flex min-w-[230px] items-end gap-3">
             <div>
-            <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
-              Order Queue
-            </p>
-            <h1 className="font-sans text-2xl font-bold text-[#0D2E18] lg:text-3xl">
-              Active orders
-            </h1>
+              <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
+                Order Queue
+              </p>
+              <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                Active Orders
+              </h1>
             </div>
 
             <button
@@ -578,17 +734,43 @@ export function StaffDashboard() {
               onClick={() => loadOrders({ showLoading: true })}
               disabled={isLoading}
               title="Force refresh order queue"
-              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-[#F4EEE6] disabled:opacity-60"
+              className="mb-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
             >
-              <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={15}
+                className={isLoading || isSyncing ? "animate-spin" : ""}
+              />
               <span className="sr-only">
-                {isLoading ? "Syncing latest orders" : "Sync latest orders"}
+                {isLoading || isSyncing
+                  ? "Syncing latest orders"
+                  : "Sync latest orders"}
               </span>
             </button>
           </div>
 
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-            <label className="flex min-w-full items-center gap-2 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2 sm:min-w-[220px] sm:max-w-[280px]">
+          <div className="flex items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F441D] font-sans text-xs font-bold text-[#FFF0DA]">
+              SC
+            </div>
+            <div className="min-w-[118px]">
+              <p className="font-sans text-sm font-normal leading-tight text-[#0D2E18]">
+                {staffChipLabel}
+              </p>
+              <p className="font-sans text-xs text-[#8C7A64]">{staffRole}</p>
+            </div>
+
+            <div className="min-w-[74px]">
+              <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#8C7A64]">
+                Handled
+              </p>
+              <p className="font-sans text-xl font-bold leading-none text-[#0D2E18]">
+                {ordersHandledToday} today
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3 lg:flex-nowrap">
+            <label className="flex h-10 min-w-full items-center gap-2 rounded-xl bg-[#FFF8EF] px-3 sm:min-w-[260px] sm:max-w-[340px]">
               <Search size={16} className="text-[#8C7A64]" />
               <input
                 value={search}
@@ -598,80 +780,53 @@ export function StaffDashboard() {
               />
             </label>
 
-            <div className="flex w-full flex-wrap items-center justify-end gap-2 rounded-2xl border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2 sm:w-auto">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F441D] font-sans text-xs font-bold text-[#FFF0DA]">
-                {(staffProfile?.fullName || "Staff User")
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
-              <div className="min-w-[120px]">
-                <p className="font-sans text-sm font-semibold leading-tight text-[#0D2E18]">
-                  {staffProfile?.fullName || "Staff Chrizelda"}
-                </p>
-                <p className="font-sans text-xs capitalize text-[#8C7A64]">
-                  {staffProfile?.role?.replace("_", " ") || "Head Barista"}
-                </p>
-              </div>
-
-              <div className="h-8 w-px bg-[#DCCFB8]" />
-
-              <div className="min-w-[82px]">
-                <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#8C7A64]">
-                  Handled
-                </p>
-                <p className="font-sans text-sm font-bold text-[#0D2E18]">
-                  {ordersHandledToday} today
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setStationStatus((currentStatus) =>
-                    currentStatus === "accepting" ? "busy" : "accepting"
-                  )
-                }
-                className={`inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold transition ${
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+              <span
+                className={`inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold ${
                   stationStatus === "accepting"
-                    ? "bg-[#E6F2E8] text-[#0F441D]"
-                    : "bg-[#FFF0E5] text-[#B76522]"
+                    ? "bg-[#0F441D]/10 text-[#0D2E18]"
+                    : stationStatus === "busy"
+                    ? "bg-[#FFF8EF] text-[#684B35]"
+                    : "bg-[#FFF1EC] text-[#9C543D]"
                 }`}
               >
                 <span className="h-2 w-2 rounded-full bg-current" />
-                {stationStatus === "accepting" ? "Accepting" : "Busy"}
-              </button>
+                {stationStatus === "accepting"
+                  ? "Accepting"
+                  : stationStatus === "busy"
+                  ? "Busy"
+                  : "Closed"}
+              </span>
+
+              <select
+                value={storeOverrideStatus}
+                onChange={(event) =>
+                  handleStoreOverrideChange(
+                    event.target.value as StoreOverrideStatus
+                  )
+                }
+                disabled={isStoreStatusUpdating}
+                aria-label="Store status override"
+                className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
+              >
+                <option value="auto">Auto</option>
+                <option value="open">Open</option>
+                <option value="busy">Busy</option>
+                <option value="closed">Closed</option>
+              </select>
 
               <button
                 type="button"
                 title="Security settings"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#F4EEE6]"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white"
               >
                 <ShieldCheck size={15} />
                 <span className="sr-only">Security settings</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-[#0D2E18] px-3 font-sans text-xs font-semibold text-[#FFF0DA] disabled:opacity-60"
-              >
-                <LogOut size={14} />
-                {isLoggingOut ? "Leaving" : "Logout"}
-              </button>
-
-              <div className="basis-full font-sans text-[11px] text-[#8C7A64] sm:basis-auto">
-                Auto-sync 15s
-                {lastSyncedAt
-                  ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}`
-                  : ""}
-              </div>
+              <p className="font-sans text-[11px] text-[#8C7A64]">
+                {syncMeta}
+              </p>
             </div>
           </div>
         </div>
@@ -681,21 +836,21 @@ export function StaffDashboard() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
             <p className="font-sans text-xs text-[#8C7A64]">Pending</p>
-            <p className="mt-1 font-sans text-3xl font-semibold text-[#B44C1E]">
+            <p className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
               {summary.pending}
             </p>
           </div>
 
           <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
             <p className="font-sans text-xs text-[#8C7A64]">Preparing</p>
-            <p className="mt-1 font-sans text-3xl font-semibold text-[#B76522]">
+            <p className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
               {summary.preparing}
             </p>
           </div>
 
           <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
             <p className="font-sans text-xs text-[#8C7A64]">Ready</p>
-            <p className="mt-1 font-sans text-3xl font-semibold text-[#0F7A40]">
+            <p className="mt-1 font-sans text-3xl font-bold text-[#0F441D]">
               {summary.ready}
             </p>
           </div>
@@ -704,7 +859,7 @@ export function StaffDashboard() {
             <p className="font-sans text-xs text-[#8C7A64]">
               Out for delivery
             </p>
-            <p className="mt-1 font-sans text-3xl font-semibold text-[#2454C5]">
+            <p className="mt-1 font-sans text-3xl font-bold text-[#684B35]">
               {summary.outForDelivery}
             </p>
           </div>
@@ -736,6 +891,12 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
+        {storeStatusError ? (
+          <div className="mt-4 rounded-[16px] bg-[#FFF8EF] px-4 py-3 font-sans text-sm font-semibold text-[#684B35]">
+            {storeStatusError}
+          </div>
+        ) : null}
+
         {!isBootstrapped ? (
           <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
             <p className="font-sans text-lg font-semibold text-[#0D2E18]">
@@ -757,13 +918,31 @@ export function StaffDashboard() {
                 className="rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-3"
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.06em] text-[#8C7A64]">
+                  <h2
+                    className={`font-sans text-base font-bold ${
+                      column.key === "out_for_delivery"
+                        ? "text-[#684B35]"
+                        : "text-[#0D2E18]"
+                    }`}
+                  >
                     {column.label}
                   </h2>
-                  <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
+                  <span
+                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${
+                      column.key === "out_for_delivery"
+                        ? "bg-[#FFF0DA] text-[#684B35]"
+                        : "bg-[#EFE3CF] text-[#684B35]"
+                    }`}
+                  >
                     {columnOrders.length}
                   </span>
                 </div>
+
+                {column.key === "out_for_delivery" && dispatchToast ? (
+                  <div className="mb-3 rounded-full border border-[#684B35]/20 bg-[#FFF8EF] px-3 py-1.5 text-center font-sans text-xs font-semibold text-[#684B35] shadow-[0_6px_14px_rgba(104,75,53,0.08)]">
+                    {dispatchToast}
+                  </div>
+                ) : null}
 
                 <div className="space-y-3">
                   {columnOrders.length === 0 ? (
@@ -791,7 +970,7 @@ export function StaffDashboard() {
                       <article
                         key={order.id}
                         onClick={() => toggleOrderCard(order.id)}
-                        className="cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
+                        className="group/order cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -801,6 +980,11 @@ export function StaffDashboard() {
                             <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
                               {getOrderDisplayName(order)}
                             </p>
+                            {orderEmail || orderPhone ? (
+                              <p className="mt-1 max-h-0 overflow-hidden font-sans text-[11px] leading-snug text-[#8C7A64] opacity-0 transition-all duration-200 group-hover/order:max-h-10 group-hover/order:opacity-100 group-focus-within/order:max-h-10 group-focus-within/order:opacity-100">
+                                {[orderEmail, orderPhone].filter(Boolean).join(" | ")}
+                              </p>
+                            ) : null}
                           </div>
 
                           <span
@@ -873,17 +1057,6 @@ export function StaffDashboard() {
                             </div>
 
                             <div className="flex flex-wrap gap-2">
-                              {orderPhone ? (
-                                <a
-                                  href={`tel:${orderPhone}`}
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35]"
-                                >
-                                  <Phone size={14} />
-                                  Call
-                                </a>
-                              ) : null}
-
                               {orderEmail ? (
                                 <a
                                   href={`mailto:${orderEmail}`}
@@ -981,20 +1154,31 @@ export function StaffDashboard() {
           })}
         </div>
 
-        <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-4">
+        <div
+          id="order-history"
+          className="mt-5 scroll-mt-5 rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-4"
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
-                Order History
+                Session Summary
               </p>
               <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                Recent finished and cancelled orders
+                Latest finished and cancelled orders
               </h2>
             </div>
 
-            <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
-              {historyOrders.length} shown
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
+                {historyOrders.length} shown
+              </span>
+              <Link
+                href="/staff/order-history"
+                className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-semibold text-[#FFF0DA]"
+              >
+                Open History
+              </Link>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -1097,9 +1281,17 @@ export function StaffDashboard() {
                 <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
                   Order Details
                 </p>
-                <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
-                  {formatOrderCode(selectedOrder.id)}
-                </h2>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                    {formatOrderCode(selectedOrder.id)}
+                  </h2>
+
+                  {selectedOrder.payment_status === "unpaid" ? (
+                    <span className="rounded-full border border-[#684B35]/30 bg-[#FFF0DA] px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-[0.08em] text-[#684B35]">
+                      Unpaid
+                    </span>
+                  ) : null}
+                </div>
               </div>
 
               <button
@@ -1164,39 +1356,44 @@ export function StaffDashboard() {
                 </div>
               </div>
 
-              {selectedOrder.order_type === "delivery" ? (
-                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
-                    Delivery Info
-                  </p>
+              <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
+                  Customer & Delivery Hub
+                </p>
 
-                  <div className="mt-3 space-y-2 font-sans text-sm text-[#3C332A]">
-                    <p>
-                      <span className="font-semibold">Address:</span>{" "}
-                      {selectedOrder.delivery_address || "No address"}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Email:</span>{" "}
-                      {selectedOrder.delivery_email || "No email"}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Phone:</span>{" "}
-                      {selectedOrder.delivery_phone || "No phone"}
+                <div className="mt-3 grid gap-2 font-sans text-sm text-[#3C332A]">
+                  <div>
+                    <p className="text-xs text-[#8C7A64]">Customer</p>
+                    <p className="font-semibold text-[#0D2E18]">
+                      {getOrderDisplayName(selectedOrder)}
                     </p>
                   </div>
-                </div>
-              ) : null}
 
-              {getOrderDisplayName(selectedOrder) ? (
-                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
-                    Walk-in Customer
-                  </p>
-                  <p className="mt-1 font-sans text-sm font-semibold text-[#0D2E18]">
-                    {getOrderDisplayName(selectedOrder)}
-                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <p>
+                      <span className="font-semibold text-[#0D2E18]">
+                        Phone:
+                      </span>{" "}
+                      {getOrderPhone(selectedOrder) || "No phone"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-[#0D2E18]">
+                        Email:
+                      </span>{" "}
+                      {getOrderEmail(selectedOrder) || "No email"}
+                    </p>
+                  </div>
+
+                  {selectedOrder.order_type === "delivery" ? (
+                    <p>
+                      <span className="font-semibold text-[#0D2E18]">
+                        Address:
+                      </span>{" "}
+                      {selectedOrder.delivery_address || "No address"}
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
 
               <div className="mt-4 space-y-3">
                 <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
@@ -1296,7 +1493,7 @@ export function StaffDashboard() {
                         type="button"
                         onClick={() => handleMarkPaid(selectedOrder.id)}
                         disabled={isMarkingPaid}
-                        className="rounded-xl border border-[#0F441D]/25 bg-[#FFF8EF] px-3 py-2 font-sans text-sm font-semibold text-[#0F441D] transition hover:bg-[#F4EEE6] disabled:opacity-60"
+                        className="rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:opacity-60"
                       >
                         {isMarkingPaid ? "Marking..." : "Mark Paid"}
                       </button>
@@ -1308,47 +1505,30 @@ export function StaffDashboard() {
                       <button
                         type="button"
                         onClick={() => setIsConfirmingCancel(true)}
-                        className="rounded-xl border border-[#C55432] px-3 py-2 font-sans text-sm font-semibold text-[#C55432] transition hover:bg-[#FFF1EC]"
+                        className="rounded-xl border border-[#684B35] bg-transparent px-3 py-2 font-sans text-sm font-semibold text-[#684B35] transition hover:bg-[#FFF0DA]"
                       >
                         Cancel Order
                       </button>
                     ) : null}
 
-                    {getNextActionLabel(
-                      selectedOrder.order_type,
-                      selectedOrder.status
-                    ) ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (requiresPaymentBeforeNextAction(selectedOrder)) {
-                            setError("Mark this order as paid before closing it.");
-                            return;
-                          }
-
-                          await handleAdvance(
-                            selectedOrder.id,
-                            selectedOrder.status
-                          );
-                        }}
-                        disabled={updatingOrderIds.includes(selectedOrder.id)}
-                        className={`rounded-xl px-3 py-2 font-sans text-sm font-semibold transition ${
-                          requiresPaymentBeforeNextAction(selectedOrder)
-                            ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
-                            : `text-white ${getColumnActionStyle(
-                                selectedOrder.status
-                              )}`
-                        } disabled:cursor-not-allowed disabled:opacity-60`}
-                      >
-                        {requiresPaymentBeforeNextAction(selectedOrder)
-                          ? "Payment Required"
-                          : updatingOrderIds.includes(selectedOrder.id)
-                          ? "Updating..."
-                          : getNextActionLabel(
-                              selectedOrder.order_type,
+                    {getDrawerActionLabel(selectedOrder) ? (
+                      !requiresPaymentBeforeNextAction(selectedOrder) ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await handleAdvance(
+                              selectedOrder.id,
                               selectedOrder.status
-                            )}
-                      </button>
+                            );
+                          }}
+                          disabled={updatingOrderIds.includes(selectedOrder.id)}
+                          className="rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {updatingOrderIds.includes(selectedOrder.id)
+                            ? "Updating..."
+                            : getDrawerActionLabel(selectedOrder)}
+                        </button>
+                      ) : null
                     ) : (
                       <span className="rounded-xl bg-[#F4EEE6] px-3 py-2 font-sans text-sm font-semibold text-[#684B35]">
                         Final Status
