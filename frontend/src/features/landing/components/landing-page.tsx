@@ -1,3 +1,11 @@
+export default function LandingPage() {
+  return (
+    <div>
+      Landing Page
+    </div>
+  );
+}
+
 import {
   ArrowRight,
   BarChart3,
