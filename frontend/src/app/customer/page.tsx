@@ -47,7 +47,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     fullName: "KadaServe Customer",
     email: user?.email ?? null,
     phone: null as string | null,
-    defaultDeliveryAddress: null as string | null,
     avatarUrl: null as string | null,
     satisfactionAverage: null as number | null,
   };
@@ -58,12 +57,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       .select("full_name, email, phone, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
-    const { data: deliveryProfile } = await supabase
-      .from("profiles")
-      .select("default_delivery_address")
-      .eq("id", user.id)
-      .maybeSingle();
-
     customerProfile = {
       fullName:
         profile?.full_name ||
@@ -72,8 +65,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
         "KadaServe Customer",
       email: profile?.email || user.email || null,
       phone: profile?.phone || null,
-      defaultDeliveryAddress:
-        deliveryProfile?.default_delivery_address ?? null,
       avatarUrl:
         profile?.avatar_url ||
         (typeof user.user_metadata?.avatar_url === "string"
@@ -94,6 +85,8 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           total_amount,
           ordered_at,
           delivery_address,
+          delivery_lat,
+          delivery_lng,
           delivery_email,
           delivery_phone,
           order_items (
@@ -113,10 +106,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
     if (!ordersError && ordersData) {
       orders = ordersData as unknown as CustomerOrder[];
-      customerProfile.defaultDeliveryAddress =
-        customerProfile.defaultDeliveryAddress ||
-        orders.find((order) => order.delivery_address)?.delivery_address ||
-        null;
     }
 
     const eligibleStatuses = ["delivered", "completed"];

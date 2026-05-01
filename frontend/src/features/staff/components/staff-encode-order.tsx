@@ -6,7 +6,6 @@ import {
     Plus,
     RefreshCw,
     Search,
-    ShieldCheck,
     ShoppingCart,
     Trash2,
 } from "lucide-react";
@@ -407,15 +406,6 @@ export function StaffEncodeOrder() {
                         </label>
 
                         <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
-                            <button
-                                type="button"
-                                title="System integrity"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white"
-                            >
-                                <ShieldCheck size={15} />
-                                <span className="sr-only">System integrity</span>
-                            </button>
-
                             <p className="font-sans text-[11px] text-[#8C7A64]">
                                 {menuSyncMeta}
                             </p>

@@ -39,6 +39,8 @@ export type StaffOrder = {
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   delivery_email: string | null;
   delivery_phone: string | null;
   customer_profile: {
@@ -69,6 +71,8 @@ export type CustomerOrder = {
   total_amount: number;
   ordered_at: string;
   delivery_address?: string | null;
+  delivery_lat?: number | null;
+  delivery_lng?: number | null;
   delivery_email?: string | null;
   delivery_phone?: string | null;
   order_items: CustomerOrderItem[];

@@ -35,6 +35,8 @@ type EnrichedHistoryOrder = {
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   delivery_email: string | null;
   delivery_phone: string | null;
   customer_profile: CustomerProfile | null;
@@ -253,6 +255,8 @@ export async function GET(request: Request) {
           ordered_at,
           walkin_name,
           delivery_address,
+          delivery_lat,
+          delivery_lng,
           delivery_email,
           delivery_phone,
           order_items (

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Download,
+  ExternalLink,
   Loader2,
+  MapPin,
   Search,
   SlidersHorizontal,
   X,
@@ -86,6 +88,17 @@ function getCustomerPhone(order: StaffOrder) {
 
 function getCustomerEmail(order: StaffOrder) {
   return order.delivery_email || order.customer_profile?.email || "No email";
+}
+
+function hasDeliveryPin(order: StaffOrder) {
+  return (
+    typeof order.delivery_lat === "number" &&
+    typeof order.delivery_lng === "number"
+  );
+}
+
+function buildOpenStreetMapUrl(lat: number, lng: number) {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
 }
 
 function formatTime(value: string) {
@@ -524,10 +537,32 @@ export function StaffOrderHistory() {
                       <p>Phone: {getCustomerPhone(selectedOrder)}</p>
                       <p>Email: {getCustomerEmail(selectedOrder)}</p>
                       {selectedOrder.order_type === "delivery" ? (
-                        <p>
-                          Address:{" "}
-                          {selectedOrder.delivery_address || "No address"}
-                        </p>
+                        <div>
+                          <p>
+                            Address:{" "}
+                            {selectedOrder.delivery_address || "No address"}
+                          </p>
+
+                          {hasDeliveryPin(selectedOrder) ? (
+                            <a
+                              href={buildOpenStreetMapUrl(
+                                selectedOrder.delivery_lat as number,
+                                selectedOrder.delivery_lng as number
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-flex items-center gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                            >
+                              <MapPin size={13} />
+                              View pinned map
+                              <ExternalLink size={12} />
+                            </a>
+                          ) : (
+                            <p className="mt-1 font-sans text-xs text-[#8C7A64]">
+                              No map pin saved.
+                            </p>
+                          )}
+                        </div>
                       ) : null}
                     </div>
                   </div>
