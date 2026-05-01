@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 function peso(value: number) {
@@ -41,10 +41,6 @@ function formatPaymentStatus(paymentStatus: StaffOrder["payment_status"]) {
   return "No status";
 }
 
-function formatOrderTypeLabel(orderType: StaffOrder["order_type"]) {
-  return orderType === "pickup" ? "Pickup" : "Delivery";
-}
-
 function formatNameFromEmail(email: string | null) {
   if (!email) return null;
 
@@ -60,54 +56,49 @@ function formatNameFromEmail(email: string | null) {
 
 function getOrderDisplayName(order: StaffOrder) {
   return (
+    order.customer_profile?.full_name?.trim() ||
     order.walkin_name?.trim() ||
+    formatNameFromEmail(order.customer_profile?.email ?? null) ||
     formatNameFromEmail(order.delivery_email) ||
     (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
   );
-}
-
-function getOrderTypeStyle(orderType: StaffOrder["order_type"]) {
-  return orderType === "pickup"
-    ? "border border-[#7A3FB4]/20 bg-[#FFF8EF] text-[#7A3FB4]"
-    : "border border-[#B76522]/20 bg-[#FFF8EF] text-[#B76522]";
-}
-
-function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
-  return paymentMethod === "gcash"
-    ? "border border-[#684B35]/20 bg-[#FFF8EF]/70 text-[#684B35]"
-    : "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]";
-}
-
-function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
-  return paymentStatus === "paid"
-    ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
-    : "border border-[#B76522]/25 bg-[#FFF8EF]/70 text-[#B76522]";
 }
 
 function getStatusStyle(status: OrderStatus) {
   switch (status) {
     case "completed":
     case "delivered":
-      return "bg-[#E6F2E8] text-[#0F441D]";
+      return "border border-[#0F441D]/15 bg-[#E6F2E8] text-[#0F441D]";
     case "cancelled":
-      return "bg-[#FFF1EC] text-[#C55432]";
-    case "ready":
+      return "border border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]";
     case "out_for_delivery":
-      return "bg-[#FFF0DA] text-[#684B35]";
+      return "border border-[#684B35]/20 bg-[#FFF0DA] text-[#684B35]";
+    case "ready":
+      return "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]";
     default:
-      return "bg-[#F4EEE6] text-[#684B35]";
+      return "border border-[#DCCFB8] bg-transparent text-[#684B35]";
   }
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoText({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
-      <p className="font-sans text-sm text-[#8C7A64]">{label}</p>
-      <p className="mt-2 font-sans text-lg font-semibold text-[#0D2E18]">
+    <div>
+      <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C7A64]">
+        {label}
+      </p>
+      <p className="mt-1 font-sans text-base font-semibold text-[#0D2E18]">
         {value}
       </p>
     </div>
   );
+}
+
+function getContactEmail(order: StaffOrder) {
+  return order.customer_profile?.email || order.delivery_email || "No email";
+}
+
+function getContactPhone(order: StaffOrder) {
+  return order.customer_profile?.phone || order.delivery_phone || "No phone";
 }
 
 export function AdminOrderDetailsDrawer({
@@ -121,71 +112,55 @@ export function AdminOrderDetailsDrawer({
     order.order_type === "pickup"
       ? ["pending", "preparing", "ready", "completed"]
       : ["pending", "preparing", "ready", "out_for_delivery", "delivered"];
+  const activeStatusIndex = flowStatuses.indexOf(order.status);
+
+  function handleCopyPhone() {
+    const phone = getContactPhone(order);
+
+    if (phone !== "No phone") {
+      navigator.clipboard?.writeText(phone);
+    }
+  }
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-[#0D2E18]/35" onClick={onClose} />
 
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-[#FFF0DA] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
         <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-6 py-5">
           <div>
             <p className="font-sans text-sm uppercase tracking-[0.16em] text-[#684B35]">
               Admin Order Details
             </p>
-            <h2 className="mt-2 font-sans text-4xl font-bold text-[#0D2E18]">
-              {formatOrderCode(order.id)}
-            </h2>
-            <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
-              {getOrderDisplayName(order)}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h2 className="font-display text-4xl font-bold text-[#0D2E18]">
+                {formatOrderCode(order.id)}
+              </h2>
+              <span
+                className={`rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusStyle(
+                  order.status
+                )}`}
+              >
+                {formatStatus(order.status)}
+              </span>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-white p-2 text-[#0D2E18]"
+            className="rounded-full bg-[#FFF8EF] p-2 text-[#0D2E18]"
           >
             <X size={20} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full px-3 py-1 font-sans text-sm font-semibold ${getOrderTypeStyle(
-                order.order_type
-              )}`}
-            >
-              {formatOrderTypeLabel(order.order_type)}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStyle(
-                order.payment_method
-              )}`}
-            >
-              {formatPaymentMethod(order.payment_method)}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 font-sans text-sm font-semibold ${getPaymentStatusStyle(
-                order.payment_status
-              )}`}
-            >
-              {formatPaymentStatus(order.payment_status)}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 font-sans text-sm font-semibold ${getStatusStyle(
-                order.status
-              )}`}
-            >
-              {formatStatus(order.status)}
-            </span>
-          </div>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <InfoCard label="Customer" value={getOrderDisplayName(order)} />
-            <InfoCard label="Placed at" value={formatDateTime(order.ordered_at)} />
-            <InfoCard label="Total" value={peso(order.total_amount)} />
-            <InfoCard
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+            <InfoText label="Customer" value={getOrderDisplayName(order)} />
+            <InfoText label="Placed at" value={formatDateTime(order.ordered_at)} />
+            <InfoText label="Total" value={peso(order.total_amount)} />
+            <InfoText
               label="Payment"
               value={`${formatPaymentMethod(order.payment_method)} - ${formatPaymentStatus(
                 order.payment_status
@@ -193,62 +168,92 @@ export function AdminOrderDetailsDrawer({
             />
           </div>
 
-          <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
+          <hr className="my-6 border-[#D8C8AA]/70" />
+
+          <section>
             <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
               Order Flow
             </p>
             <div className="mt-4 space-y-3">
-              {flowStatuses.map((status) => {
+              {flowStatuses.map((status, index) => {
                 const activeStatus = status === order.status;
+                const completedStatus =
+                  activeStatusIndex >= 0 && index < activeStatusIndex;
+                const dotColor =
+                  activeStatus && status === "out_for_delivery"
+                    ? "bg-[#684B35]"
+                    : activeStatus || completedStatus
+                    ? "bg-[#0D2E18]"
+                    : "bg-[#DCCFB8]";
 
                 return (
                   <div
                     key={status}
                     className="flex items-center gap-3 font-sans text-sm"
-                  >
-                    <span
-                      className={`h-3 w-3 rounded-full ${
-                        activeStatus ? "bg-[#0D2E18]" : "bg-[#DCCFB8]"
-                      }`}
+                    >
+                      <span
+                      className={`h-3 w-3 rounded-full ${dotColor}`}
                     />
                     <span
                       className={
-                        activeStatus
+                        activeStatus && status === "out_for_delivery"
+                          ? "font-bold text-[#684B35]"
+                          : activeStatus
                           ? "font-bold text-[#0D2E18]"
                           : "text-[#8C7A64]"
                       }
                     >
                       {formatStatus(status)}
                     </span>
+                    {completedStatus ? (
+                      <Check size={14} className="text-[#0D2E18]" />
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
 
           {order.order_type === "delivery" ? (
-            <div className="mt-5 rounded-[20px] border border-[#DCCFB8] bg-white p-4">
+            <>
+              <hr className="my-6 border-[#D8C8AA]/70" />
+              <section>
               <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
                 Delivery Info
               </p>
-              <div className="mt-3 space-y-2 font-sans text-sm text-[#3C332A]">
+              <div className="mt-3 space-y-3 font-sans text-sm text-[#3C332A]">
                 <p>
                   <span className="font-semibold">Address:</span>{" "}
                   {order.delivery_address || "No address"}
                 </p>
                 <p>
                   <span className="font-semibold">Email:</span>{" "}
-                  {order.delivery_email || "No email"}
+                  {getContactEmail(order)}
                 </p>
-                <p>
-                  <span className="font-semibold">Phone:</span>{" "}
-                  {order.delivery_phone || "No phone"}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p>
+                    <span className="font-semibold">Phone:</span>{" "}
+                    {getContactPhone(order)}
+                  </p>
+                  {getContactPhone(order) !== "No phone" ? (
+                    <button
+                      type="button"
+                      onClick={handleCopyPhone}
+                      className="rounded-full p-1 text-[#684B35] transition hover:bg-[#FFF8EF] hover:text-[#0D2E18]"
+                      aria-label="Copy phone number"
+                    >
+                      <Copy size={14} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
+              </section>
+            </>
           ) : null}
 
-          <div className="mt-5 space-y-4">
+          <hr className="my-6 border-[#D8C8AA]/70" />
+
+          <section className="space-y-4">
             <p className="font-sans text-sm uppercase tracking-[0.08em] text-[#684B35]">
               Order Items
             </p>
@@ -256,7 +261,7 @@ export function AdminOrderDetailsDrawer({
             {order.order_items.map((item) => (
               <div
                 key={item.id}
-                className="rounded-[20px] border border-[#DCCFB8] bg-white p-4"
+                className="border-b border-[#D8C8AA]/70 pb-4 last:border-b-0"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -285,7 +290,7 @@ export function AdminOrderDetailsDrawer({
                 </div>
               </div>
             ))}
-          </div>
+          </section>
         </div>
       </aside>
     </>

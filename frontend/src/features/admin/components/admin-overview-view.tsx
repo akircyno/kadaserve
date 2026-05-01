@@ -60,11 +60,11 @@ function Panel({
   title: string;
 }) {
   return (
-    <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+    <section className="rounded-[18px] bg-white/72 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.52)]">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-sans text-lg font-bold text-[#0D2E18]">{title}</h2>
+        <h2 className="font-display text-2xl font-bold text-[#0D2E18]">{title}</h2>
         {rightLabel ? (
-          <p className="font-sans text-sm uppercase text-[#0D2E18]">{rightLabel}</p>
+          <p className="font-sans text-[15px] uppercase text-[#684B35]">{rightLabel}</p>
         ) : null}
       </div>
       {children}
@@ -74,11 +74,11 @@ function Panel({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-5">
-      <p className="font-sans text-sm font-bold uppercase text-[#0D2E18]">
+    <div className="rounded-[16px] bg-[#FFF0DA] px-5 py-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.45)]">
+      <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
         {label}
       </p>
-      <p className="mt-7 font-sans text-4xl font-bold text-[#0D2E18]">{value}</p>
+      <p className="mt-5 font-sans text-4xl font-black tabular-nums text-[#0D2E18]">{value}</p>
     </div>
   );
 }
@@ -108,10 +108,10 @@ function RankingRow({
   value: number;
 }) {
   return (
-    <div className="grid grid-cols-[34px_1fr_90px_130px] items-center gap-4 font-sans text-sm">
-      <span>{index}</span>
-      <span>{label}</span>
-      <span className="font-semibold">{value}</span>
+    <div className="grid grid-cols-[34px_1fr_72px_120px] items-center gap-4 border-b border-[#E8D9BE] py-3 font-sans text-[15px] last:border-b-0">
+      <span className="font-bold text-[#684B35]">{index}</span>
+      <span className="font-semibold text-[#0D2E18]">{label}</span>
+      <span className="font-semibold tabular-nums text-[#684B35]">{value}</span>
       <ProgressBar max={max} value={value} />
     </div>
   );
@@ -119,10 +119,10 @@ function RankingRow({
 
 function RatingRow({ item, rating }: { item: string; rating: number }) {
   return (
-    <div className="grid grid-cols-[120px_1fr_50px] items-center gap-4 font-sans text-sm">
-      <span>{item}</span>
+    <div className="grid grid-cols-[120px_1fr_50px] items-center gap-4 border-b border-[#E8D9BE] py-3 font-sans text-[15px] last:border-b-0">
+      <span className="font-semibold text-[#0D2E18]">{item}</span>
       <ProgressBar max={5} value={rating} />
-      <span>{rating.toFixed(1)}</span>
+      <span className="font-semibold tabular-nums text-[#684B35]">{rating.toFixed(1)}</span>
     </div>
   );
 }
@@ -149,7 +149,7 @@ function Heatmap({
       <div className="min-w-[620px] space-y-3">
         {visibleDays.map((day) => (
           <div key={day} className="grid grid-cols-[48px_1fr] items-center gap-3">
-            <span className="font-sans text-sm">{day}</span>
+            <span className="font-sans text-[15px]">{day}</span>
             <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
               {visibleHours.map((hour) => {
                 const count = countOrdersForSlot(orders, day, hour);
@@ -170,7 +170,7 @@ function Heatmap({
           <span />
           <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
             {visibleHours.map((hour) => (
-              <span key={hour} className="text-center font-sans text-sm text-[#8C7A64]">
+              <span key={hour} className="text-center font-sans text-[15px] text-[#8C7A64]">
                 {hour}
               </span>
             ))}
@@ -189,6 +189,10 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
+function matchesSearch(value: string, search: string) {
+  return value.toLowerCase().includes(search.trim().toLowerCase());
+}
+
 export function DashboardView({
   averageRating,
   averageOrderValue,
@@ -199,6 +203,7 @@ export function DashboardView({
   maxItemOrders,
   maxWeekdayOrders,
   nonCancelledOrders,
+  search,
   weekdayCounts,
 }: {
   averageRating: number;
@@ -210,26 +215,81 @@ export function DashboardView({
   maxItemOrders: number;
   maxWeekdayOrders: number;
   nonCancelledOrders: StaffOrder[];
+  search?: string;
   weekdayCounts: Array<{ day: string; orders: number }>;
 }) {
+  const keyword = search?.trim().toLowerCase() ?? "";
+  const metricCards = [
+    { label: "Total Orders", value: nonCancelledOrders.length.toString() },
+    { label: "Gross Sales", value: peso(grossIncomeSales) },
+    { label: "Avg Order Value", value: peso(averageOrderValue) },
+    {
+      label: "Average Rating",
+      value: averageRating ? averageRating.toFixed(1) : "N/A",
+    },
+  ];
+  const visibleMetricCards = keyword
+    ? metricCards.filter(
+        (metric) =>
+          matchesSearch(metric.label, keyword) || matchesSearch(metric.value, keyword)
+      )
+    : metricCards;
+  const visibleItemRanking = keyword
+    ? itemRanking.filter((item) => matchesSearch(item.item, keyword))
+    : itemRanking;
+  const showOrdersWeek =
+    !keyword ||
+    matchesSearch("Orders - Week", keyword) ||
+    weekdayCounts.some((item) => matchesSearch(item.day, keyword));
+  const showPeakHours = !keyword || matchesSearch("Peak Hours", keyword);
+  const showTopItems =
+    !keyword ||
+    matchesSearch("Top Items", keyword) ||
+    visibleItemRanking.length > 0;
+  const showSatisfaction =
+    !keyword ||
+    matchesSearch("Satisfaction", keyword) ||
+    visibleItemRanking.length > 0;
+  const showHourly =
+    !keyword ||
+    matchesSearch("Hourly Order Volume", keyword) ||
+    hourlyCounts.some((item) => matchesSearch(item.label, keyword));
+  const hasDashboardResults =
+    visibleMetricCards.length > 0 ||
+    showOrdersWeek ||
+    showPeakHours ||
+    showTopItems ||
+    showSatisfaction ||
+    showHourly;
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-4">
-        <MetricCard label="Total Orders" value={nonCancelledOrders.length.toString()} />
-        <MetricCard label="Gross Income Sales" value={peso(grossIncomeSales)} />
-        <MetricCard label="Avg Order Value" value={peso(averageOrderValue)} />
-        <MetricCard
-          label="Average Rating"
-          value={averageRating ? averageRating.toFixed(1) : "N/A"}
-        />
-      </div>
+      {visibleMetricCards.length > 0 ? (
+        <div className="grid gap-5 lg:grid-cols-4">
+          {visibleMetricCards.map((metric) => (
+            <div
+              key={metric.label}
+              id={`admin-${metric.label.toLowerCase().replaceAll(" ", "-")}`}
+              className="scroll-mt-28"
+            >
+              <MetricCard
+                label={metric.label}
+                value={metric.value}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Orders - Week">
+      {showOrdersWeek || showPeakHours ? (
+        <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        {showOrdersWeek ? (
+          <div id="admin-orders-week" className="scroll-mt-28">
+          <Panel title="Orders - Week">
           <div className="flex h-[190px] items-end gap-5">
             {weekdayCounts.map((item) => (
               <div key={item.day} className="flex flex-1 flex-col items-center gap-3">
-                <p className="font-sans text-sm font-semibold text-[#0D2E18]">
+                <p className="font-sans text-[15px] font-semibold tabular-nums text-[#0D2E18]">
                   {item.orders}
                 </p>
                 <div
@@ -238,21 +298,31 @@ export function DashboardView({
                     height: `${Math.max(18, (item.orders / maxWeekdayOrders) * 120)}px`,
                   }}
                 />
-                <p className="font-sans text-sm text-[#0D2E18]">{item.day}</p>
+                <p className="font-sans text-[15px] text-[#0D2E18]">{item.day}</p>
               </div>
             ))}
           </div>
-        </Panel>
+          </Panel>
+          </div>
+        ) : null}
 
-        <Panel title="Peak Hours">
+        {showPeakHours ? (
+          <div id="admin-peak-hours" className="scroll-mt-28">
+          <Panel title="Peak Hours">
           <Heatmap compact orders={nonCancelledOrders} />
-        </Panel>
-      </div>
+          </Panel>
+          </div>
+        ) : null}
+        </div>
+      ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Top Items" rightLabel="ORDERS">
+      {showTopItems || showSatisfaction ? (
+        <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        {showTopItems ? (
+          <div id="admin-top-items" className="scroll-mt-28">
+          <Panel title="Top Items" rightLabel="ORDERS">
           <div className="mt-4 space-y-4">
-            {itemRanking.slice(0, 5).map((item, index) => (
+            {visibleItemRanking.slice(0, 5).map((item, index) => (
               <RankingRow
                 key={item.item}
                 index={index + 1}
@@ -261,36 +331,51 @@ export function DashboardView({
                 max={maxItemOrders}
               />
             ))}
-            {itemRanking.length === 0 ? <EmptyState label="No order data yet" /> : null}
+            {visibleItemRanking.length === 0 ? <EmptyState label="No matching item data" /> : null}
           </div>
-        </Panel>
+          </Panel>
+          </div>
+        ) : null}
 
-        <Panel title="Satisfaction" rightLabel="AVG / 5">
+        {showSatisfaction ? (
+          <div id="admin-satisfaction" className="scroll-mt-28">
+          <Panel title="Satisfaction" rightLabel="AVG / 5">
           <div className="mt-4 space-y-4">
-            {itemRanking.slice(0, 5).map((item) => (
+            {visibleItemRanking.slice(0, 5).map((item) => (
               <RatingRow key={item.item} item={item.item} rating={item.rating} />
             ))}
-            {itemRanking.length === 0 ? <EmptyState label="No rating data yet" /> : null}
+            {visibleItemRanking.length === 0 ? <EmptyState label="No matching rating data" /> : null}
           </div>
-        </Panel>
-      </div>
+          </Panel>
+          </div>
+        ) : null}
+        </div>
+      ) : null}
 
-      <Panel title="Hourly Order Volume">
+      {showHourly ? (
+        <div id="admin-hourly-order-volume" className="scroll-mt-28">
+        <Panel title="Hourly Order Volume">
         <div className="mt-8 flex items-end gap-4 overflow-x-auto pb-2">
           {hourlyCounts.map((item) => (
             <div key={item.label} className="flex min-w-[62px] flex-col items-center gap-2">
-              <p className="font-sans text-sm text-[#0D2E18]">{item.orders}</p>
+              <p className="font-sans text-[15px] tabular-nums text-[#0D2E18]">{item.orders}</p>
               <div
                 className="w-12 rounded-full bg-[#0D2E18]"
                 style={{
                   height: `${Math.max(10, (item.orders / maxHourlyOrders) * 44)}px`,
                 }}
               />
-              <p className="font-sans text-sm text-[#0D2E18]">{item.label}</p>
+              <p className="font-sans text-[15px] text-[#0D2E18]">{item.label}</p>
             </div>
           ))}
         </div>
-      </Panel>
+        </Panel>
+        </div>
+      ) : null}
+
+      {!hasDashboardResults ? (
+        <EmptyState label="No dashboard results match this search" />
+      ) : null}
     </div>
   );
 }

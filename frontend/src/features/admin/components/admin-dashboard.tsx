@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
   LogOut,
   Menu as MenuIcon,
@@ -28,6 +29,10 @@ import {
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
 import { inventoryItems } from "@/features/admin/data/inventory-items";
+import type {
+  StoreOverrideStatus,
+  StoreStatusPayload,
+} from "@/lib/store-status";
 import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
@@ -83,6 +88,44 @@ function parseHourLabel(label: string) {
   return isPm ? hourNumber + 12 : hourNumber;
 }
 
+function formatHourLabel(dateValue: string) {
+  return new Date(dateValue)
+    .toLocaleTimeString("en-PH", {
+      hour: "numeric",
+      hour12: true,
+    })
+    .replace(":00", "")
+    .replace(" ", "")
+    .toUpperCase();
+}
+
+function isSameManilaDate(value: string, date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(new Date(value)) === formatter.format(date);
+}
+
+function peso(value: number) {
+  return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
+}
+
+type AdminSearchSuggestion = {
+  category: string;
+  label: string;
+  query: string;
+  targetId?: string;
+  targetTab?: AdminTab;
+};
+
+function normalizeSuggestion(value: string) {
+  return value.trim().replaceAll("_", " ");
+}
+
 export function AdminDashboard() {
   const router = useRouter();
 
@@ -91,11 +134,18 @@ export function AdminDashboard() {
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [error, setError] = useState("");
+  const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
+  const [storeOverrideStatus, setStoreOverrideStatus] =
+    useState<StoreOverrideStatus>("auto");
+  const [isStoreStatusUpdating, setIsStoreStatusUpdating] = useState(false);
+  const [storeStatusError, setStoreStatusError] = useState("");
 
   const nonCancelledOrders = useMemo(
     () => orders.filter((order) => order.status !== "cancelled"),
@@ -115,13 +165,51 @@ export function AdminDashboard() {
     () => paidOrders.reduce((sum, order) => sum + order.total_amount, 0),
     [paidOrders]
   );
+  const totalSalesToday = useMemo(
+    () =>
+      paidOrders
+        .filter((order) => isSameManilaDate(order.ordered_at))
+        .reduce((sum, order) => sum + order.total_amount, 0),
+    [paidOrders]
+  );
 
   const averageOrderValue = paidOrders.length
     ? grossIncomeSales / paidOrders.length
     : 0;
+  const syncMeta = isLoading
+    ? "Syncing..."
+    : `Auto-sync 15s${
+        lastSyncedAt
+          ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}`
+          : ""
+      }`;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+
+    function syncSidebarState() {
+      setIsSidebarOpen(mediaQuery.matches);
+    }
+
+    syncSidebarState();
+    mediaQuery.addEventListener("change", syncSidebarState);
+
+    return () => mediaQuery.removeEventListener("change", syncSidebarState);
+  }, []);
 
   const filteredOrders = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = debouncedSearch.trim().toLowerCase();
 
     if (!keyword) return orders;
 
@@ -136,13 +224,55 @@ export function AdminDashboard() {
         order.status,
         order.delivery_email ?? "",
         order.delivery_phone ?? "",
+        order.total_amount.toString(),
       ]
         .join(" ")
         .toLowerCase();
 
       return haystack.includes(keyword);
     });
-  }, [orders, search]);
+  }, [debouncedSearch, orders]);
+  const scopedMenuItems = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "menu" || !keyword) {
+      return menuItems;
+    }
+
+    return menuItems.filter((item) =>
+      [
+        item.name,
+        item.category,
+        item.price.toString(),
+        item.isAvailable ? "available" : "not available",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, menuItems]);
+  const scopedInventoryItems = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "inventory" || !keyword) {
+      return inventoryItems;
+    }
+
+    return inventoryItems.filter((item) =>
+      [
+        item.name,
+        item.unit,
+        item.supplier,
+        getInventoryStatus(item),
+        item.onHand.toString(),
+        item.minNeed.toString(),
+        item.maxCap.toString(),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch]);
 
   const itemRanking = useMemo(() => {
     const ranking = new Map<
@@ -175,6 +305,47 @@ export function AdminDashboard() {
       (first, second) => second.orders - first.orders
     );
   }, [nonCancelledOrders]);
+  const scopedItemRanking = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (
+      !keyword ||
+      !["item-ranking", "satisfaction", "dashboard"].includes(activeTab)
+    ) {
+      return itemRanking;
+    }
+
+    return itemRanking.filter((item) =>
+      [
+        item.item,
+        item.orders.toString(),
+        item.revenue.toString(),
+        item.rating.toFixed(1),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, itemRanking]);
+  const scopedCustomerPreferenceOrders = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "customer-pref" || !keyword) {
+      return orders;
+    }
+
+    return orders.filter((order) =>
+      [
+        getOrderDisplayName(order),
+        formatOrderItems(order),
+        order.order_type,
+        order.status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, orders]);
 
   const weekdayCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -208,13 +379,211 @@ export function AdminDashboard() {
       };
     });
   }, [nonCancelledOrders]);
+  const scopedHourlyCounts = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "time-series" || !keyword) {
+      return hourlyCounts;
+    }
+
+    return hourlyCounts.filter((item) =>
+      [item.label, `${item.orders} orders`]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, hourlyCounts]);
+  const scopedPeakHourOrders = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "peak-hours" || !keyword) {
+      return orders;
+    }
+
+    return orders.filter((order) =>
+      [
+        normalizeWeekday(order.ordered_at),
+        formatHourLabel(order.ordered_at),
+        getOrderDisplayName(order),
+        order.status,
+        order.order_type,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, orders]);
 
   const maxHourlyOrders = Math.max(1, ...hourlyCounts.map((item) => item.orders));
+  const maxScopedHourlyOrders = Math.max(
+    1,
+    ...scopedHourlyCounts.map((item) => item.orders)
+  );
   const maxWeekdayOrders = Math.max(1, ...weekdayCounts.map((item) => item.orders));
   const maxItemOrders = Math.max(1, ...itemRanking.map((item) => item.orders));
+  const maxScopedItemOrders = Math.max(
+    1,
+    ...scopedItemRanking.map((item) => item.orders)
+  );
   const averageRating = itemRanking.length
     ? itemRanking.reduce((sum, item) => sum + item.rating, 0) / itemRanking.length
     : 0;
+  const searchSuggestions = useMemo<AdminSearchSuggestion[]>(() => {
+    const suggestions: AdminSearchSuggestion[] = [];
+    const seen = new Set<string>();
+    const addSuggestion = (suggestion: AdminSearchSuggestion) => {
+      const key = `${suggestion.category}:${suggestion.label}`;
+
+      if (seen.has(key) || !suggestion.label.trim()) {
+        return;
+      }
+
+      seen.add(key);
+      suggestions.push(suggestion);
+    };
+
+    if (activeTab === "dashboard") {
+      [
+        ["Total Orders", "admin-total-orders"],
+        ["Gross Sales", "admin-gross-sales"],
+        ["Avg Order Value", "admin-avg-order-value"],
+        ["Average Rating", "admin-average-rating"],
+        ["Orders - Week", "admin-orders-week"],
+        ["Peak Hours", "admin-peak-hours"],
+        ["Top Items", "admin-top-items"],
+        ["Satisfaction", "admin-satisfaction"],
+        ["Hourly Order Volume", "admin-hourly-order-volume"],
+      ].forEach(([label, targetId]) =>
+        addSuggestion({
+          category: "Dashboard",
+          label,
+          query: label,
+          targetId,
+        })
+      );
+      itemRanking.slice(0, 8).forEach((item) =>
+        addSuggestion({
+          category: "Top Items",
+          label: item.item,
+          query: item.item,
+          targetId: "admin-top-items",
+        })
+      );
+      orders.slice(0, 8).forEach((order) => {
+        const name = getOrderDisplayName(order);
+        addSuggestion({
+          category: "Deep Dive",
+          label: `View Order History for ${name}`,
+          query: name,
+          targetTab: "orders",
+        });
+      });
+    } else if (activeTab === "orders") {
+      for (const order of orders.slice(0, 18)) {
+        addSuggestion({
+          category: "Orders",
+          label: formatOrderCode(order.id),
+          query: formatOrderCode(order.id),
+        });
+        addSuggestion({
+          category: "Customers",
+          label: getOrderDisplayName(order),
+          query: getOrderDisplayName(order),
+        });
+        addSuggestion({
+          category: "Fulfillment",
+          label: normalizeSuggestion(order.order_type),
+          query: order.order_type,
+        });
+        if (order.delivery_phone) {
+          addSuggestion({
+            category: "Phone",
+            label: order.delivery_phone,
+            query: order.delivery_phone,
+          });
+        }
+        if (order.payment_method) {
+          addSuggestion({
+            category: "Payment",
+            label: normalizeSuggestion(order.payment_method),
+            query: order.payment_method,
+          });
+        }
+        if (order.payment_status) {
+          addSuggestion({
+            category: "Payment",
+            label: normalizeSuggestion(order.payment_status),
+            query: order.payment_status,
+          });
+        }
+        addSuggestion({
+          category: "Status",
+          label: normalizeSuggestion(order.status),
+          query: order.status,
+        });
+        addSuggestion({
+          category: "Prices",
+          label: peso(order.total_amount),
+          query: order.total_amount.toString(),
+        });
+      }
+    } else if (activeTab === "menu") {
+      menuItems.slice(0, 14).forEach((item) => {
+        addSuggestion({ category: "Menu Items", label: item.name, query: item.name });
+        addSuggestion({
+          category: "Categories",
+          label: normalizeSuggestion(item.category),
+          query: item.category,
+        });
+      });
+    } else if (activeTab === "inventory") {
+      inventoryItems.slice(0, 14).forEach((item) => {
+        addSuggestion({ category: "Inventory", label: item.name, query: item.name });
+        addSuggestion({
+          category: "Stock Status",
+          label: getInventoryStatus(item),
+          query: getInventoryStatus(item),
+        });
+      });
+    } else if (activeTab === "item-ranking" || activeTab === "satisfaction") {
+      itemRanking.slice(0, 12).forEach((item) =>
+        addSuggestion({ category: "Items", label: item.item, query: item.item })
+      );
+    } else if (activeTab === "peak-hours" || activeTab === "time-series") {
+      ["Peak Hours", "Hourly Order Volume", "5PM", "6PM", "7PM", "8PM"].forEach(
+        (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
+      );
+    } else if (activeTab === "customer-pref") {
+      orders.slice(0, 14).forEach((order) => {
+        addSuggestion({
+          category: "Customers",
+          label: getOrderDisplayName(order),
+          query: getOrderDisplayName(order),
+        });
+        formatOrderItems(order)
+          .split(",")
+          .map((item) => item.trim())
+          .forEach((item) =>
+            addSuggestion({ category: "Top Badges", label: item, query: item })
+          );
+      });
+    }
+
+    const keyword = search.trim().toLowerCase();
+    const numericOnly = /^\d+$/.test(keyword);
+
+    return suggestions
+      .filter((item) => !keyword || item.label.toLowerCase().includes(keyword))
+      .sort((first, second) => {
+        if (!numericOnly) return 0;
+
+        const firstNumeric = /\d/.test(first.label) ? -1 : 1;
+        const secondNumeric = /\d/.test(second.label) ? -1 : 1;
+
+        return firstNumeric - secondNumeric;
+      })
+      .slice(0, 8);
+  }, [activeTab, itemRanking, menuItems, orders, search]);
   const inventorySummary = {
     total: inventoryItems.length,
     normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Good Stock").length,
@@ -222,9 +591,58 @@ export function AdminDashboard() {
     critical: inventoryItems.filter((item) => getInventoryStatus(item) === "Critical").length,
   };
 
+  const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
+    setStoreStatus(status);
+    setStoreOverrideStatus(status.overrideStatus);
+    setStoreStatusError(
+      status.setupRequired ? "Run backend/seed/store-settings.sql in Supabase." : ""
+    );
+  }, []);
+
+  const loadStoreStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/store-status");
+      const result = (await response.json()) as StoreStatusPayload & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setStoreStatusError(result.error || "Failed to load store status.");
+        return;
+      }
+
+      applyStoreStatus(result);
+    } catch {
+      setStoreStatusError("Something went wrong while loading store status.");
+    }
+  }, [applyStoreStatus]);
+
   useEffect(() => {
     loadAdminData({ showLoading: true });
-  }, []);
+    loadStoreStatus();
+  }, [loadStoreStatus]);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel("admin-store-status-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "store_settings",
+        },
+        () => {
+          void loadStoreStatus();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadStoreStatus]);
 
   useEffect(() => {
     const shouldAutoSync =
@@ -242,7 +660,7 @@ export function AdminDashboard() {
 
     const intervalId = window.setInterval(() => {
       loadAdminData({ showLoading: false });
-    }, 20000);
+    }, 15000);
 
     return () => window.clearInterval(intervalId);
   }, [activeTab]);
@@ -306,15 +724,81 @@ export function AdminDashboard() {
     }
   }
 
+  async function handleStoreOverrideChange(overrideStatus: StoreOverrideStatus) {
+    setIsStoreStatusUpdating(true);
+    setStoreStatusError("");
+
+    try {
+      const response = await fetch("/api/store-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ overrideStatus }),
+      });
+      const result = (await response.json()) as StoreStatusPayload & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setStoreStatusError(result.error || "Failed to update store status.");
+        return;
+      }
+
+      applyStoreStatus(result);
+    } catch {
+      setStoreStatusError("Something went wrong while updating store status.");
+    } finally {
+      setIsStoreStatusUpdating(false);
+    }
+  }
+
+  function handleSearchSuggestionSelect(suggestion: AdminSearchSuggestion) {
+    setSearch(suggestion.query);
+    setIsSearchFocused(false);
+
+    if (suggestion.targetTab) {
+      setActiveTab(suggestion.targetTab);
+    }
+
+    if (suggestion.targetId) {
+      window.setTimeout(() => {
+        document
+          .getElementById(suggestion.targetId as string)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }
+  }
+
+  function handleTabSelect(tab: AdminTab) {
+    setActiveTab(tab);
+
+    if (window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
+      {isSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-[#0D2E18]/35 lg:hidden"
+        />
+      ) : null}
+
       <div
-        className={`grid min-h-screen transition-all duration-300 ${isSidebarOpen
-          ? "grid-cols-[190px_minmax(0,1fr)]"
-          : "grid-cols-[76px_minmax(0,1fr)]"
+        className={`min-h-screen transition-all duration-300 lg:grid ${isSidebarOpen
+          ? "lg:grid-cols-[190px_minmax(0,1fr)]"
+          : "lg:grid-cols-[76px_minmax(0,1fr)]"
           }`}
       >
-        <aside className="sticky top-0 flex h-screen flex-col overflow-hidden rounded-r-[26px] bg-[#0D2E18] text-[#FFF0DA]">
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[220px] flex-col overflow-hidden rounded-r-[26px] bg-[#0D2E18] text-[#FFF0DA] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
+        >
           <div
             className={`flex items-center gap-3 pt-9 ${isSidebarOpen ? "justify-between px-7" : "justify-center px-3"
               }`}
@@ -348,7 +832,7 @@ export function AdminDashboard() {
                 <button
                   key={tab.key}
                   type="button"
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleTabSelect(tab.key)}
                   title={tab.label}
                   className={`flex w-full items-center gap-3 px-4 py-2.5 text-left font-sans text-sm font-semibold leading-tight transition ${isActive
                     ? isSidebarOpen
@@ -384,54 +868,154 @@ export function AdminDashboard() {
         </aside>
 
         <section className="min-w-0">
-          <header className="border-b border-[#DCCFB8] bg-white">
-            <div className="flex flex-wrap items-center justify-between gap-4 px-7 py-4">
-              <label className="flex w-full max-w-[520px] items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3">
-                <Search size={18} className="text-[#6F7F69]" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search orders, customers, payments..."
-                  className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8D9C87]"
-                />
-              </label>
-
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end gap-1">
-                  <button
-                    type="button"
-                    onClick={() => loadAdminData({ showLoading: true })}
-                    disabled={isLoading}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#EDF6EA] disabled:opacity-60"
-                  >
-                    <RefreshCw size={16} />
-                    {isLoading ? "Syncing..." : "Sync latest"}
-                  </button>
-
-                  <p className="font-sans text-[11px] text-[#8C7A64]">
-                    Auto-syncs every 20s
-                    {lastSyncedAt
-                      ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}`
-                      : ""}
+          <header className="border-b border-[#DCCFB8] bg-white/88">
+            <div className="grid gap-4 px-7 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen(true)}
+                  aria-label="Open admin navigation"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white lg:hidden"
+                >
+                  <MenuIcon size={18} />
+                </button>
+                <div>
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                    Admin Dashboard
                   </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="h-11 w-11 rounded-full bg-[#D9D9D9]" />
-                  <div className="font-sans">
-                    <p className="text-sm font-semibold text-[#684B35]">
-                      Chrizelda P. Norial
-                    </p>
-                    <p className="text-[11px] text-[#8C7A64]">
-                      chrizeldanorial@gmail.com
-                    </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                      Dashboard Overview
+                    </h1>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        loadAdminData({ showLoading: true });
+                        void loadStoreStatus();
+                      }}
+                      disabled={isLoading}
+                      aria-label="Sync admin dashboard"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
+                    >
+                      <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+                    </button>
                   </div>
                 </div>
               </div>
+
+              <div className="flex items-center gap-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2.5 shadow-[0_8px_18px_rgba(13,46,24,0.06)]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0D2E18] font-sans text-sm font-black text-[#FFF0DA]">
+                  AD
+                </div>
+                <div className="min-w-[120px] font-sans">
+                  <p className="text-sm font-bold text-[#0D2E18]">Admin</p>
+                  <p className="text-[11px] text-[#8C7A64]">Owner Control</p>
+                </div>
+                <span className="h-9 w-px bg-[#DCCFB8]" />
+                <div className="font-sans">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                    Total Sales Today
+                  </p>
+                  <p className="text-xl font-black tabular-nums text-[#0D2E18]">
+                    {peso(totalSalesToday)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
+                <div className="relative w-full max-w-[260px]">
+                  <label className="flex h-10 items-center gap-2 rounded-[14px] bg-[#FFF0DA] px-3 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.42)]">
+                    <Search size={15} className="text-[#8C7A64]" />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setIsSearchFocused(false), 140);
+                      }}
+                      placeholder="Search records..."
+                      className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                    />
+                  </label>
+
+                  {isSearchFocused && searchSuggestions.length > 0 ? (
+                    <div className="absolute left-0 right-0 top-12 z-40 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-white shadow-[0_14px_28px_rgba(13,46,24,0.14)]">
+                      <p className="border-b border-[#EFE3CF] px-3 py-2 font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                        Suggested searches
+                      </p>
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        {searchSuggestions.map((suggestion) => (
+                          <button
+                            key={`${suggestion.category}-${suggestion.label}`}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handleSearchSuggestionSelect(suggestion)}
+                            className="block w-full px-3 py-2 text-left transition hover:bg-[#FFF0DA]"
+                          >
+                            <span className="block font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                              {suggestion.category}
+                            </span>
+                            <span className="block font-sans text-sm font-semibold text-[#0D2E18]">
+                              {suggestion.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold ${
+                      storeStatus?.effectiveStatus === "open"
+                        ? "bg-[#E9F5E7] text-[#0D2E18]"
+                        : storeStatus?.effectiveStatus === "busy"
+                        ? "bg-[#FFF0DA] text-[#684B35]"
+                        : "bg-[#FFF1EC] text-[#9C543D]"
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        storeStatus?.effectiveStatus === "open"
+                          ? "bg-[#0F441D]"
+                          : storeStatus?.effectiveStatus === "busy"
+                          ? "bg-[#684B35]"
+                          : "bg-[#9C543D]"
+                      }`}
+                    />
+                    {storeStatus?.label ?? "Loading"}
+                  </span>
+
+                  <select
+                    value={storeOverrideStatus}
+                    onChange={(event) =>
+                      handleStoreOverrideChange(
+                        event.target.value as StoreOverrideStatus
+                      )
+                    }
+                    disabled={isStoreStatusUpdating}
+                    aria-label="Master store status override"
+                    className="h-10 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="open">Force Open</option>
+                    <option value="busy">Busy</option>
+                    <option value="closed">Force Closed</option>
+                  </select>
+
+                </div>
+
+                <p className="font-sans text-[11px] text-[#8C7A64]">
+                  {syncMeta}
+                </p>
+              </div>
             </div>
+            {storeStatusError ? (
+              <p className="border-t border-[#F0DDC0] bg-[#FFF8EF] px-7 py-2 font-sans text-xs font-semibold text-[#9C543D]">
+                {storeStatusError}
+              </p>
+            ) : null}
           </header>
 
           <div className="px-7 py-6">
@@ -452,6 +1036,7 @@ export function AdminDashboard() {
                 nonCancelledOrders={nonCancelledOrders}
                 grossIncomeSales={grossIncomeSales}
                 averageRating={averageRating}
+                search={debouncedSearch}
                 weekdayCounts={weekdayCounts}
               />
             ) : null}
@@ -465,35 +1050,35 @@ export function AdminDashboard() {
 
             {activeTab === "time-series" ? (
               <TimeSeriesView
-                hourlyCounts={hourlyCounts}
-                maxHourlyOrders={maxHourlyOrders}
+                hourlyCounts={scopedHourlyCounts}
+                maxHourlyOrders={maxScopedHourlyOrders}
               />
             ) : null}
 
-            {activeTab === "peak-hours" ? <PeakHoursView orders={orders} /> : null}
+            {activeTab === "peak-hours" ? <PeakHoursView orders={scopedPeakHourOrders} /> : null}
 
             {activeTab === "item-ranking" ? (
               <ItemRankingView
-                itemRanking={itemRanking}
-                maxItemOrders={maxItemOrders}
+                itemRanking={scopedItemRanking}
+                maxItemOrders={maxScopedItemOrders}
               />
             ) : null}
 
             {activeTab === "satisfaction" ? (
-              <SatisfactionView itemRanking={itemRanking} />
+              <SatisfactionView itemRanking={scopedItemRanking} />
             ) : null}
 
             {activeTab === "customer-pref" ? (
-              <CustomerPreferenceView orders={orders} />
+              <CustomerPreferenceView orders={scopedCustomerPreferenceOrders} />
             ) : null}
 
             {activeTab === "menu" ? (
-              <MenuView menuItems={menuItems} setMenuItems={setMenuItems} />
+              <MenuView menuItems={scopedMenuItems} setMenuItems={setMenuItems} />
             ) : null}
 
             {activeTab === "inventory" ? (
               <InventoryView
-                inventoryItems={inventoryItems}
+                inventoryItems={scopedInventoryItems}
                 inventorySummary={inventorySummary}
               />
             ) : null}
