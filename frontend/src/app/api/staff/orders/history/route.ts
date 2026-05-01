@@ -14,6 +14,7 @@ type CustomerProfile = {
 };
 type HistoryOrderItem = {
   id: string;
+  order_id: string;
   quantity: number;
   unit_price: number;
   sugar_level: number;
@@ -41,6 +42,25 @@ type EnrichedHistoryOrder = {
   delivery_phone: string | null;
   customer_profile: CustomerProfile | null;
   order_items: HistoryOrderItem[];
+};
+type AdminHistoryOrderRow = {
+  id: string;
+  customer_id: string | null;
+  order_type: string;
+  status: string;
+  payment_method: string | null;
+  payment_status: string | null;
+  total_amount: number;
+  ordered_at: string;
+  walkin_name: string | null;
+  delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  delivery_email: string | null;
+  delivery_phone: string | null;
+  customer_full_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
 };
 
 function isUuid(value: string) {
@@ -142,6 +162,12 @@ function getOrderPhone(order: {
   return order.delivery_phone || order.customer_profile?.phone || "";
 }
 
+function normalizeMenuItem(
+  menuItem: HistoryOrderItem["menu_items"]
+): { name: string } | null {
+  return Array.isArray(menuItem) ? menuItem[0] ?? null : menuItem;
+}
+
 function buildCsv(orders: EnrichedHistoryOrder[]) {
   const rows = [
     [
@@ -226,23 +252,8 @@ export async function GET(request: Request) {
     );
     const dateBounds = getDateBounds(range, customFrom, customTo);
 
-    let matchingProfileIds: string[] = [];
-
-    if (search) {
-      const searchPattern = `%${search}%`;
-      const { data: matchingProfiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .or(
-          `full_name.ilike.${searchPattern},phone.ilike.${searchPattern},email.ilike.${searchPattern}`
-        )
-        .limit(100);
-
-      matchingProfileIds = matchingProfiles?.map((item) => item.id) ?? [];
-    }
-
     let query = supabase
-      .from("orders")
+      .from("admin_orders_view")
       .select(
         `
           id,
@@ -259,20 +270,9 @@ export async function GET(request: Request) {
           delivery_lng,
           delivery_email,
           delivery_phone,
-          order_items (
-            id,
-            quantity,
-            unit_price,
-            sugar_level,
-            ice_level,
-            size,
-            temperature,
-            addons,
-            special_instructions,
-            menu_items (
-              name
-            )
-          )
+          customer_full_name,
+          customer_email,
+          customer_phone
         `,
         { count: "exact" }
       )
@@ -289,9 +289,9 @@ export async function GET(request: Request) {
         `walkin_name.ilike.%${search}%`,
         `delivery_phone.ilike.%${search}%`,
         `delivery_email.ilike.%${search}%`,
-        ...(matchingProfileIds.length > 0
-          ? [`customer_id.in.(${matchingProfileIds.join(",")})`]
-          : []),
+        `customer_full_name.ilike.%${search}%`,
+        `customer_phone.ilike.%${search}%`,
+        `customer_email.ilike.%${search}%`,
       ];
 
       query = query.or(filters.join(","));
@@ -299,45 +299,81 @@ export async function GET(request: Request) {
 
     const from = isCsv ? 0 : page * pageSize;
     const to = isCsv ? maxCsvRows - 1 : from + pageSize - 1;
-    const { data: orders, error, count } = await query.range(from, to);
+    const { data: orders, error, count } = await query
+      .range(from, to)
+      .returns<AdminHistoryOrderRow[]>();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const customerIds = Array.from(
-      new Set(
-        (orders ?? [])
-          .map((order) => order.customer_id)
-          .filter((id): id is string => Boolean(id))
-      )
-    );
-    const customerProfilesById = new Map<
-      string,
-      { full_name: string | null; email: string | null; phone: string | null }
-    >();
+    const orderIds = (orders ?? []).map((order) => order.id);
+    const { data: orderItems, error: orderItemsError } = orderIds.length
+      ? await supabase
+          .from("order_items")
+          .select(
+            `
+              id,
+              order_id,
+              quantity,
+              unit_price,
+              sugar_level,
+              ice_level,
+              size,
+              temperature,
+              addons,
+              special_instructions,
+              menu_items (
+                name
+              )
+            `
+          )
+          .in("order_id", orderIds)
+          .returns<HistoryOrderItem[]>()
+      : { data: [], error: null };
 
-    if (customerIds.length > 0) {
-      const { data: customerProfiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, phone")
-        .in("id", customerIds);
-
-      customerProfiles?.forEach((customerProfile) => {
-        customerProfilesById.set(customerProfile.id, {
-          full_name: customerProfile.full_name,
-          email: customerProfile.email,
-          phone: customerProfile.phone,
-        });
-      });
+    if (orderItemsError) {
+      return NextResponse.json(
+        { error: orderItemsError.message },
+        { status: 500 }
+      );
     }
+
+    const orderItemsByOrderId = new Map<string, HistoryOrderItem[]>();
+
+    (orderItems ?? []).forEach((item) => {
+      const currentItems = orderItemsByOrderId.get(item.order_id) ?? [];
+      currentItems.push(item);
+      orderItemsByOrderId.set(item.order_id, currentItems);
+    });
 
     const enrichedOrders =
       orders?.map((order) => ({
-        ...order,
+        id: order.id,
+        customer_id: order.customer_id,
+        order_type: order.order_type,
+        status: order.status,
+        payment_method: order.payment_method,
+        payment_status: order.payment_status,
+        total_amount: order.total_amount,
+        ordered_at: order.ordered_at,
+        walkin_name: order.walkin_name,
+        delivery_address: order.delivery_address,
+        delivery_lat: order.delivery_lat,
+        delivery_lng: order.delivery_lng,
+        delivery_email: order.delivery_email,
+        delivery_phone: order.delivery_phone,
         customer_profile: order.customer_id
-          ? customerProfilesById.get(order.customer_id) ?? null
+          ? {
+              full_name: order.customer_full_name,
+              email: order.customer_email,
+              phone: order.customer_phone,
+            }
           : null,
+        order_items: (orderItemsByOrderId.get(order.id) ?? []).map((item) => ({
+          ...item,
+          menu_items: normalizeMenuItem(item.menu_items),
+        })),
       })) ?? [];
 
     if (isCsv) {

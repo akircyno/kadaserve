@@ -93,9 +93,11 @@ function Panel({
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[12px] bg-[#F7FBF5] p-5 text-center">
-      <p className="font-sans text-sm text-[#684B35]">{label}</p>
-      <p className="mt-2 font-sans text-lg font-bold">{value}</p>
+    <div>
+      <p className="font-sans text-xs text-[#684B35]">{label}</p>
+      <p className="mt-1 font-sans text-xl font-semibold text-[#0D2E18]">
+        {value}
+      </p>
     </div>
   );
 }
@@ -167,55 +169,87 @@ export function TimeSeriesView({
     : 0;
 
   return (
-    <div className="space-y-5">
-      <h1 className="font-sans text-3xl font-bold uppercase tracking-[0.06em]">
+    <div className="space-y-8 lg:space-y-10">
+      <h1 className="font-display text-2xl font-bold text-[#0D2E18] sm:text-3xl">
         Time Series Analytics
       </h1>
-      <Panel title="Hourly Order Volume">
-        <div className="mt-36 flex items-end gap-4 overflow-x-auto pb-2">
+
+      <section>
+        <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
+          Hourly Order Volume
+        </h2>
+        <div className="mt-16 flex min-w-0 items-end gap-3 overflow-x-auto pb-3 sm:mt-24 sm:gap-4 lg:mt-32">
           {hourlyCounts.map((item) => (
-            <div key={item.label} className="flex min-w-[62px] flex-col items-center gap-2">
-              <p className="font-sans text-sm text-[#0D2E18]">{item.orders}</p>
+            <div
+              key={item.label}
+              className="flex min-w-[48px] flex-col items-center gap-2 sm:min-w-[62px]"
+            >
+              <p
+                className={`font-sans text-sm ${
+                  item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
+                }`}
+              >
+                {item.orders}
+              </p>
               <div
-                className="w-12 rounded-full bg-[#0D2E18]"
+                className="w-9 rounded-full sm:w-12"
                 style={{
-                  height: `${Math.max(10, (item.orders / maxHourlyOrders) * 60)}px`,
+                  backgroundColor: item.orders === 0 ? "rgba(13,46,24,0.18)" : "#0D2E18",
+                  height: `${Math.max(8, (item.orders / maxHourlyOrders) * 72)}px`,
                 }}
               />
               <p className="font-sans text-sm text-[#0D2E18]">{item.label}</p>
             </div>
           ))}
         </div>
-      </Panel>
+      </section>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Statistics">
-          <div className="grid gap-5 p-6 sm:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-[0.72fr_1fr] xl:gap-12">
+        <section>
+          <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
+            Statistics
+          </h2>
+          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 sm:gap-x-10">
             <MiniStat label="Peak" value={`${peak.orders} orders`} />
             <MiniStat label="Low" value={`${low} orders`} />
             <MiniStat label="Avg" value={`${avg} orders`} />
             <MiniStat label="Total" value={`${total} orders`} />
           </div>
-        </Panel>
-        <Panel title="Data Table">
-          <div className="mt-4 grid grid-cols-3 gap-4 px-4 font-sans text-sm font-bold text-[#684B35]">
-            <span>Period</span>
-            <span>Orders</span>
-            <span>Trend</span>
+        </section>
+
+        <section>
+          <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
+            Data Table
+          </h2>
+          <div className="mt-5 overflow-x-auto">
+            <div className="min-w-[360px]">
+              <div className="grid grid-cols-3 gap-4 border-b border-[#0D2E18]/10 pb-2 font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C7A64]">
+                <span>Period</span>
+                <span>Orders</span>
+                <span>Trend</span>
+              </div>
+              <div>
+                {hourlyCounts.slice(0, 8).map((item, index, list) => {
+                  const previous = list[index - 1]?.orders ?? item.orders;
+                  return (
+                    <div
+                      key={item.label}
+                      className="grid grid-cols-3 gap-4 border-b border-[#0D2E18]/10 py-3 font-sans text-sm text-[#0D2E18]"
+                    >
+                      <span className="font-semibold">{item.label}</span>
+                      <span className="font-semibold tabular-nums">
+                        {item.orders}
+                      </span>
+                      <span className="text-[#684B35]">
+                        {item.orders >= previous ? "Up" : "Down"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          <div className="mt-3 space-y-3 px-4 pb-4">
-            {hourlyCounts.slice(0, 8).map((item, index, list) => {
-              const previous = list[index - 1]?.orders ?? item.orders;
-              return (
-                <div key={item.label} className="grid grid-cols-3 gap-4 font-sans text-sm">
-                  <span>{item.label}</span>
-                  <span>{item.orders}</span>
-                  <span>{item.orders >= previous ? "Up" : "Down"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
+        </section>
       </div>
     </div>
   );
