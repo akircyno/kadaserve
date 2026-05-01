@@ -117,7 +117,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("role")
+      .select("full_name, email, phone, role")
       .eq("id", user.id)
       .single();
 
@@ -197,7 +197,15 @@ export async function GET() {
         return first.name.localeCompare(second.name);
       });
 
-    return NextResponse.json({ menuItems: staffMenuItems });
+    return NextResponse.json({
+      menuItems: staffMenuItems,
+      staffProfile: {
+        fullName: profile.full_name,
+        email: profile.email,
+        phone: profile.phone,
+        role: profile.role,
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {

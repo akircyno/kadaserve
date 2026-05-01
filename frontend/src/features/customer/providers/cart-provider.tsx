@@ -54,6 +54,7 @@ function readStoredItems(isAuthenticated: boolean) {
 function buildSignature(item: AddCartItemInput) {
   return JSON.stringify({
     menu_item_id: item.menu_item_id,
+    category: item.category,
     sugar_level: item.sugar_level,
     ice_level: item.ice_level,
     size: item.size,
@@ -96,6 +97,7 @@ export function CartProvider({
           buildSignature({
             menu_item_id: currentItem.menu_item_id,
             name: currentItem.name,
+            category: currentItem.category,
             base_price: currentItem.base_price,
             quantity: currentItem.quantity,
             sugar_level: currentItem.sugar_level,

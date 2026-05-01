@@ -65,6 +65,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addItem, updateItem, getItemById } = useCart();
+  const isPastry = menuItem.category === "pastries";
 
   const cartItemId = searchParams.get("cartItemId");
   const editingItem = cartItemId ? getItemById(cartItemId) : undefined;
@@ -102,8 +103,12 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const sizeCharge = selectedSize?.price ?? 0;
 
   const total = useMemo(() => {
+    if (isPastry) {
+      return menuItem.base_price * quantity;
+    }
+
     return (menuItem.base_price + addonTotal + sizeCharge) * quantity;
-  }, [addonTotal, menuItem.base_price, quantity, sizeCharge]);
+  }, [addonTotal, isPastry, menuItem.base_price, quantity, sizeCharge]);
 
   function toggleAddon(value: string) {
     setSelectedAddons((current) =>
@@ -117,15 +122,16 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
     const payload = {
       menu_item_id: menuItem.id,
       name: menuItem.name,
+      category: menuItem.category,
       base_price: menuItem.base_price,
       quantity,
-      sugar_level: sugarLevel,
-      ice_level: menuItem.has_ice_level ? iceLevel : null,
-      size,
-      temperature,
-      addons: selectedAddons,
-      addon_price: addonTotal + sizeCharge,
-      special_instructions: specialInstructions.trim(),
+      sugar_level: isPastry ? 100 : sugarLevel,
+      ice_level: isPastry || !menuItem.has_ice_level ? null : iceLevel,
+      size: isPastry ? "regular" : size,
+      temperature: isPastry ? "room" : temperature,
+      addons: isPastry ? [] : selectedAddons,
+      addon_price: isPastry ? 0 : addonTotal + sizeCharge,
+      special_instructions: isPastry ? "" : specialInstructions.trim(),
       image_url: menuItem.image_url,
     };
 
@@ -171,13 +177,20 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
               <div className="flex-1">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6D7A61]">
-                  {isEditing ? "Edit Cart Item" : "Customize Order"}
+                  {isPastry
+                    ? isEditing
+                      ? "Edit Cart Item"
+                      : "Add Pastry"
+                    : isEditing
+                    ? "Edit Cart Item"
+                    : "Customize Order"}
                 </p>
                 <h1 className="mt-2 text-4xl font-black tracking-tight">
                   {menuItem.name}
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[#6F634E]">
-                  {menuItem.description ?? "Freshly prepared drink."}
+                  {menuItem.description ??
+                    (isPastry ? "Freshly prepared pastry." : "Freshly prepared drink.")}
                 </p>
                 <div className="mt-4 flex items-center gap-3">
                   <span className="text-3xl font-black text-[#765531]">
@@ -199,7 +212,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
           <div className="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-[1.3fr_0.9fr]">
             <div className="space-y-6">
-              {menuItem.has_sugar_level && (
+              {!isPastry && menuItem.has_sugar_level && (
                 <div>
                   <h2 className="text-lg font-bold">Sugar Level</h2>
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -221,7 +234,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 </div>
               )}
 
-              {menuItem.has_ice_level && (
+              {!isPastry && menuItem.has_ice_level && (
                 <div>
                   <h2 className="text-lg font-bold">Ice Level</h2>
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -243,7 +256,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 </div>
               )}
 
-              {menuItem.has_size_option && (
+              {!isPastry && menuItem.has_size_option && (
                 <div>
                   <h2 className="text-lg font-bold">Size</h2>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -268,7 +281,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 </div>
               )}
 
-              {menuItem.has_temp_option && (
+              {!isPastry && menuItem.has_temp_option && (
                 <div>
                   <h2 className="text-lg font-bold">Temperature</h2>
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -290,6 +303,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 </div>
               )}
 
+              {!isPastry ? (
               <div>
                 <h2 className="text-lg font-bold">Add-ons</h2>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -314,7 +328,9 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   })}
                 </div>
               </div>
+              ) : null}
 
+              {!isPastry ? (
               <div>
                 <h2 className="text-lg font-bold">Special Instructions</h2>
                 <textarea
@@ -324,6 +340,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   className="mt-3 min-h-28 w-full rounded-[20px] border border-[#CDBD9E] bg-white/70 px-4 py-3 outline-none placeholder:text-[#8D856F]"
                 />
               </div>
+              ) : null}
             </div>
 
             <aside className="h-fit rounded-[24px] border border-[#D9C9A7] bg-white/70 p-5">
@@ -336,12 +353,12 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-[#6F634E]">Size Charge</span>
-                <span className="font-bold">{peso(sizeCharge)}</span>
+                <span className="font-bold">{peso(isPastry ? 0 : sizeCharge)}</span>
               </div>
 
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-[#6F634E]">Add-ons</span>
-                <span className="font-bold">{peso(addonTotal)}</span>
+                <span className="font-bold">{peso(isPastry ? 0 : addonTotal)}</span>
               </div>
 
               <div className="mt-5">

@@ -72,7 +72,6 @@ type CustomerDashboardProps = {
     fullName: string;
     email: string | null;
     phone: string | null;
-    defaultDeliveryAddress: string | null;
     avatarUrl: string | null;
     satisfactionAverage: number | null;
   };
@@ -346,6 +345,10 @@ function getMenuImage(item: CustomerMenuItem) {
   }
 
   return localMenuImages[normalizeText(item.name)] ?? null;
+}
+
+function isPastryMenuItem(item: Pick<CustomerMenuItem, "category">) {
+  return item.category === "pastries";
 }
 
 function getFilter(category: string): Filter {
@@ -741,6 +744,11 @@ export function CustomerDashboard({
   const [activePromoIndex, setActivePromoIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCartTrayOpen, setIsCartTrayOpen] = useState(false);
+  const [quickAddFeedback, setQuickAddFeedback] = useState<{
+    itemId: string;
+    name: string;
+  } | null>(null);
+  const [isCartPulseActive, setIsCartPulseActive] = useState(false);
   const [guestActionMessage, setGuestActionMessage] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -787,9 +795,6 @@ export function CustomerDashboard({
     useState(profileName);
   const [profilePhoneDraft, setProfilePhoneDraft] = useState(
     formatProfilePhone(customerProfile?.phone ?? "")
-  );
-  const [profileAddressDraft, setProfileAddressDraft] = useState(
-    customerProfile?.defaultDeliveryAddress ?? ""
   );
   const [profileLanguage, setProfileLanguage] = useState<"English" | "Filipino">(
     "English"
@@ -877,10 +882,6 @@ export function CustomerDashboard({
   }, [customerProfile?.phone]);
 
   useEffect(() => {
-    setProfileAddressDraft(customerProfile?.defaultDeliveryAddress ?? "");
-  }, [customerProfile?.defaultDeliveryAddress]);
-
-  useEffect(() => {
     const syncTrackingOrderFromUrl = () => {
       const orderId = new URLSearchParams(window.location.search).get("orderId");
       setTrackingOrderId(orderId);
@@ -908,6 +909,24 @@ export function CustomerDashboard({
     );
     setRewardWallet(readRewardWallet());
   }, []);
+
+  useEffect(() => {
+    if (!quickAddFeedback) {
+      return;
+    }
+
+    const feedbackTimeoutId = window.setTimeout(() => {
+      setQuickAddFeedback(null);
+    }, 1100);
+    const pulseTimeoutId = window.setTimeout(() => {
+      setIsCartPulseActive(false);
+    }, 700);
+
+    return () => {
+      window.clearTimeout(feedbackTimeoutId);
+      window.clearTimeout(pulseTimeoutId);
+    };
+  }, [quickAddFeedback]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1109,17 +1128,13 @@ export function CustomerDashboard({
       } until your free drink voucher!`;
   const normalizedProfileName = profileFullNameDraft.trim();
   const normalizedProfilePhone = getPhoneDigits(profilePhoneDraft);
-  const normalizedProfileAddress = profileAddressDraft.trim();
   const isProfileSettingsDirty =
     normalizedProfileName !== profileName ||
-    normalizedProfilePhone !== getPhoneDigits(customerProfile?.phone ?? "") ||
-    normalizedProfileAddress !==
-      (customerProfile?.defaultDeliveryAddress ?? "").trim();
+    normalizedProfilePhone !== getPhoneDigits(customerProfile?.phone ?? "");
   const canSaveProfileSettings =
     isProfileSettingsDirty &&
     isValidProfileName(normalizedProfileName) &&
     isValidOptionalPhone(profilePhoneDraft) &&
-    normalizedProfileAddress.length <= 180 &&
     !isSavingProfile;
   const tasteProfile = useMemo(
     () => getTasteProfile(customerOrders),
@@ -1354,6 +1369,13 @@ export function CustomerDashboard({
 
     const menuItem = uniqueMenuItems.find((item) => item.id === customizeId);
 
+    if (menuItem?.is_available && isPastryMenuItem(menuItem)) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("customize");
+      window.history.replaceState(null, "", url);
+      return;
+    }
+
     if (menuItem?.is_available) {
       resetCustomization(menuItem);
       setSelectedMenuItem(menuItem);
@@ -1395,6 +1417,11 @@ export function CustomerDashboard({
       return;
     }
 
+    if (isPastryMenuItem(item)) {
+      handleQuickAdd(item);
+      return;
+    }
+
     resetCustomization(item);
     setSelectedMenuItem(item);
 
@@ -1432,6 +1459,7 @@ export function CustomerDashboard({
     addItem({
       menu_item_id: selectedMenuItem.id,
       name: selectedMenuItem.name,
+      category: selectedMenuItem.category,
       base_price: selectedMenuItem.base_price,
       quantity,
       sugar_level: selectedMenuItem.has_sugar_level === false ? 100 : sugarLevel,
@@ -1464,6 +1492,7 @@ export function CustomerDashboard({
     addItem({
       menu_item_id: item.id,
       name: item.name,
+      category: item.category,
       base_price: item.base_price,
       quantity: 1,
       sugar_level: item.has_sugar_level === false ? 100 : 50,
@@ -1477,6 +1506,9 @@ export function CustomerDashboard({
     });
 
     navigator.vibrate?.(18);
+    setQuickAddFeedback({ itemId: item.id, name: item.name });
+    setIsCartTrayOpen(true);
+    setIsCartPulseActive(true);
   }
 
   function handleRatingChange(
@@ -1500,6 +1532,7 @@ export function CustomerDashboard({
       addItem({
         menu_item_id: item.menu_items.id ?? item.id,
         name: item.menu_items.name,
+        category: item.menu_items.category,
         base_price: item.unit_price,
         quantity: item.quantity,
         sugar_level: 50,
@@ -1603,7 +1636,6 @@ export function CustomerDashboard({
         body: JSON.stringify({
           fullName: normalizedProfileName,
           phone: normalizedProfilePhone,
-          defaultDeliveryAddress: normalizedProfileAddress,
         }),
       });
 
@@ -1618,7 +1650,6 @@ export function CustomerDashboard({
 
       setDisplayProfileName(result.profile?.fullName ?? normalizedProfileName);
       setProfilePhoneDraft(formatProfilePhone(result.profile?.phone ?? ""));
-      setProfileAddressDraft(result.profile?.defaultDeliveryAddress ?? "");
       setProfileSettingsMessage("Profile changes saved.");
       router.refresh();
     } catch {
@@ -2072,12 +2103,19 @@ export function CustomerDashboard({
                   <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {recommendedItems.slice(0, 5).map(({ item, reason, score }) => {
                       const menuImage = getMenuImage(item);
+                      const isQuickAdded = quickAddFeedback?.itemId === item.id;
 
                       return (
                         <article
                           key={item.id}
                           className="relative flex w-[270px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-white text-[#123E26] shadow-[0_8px_20px_rgba(13,46,24,0.08)]"
                         >
+                          {isQuickAdded ? (
+                            <div className="absolute inset-x-3 top-3 z-20 flex animate-bounce items-center justify-center gap-1.5 rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
+                              <CheckCircle2 size={14} />
+                              Added to cart
+                            </div>
+                          ) : null}
                           <div className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl">
                             {menuImage ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -2159,20 +2197,29 @@ export function CustomerDashboard({
                   >
                     {recommendedItems.slice(0, 3).map(({ item, reason, score }, index) => {
                       const menuImage = getMenuImage(item);
+                      const isQuickAdded = quickAddFeedback?.itemId === item.id;
 
                       return (
                         <article
                           key={item.id}
                           className="relative flex w-[240px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-[#FFF8EF] text-[#123E26] shadow-[0_8px_18px_rgba(0,0,0,0.12)] sm:w-[270px]"
                         >
-                          <button
-                            type="button"
-                            onClick={() => openCustomizeModal(item)}
-                            aria-label={`Customize ${item.name}`}
-                            className="absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
-                          >
-                            <SlidersHorizontal size={16} />
-                          </button>
+                          {isQuickAdded ? (
+                            <div className="absolute inset-x-3 top-3 z-20 flex animate-bounce items-center justify-center gap-1.5 rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
+                              <CheckCircle2 size={14} />
+                              Added to cart
+                            </div>
+                          ) : null}
+                          {!isPastryMenuItem(item) ? (
+                            <button
+                              type="button"
+                              onClick={() => openCustomizeModal(item)}
+                              aria-label={`Customize ${item.name}`}
+                              className="absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
+                            >
+                              <SlidersHorizontal size={16} />
+                            </button>
+                          ) : null}
 
                           <div className="flex aspect-[9/16] w-20 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-3xl">
                             {menuImage ? (
@@ -2271,18 +2318,42 @@ export function CustomerDashboard({
                         <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
                           {group.items.map((item) => {
                             const menuImage = getMenuImage(item);
+                            const isQuickAdded = quickAddFeedback?.itemId === item.id;
 
                             return (
                       <article
                         key={item.id}
-                        className="min-w-0 text-center"
+                        className="relative min-w-0 text-center"
                       >
+                        {isQuickAdded ? (
+                          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 animate-bounce items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
+                            <CheckCircle2 size={14} />
+                            Added
+                          </div>
+                        ) : null}
                         <button
                           type="button"
-                          onClick={() => item.is_available && openCustomizeModal(item)}
+                          onClick={() => {
+                            if (!item.is_available) {
+                              return;
+                            }
+
+                            if (isPastryMenuItem(item)) {
+                              handleQuickAdd(item);
+                              return;
+                            }
+
+                            openCustomizeModal(item);
+                          }}
                           disabled={!item.is_available}
                           className="group w-full disabled:cursor-not-allowed"
-                          aria-label={`${item.is_available ? "Customize" : "Unavailable"} ${item.name}`}
+                          aria-label={`${
+                            !item.is_available
+                              ? "Unavailable"
+                              : isPastryMenuItem(item)
+                              ? "Add"
+                              : "Customize"
+                          } ${item.name}`}
                         >
                           <div className="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center overflow-hidden rounded-full bg-[#F1E7D2] p-2 text-4xl transition group-hover:bg-[#E7F1E6]">
                             {menuImage ? (
@@ -3943,68 +4014,6 @@ export function CustomerDashboard({
                   </span>
                 </div>
 
-                <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                        Payment Status
-                      </p>
-                      <p className="mt-1 font-sans text-xl font-black text-[#0D2E18]">
-                        {trackingOrder.payment_status === "paid"
-                          ? "Paid"
-                          : "Unpaid"}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-3 py-1.5 font-sans text-xs font-bold ${
-                        trackingOrder.payment_status === "paid"
-                          ? "bg-[#E9F5E7] text-[#0F441D]"
-                          : "bg-[#FFF0DA] text-[#684B35]"
-                      }`}
-                    >
-                      {trackingOrder.payment_method === "gcash"
-                        ? "GCash"
-                        : trackingOrder.payment_method === "cash"
-                        ? "Cash"
-                        : "Payment pending"}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border font-sans text-[11px] font-black ${
-                        trackingOrder.payment_status === "paid"
-                          ? "border-[#0F441D] bg-[#0F441D] text-[#FFF0DA]"
-                          : "border-[#684B35] bg-[#684B35] text-[#FFF0DA]"
-                      }`}
-                    >
-                      1
-                    </span>
-                    <span
-                      className={`h-1 rounded-full ${
-                        trackingOrder.payment_status === "paid"
-                          ? "bg-[#0F441D]"
-                          : "bg-[#DCCFB8]"
-                      }`}
-                    />
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border font-sans text-[11px] font-black ${
-                        trackingOrder.payment_status === "paid"
-                          ? "border-[#0F441D] bg-[#0F441D] text-[#FFF0DA]"
-                          : "border-[#DCCFB8] bg-white text-[#9A856C]"
-                      }`}
-                    >
-                      2
-                    </span>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-2 font-sans text-xs font-bold text-[#6F634E]">
-                    <span>Unpaid</span>
-                    <span className="text-right">Paid</span>
-                  </div>
-                </div>
-
                 <div className="mt-5 grid grid-cols-5 gap-2">
                   {getTrackingSteps(trackingOrder.order_type).map(
                     (step, index) => {
@@ -4105,6 +4114,30 @@ export function CustomerDashboard({
                       {formatStatus(trackingOrder.status)}
                     </span>
                   </div>
+
+                  <div
+                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${
+                      trackingOrder.payment_status === "paid"
+                        ? "bg-[#E9F5E7] text-[#2D7A40]"
+                        : "bg-[#FFF0DA] text-[#684B35]"
+                    }`}
+                  >
+                    Payment status:{" "}
+                    <span className="font-black">
+                      {trackingOrder.payment_status === "paid"
+                        ? "Paid"
+                        : "Unpaid"}
+                    </span>
+                  </div>
+
+                  {trackingOrder.payment_status === "paid" ||
+                  ["out_for_delivery", "delivered"].includes(
+                    trackingOrder.status
+                  ) ? (
+                    <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">
+                      Check your email for the latest Kada Cafe PH update.
+                    </div>
+                  ) : null}
                 </section>
               </div>
             </div>
@@ -4359,23 +4392,6 @@ export function CustomerDashboard({
                     ) : null}
                   </label>
 
-                  <label className="block">
-                    <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                      Default Address
-                    </span>
-                    <textarea
-                      value={profileAddressDraft}
-                      onChange={(event) =>
-                        setProfileAddressDraft(event.target.value.slice(0, 180))
-                      }
-                      rows={3}
-                      placeholder="Add a delivery address"
-                      className="mt-1 w-full resize-none rounded-[14px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5 font-sans text-sm text-[#0D2E18] outline-none focus:border-[#0F441D]"
-                    />
-                    <span className="mt-1 block text-right font-sans text-[11px] text-[#8A755D]">
-                      {normalizedProfileAddress.length}/180
-                    </span>
-                  </label>
                 </div>
               </section>
 
@@ -4603,13 +4619,19 @@ export function CustomerDashboard({
       </aside>
 
       {isCartTrayOpen ? (
-        <section className="fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px]">
+        <section
+          className={`fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur transition duration-300 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] ${
+            isCartPulseActive ? "scale-[1.03] ring-4 ring-[#F8EBCF]" : ""
+          }`}
+        >
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setIsCartTrayOpen(false)}
               aria-label="Collapse cart"
-              className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)]"
+              className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)] ${
+                isCartPulseActive ? "animate-bounce" : ""
+              }`}
             >
               <ShoppingCart size={20} />
               <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 font-sans text-[11px] font-black text-white">
@@ -4659,7 +4681,9 @@ export function CustomerDashboard({
             setIsCartTrayOpen(true);
           }}
           aria-label="Open cart"
-          className="fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] sm:bottom-6 sm:right-6"
+          className={`fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] transition duration-300 sm:bottom-6 sm:right-6 ${
+            isCartPulseActive ? "animate-bounce ring-4 ring-[#F8EBCF]" : ""
+          }`}
         >
           <ShoppingCart size={25} />
           {cartCount > 0 ? (

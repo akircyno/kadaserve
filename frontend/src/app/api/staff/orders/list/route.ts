@@ -45,6 +45,8 @@ export async function GET() {
           ordered_at,
           walkin_name,
           delivery_address,
+          delivery_lat,
+          delivery_lng,
           delivery_email,
           delivery_phone,
           order_items (

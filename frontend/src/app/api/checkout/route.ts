@@ -50,6 +50,29 @@ function isMissingStoreSettingsTable(error: { message?: string; code?: string } 
   );
 }
 
+function getOptionalCoordinate(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function isValidLatLng(lat: number | null, lng: number | null) {
+  if (lat === null && lng === null) {
+    return true;
+  }
+
+  return (
+    lat !== null &&
+    lng !== null &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -101,6 +124,8 @@ export async function POST(request: Request) {
     const paymentMethod = body.paymentMethod as "cash" | "gcash";
     const deliveryAddress =
       typeof body.deliveryAddress === "string" ? body.deliveryAddress.trim() : "";
+    const deliveryLat = getOptionalCoordinate(body.deliveryLat);
+    const deliveryLng = getOptionalCoordinate(body.deliveryLng);
     const voucherCode = typeof body.voucherCode === "string" ? body.voucherCode : "";
 
     const { data: profile } = await supabase
@@ -134,6 +159,13 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+
+      if (!isValidLatLng(deliveryLat, deliveryLng)) {
+        return NextResponse.json(
+          { error: "Use a valid delivery pin location." },
+          { status: 400 }
+        );
+      }
     }
 
     const subtotal = items.reduce((sum, item) => {
@@ -151,6 +183,8 @@ export async function POST(request: Request) {
         payment_status: "unpaid",
         total_amount: totalAmount,
         delivery_address: orderType === "delivery" ? deliveryAddress : null,
+        delivery_lat: orderType === "delivery" ? deliveryLat : null,
+        delivery_lng: orderType === "delivery" ? deliveryLng : null,
         delivery_email:
           orderType === "delivery" ? profile?.email || user.email || null : null,
         delivery_phone: orderType === "delivery" ? profile?.phone || null : null,
