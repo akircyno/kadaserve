@@ -85,7 +85,7 @@ const dashboardRows = [
   { item: "Red Velvet Cookie", orders: 22, score: "0.74" },
 ];
 
-export default function LandingPage() {
+export function LandingPage() {
   return (
     <div className="min-h-screen overflow-hidden bg-[#FFF0DA] font-sans text-[#0D2E18] selection:bg-[#0F441D] selection:text-white">
       <LandingNavbar />
