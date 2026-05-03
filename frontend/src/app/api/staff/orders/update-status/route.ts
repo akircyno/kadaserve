@@ -439,7 +439,13 @@ export async function POST(request: Request) {
     }
 
     if (action === "mark_paid") {
-      const shouldSendReceipt = order.payment_status !== "paid";
+      if (order.status !== "out_for_delivery") {
+        return NextResponse.json(
+          { error: "Payment can only be marked paid when the order is out for delivery." },
+          { status: 400 }
+        );
+      }
+
       const { error: paymentError } = await supabase
         .from("orders")
         .update({ payment_status: "paid" })
@@ -452,18 +458,10 @@ export async function POST(request: Request) {
         );
       }
 
-      const receiptSent = shouldSendReceipt
-        ? await triggerPaymentReceiptNotification(
-            orderId,
-            supabase,
-            new URL(request.url).origin
-          )
-        : false;
-
       return NextResponse.json({
         success: true,
         paymentStatus: "paid",
-        receiptSent,
+        receiptSent: false,
       });
     }
 
@@ -494,7 +492,7 @@ export async function POST(request: Request) {
 
     if (
       paymentStatus !== "paid" &&
-      (nextStatus === "completed" || nextStatus === "delivered")
+      nextStatus === "delivered"
     ) {
       return NextResponse.json(
         { error: "Mark this order as paid before closing it." },
@@ -523,11 +521,20 @@ export async function POST(request: Request) {
             new URL(request.url).origin
           )
         : false;
+    const receiptSent =
+      nextStatus === "delivered"
+        ? await triggerPaymentReceiptNotification(
+            orderId,
+            supabase,
+            new URL(request.url).origin
+          )
+        : false;
 
     return NextResponse.json({
       success: true,
       nextStatus,
       notificationSent,
+      receiptSent,
     });
   } catch {
     return NextResponse.json(

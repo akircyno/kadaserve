@@ -3,7 +3,7 @@
 import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const peakHourLabels = ["6A", "7A", "8A", "9A", "10A", "11A", "12P", "1P", "2P", "3P"];
+const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
 
 function normalizeWeekday(value: string) {
   const day = new Date(value)
@@ -19,7 +19,9 @@ function normalizeWeekday(value: string) {
 function parseHourLabel(label: string) {
   const hourNumber = Number(label.replace(/\D/g, ""));
   const isPm = label.includes("P") && hourNumber !== 12;
+  const isMidnight = label.includes("A") && hourNumber === 12;
 
+  if (isMidnight) return 0;
   return isPm ? hourNumber + 12 : hourNumber;
 }
 
@@ -170,7 +172,7 @@ export function TimeSeriesView({
 
   return (
     <div className="space-y-8 lg:space-y-10">
-      <h1 className="font-display text-2xl font-bold text-[#0D2E18] sm:text-3xl">
+      <h1 className="font-sans text-2xl font-bold text-[#0D2E18] sm:text-3xl">
         Time Series Analytics
       </h1>
 

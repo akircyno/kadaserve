@@ -117,16 +117,16 @@ function LoginForm() {
                 />
               </div>
 
-              <h1 className="font-display text-3xl font-semibold text-[#FFF2E2]">
+              <h1 className="font-sans text-3xl font-semibold text-[#FFF2E2]">
                 KadaServe
               </h1>
             </div>
 
             <div>
-              <h2 className="font-display text-5xl font-semibold leading-tight text-[#FFF0DA]">
+              <h2 className="font-sans text-5xl font-semibold leading-tight text-[#FFF0DA]">
                 Every cup
               </h2>
-              <p className="font-display mt-1 text-5xl italic font-semibold leading-tight text-[#FFF0DA]">
+              <p className="font-sans mt-1 text-5xl italic font-semibold leading-tight text-[#FFF0DA]">
                 tells a story.
               </p>
             </div>
@@ -157,7 +157,7 @@ function LoginForm() {
                 />
               </div>
 
-              <h1 className="font-display text-5xl font-semibold tracking-tight text-[#0D2E18]">
+              <h1 className="font-sans text-5xl font-semibold tracking-tight text-[#0D2E18]">
                 KadaServe
               </h1>
             </div>

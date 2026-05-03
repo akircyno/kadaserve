@@ -7,7 +7,7 @@ import { useState } from "react";
 
 const navLinks = [
   { href: "#features", label: "Features" },
-  { href: "#analytics", label: "Analytics" },
+  { href: "#dashboard", label: "Analytics" },
   { href: "#workflow", label: "Workflow" },
 ];
 
@@ -29,7 +29,7 @@ export function LandingNavbar() {
                 className="h-full w-full object-cover"
               />
             </span>
-            <span className="font-display text-2xl font-bold tracking-tight text-[#0D2E18]">
+            <span className="font-sans text-2xl font-bold tracking-tight text-[#0D2E18]">
               KadaServe
             </span>
           </Link>

@@ -54,9 +54,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (["completed", "delivered", "cancelled"].includes(order.status)) {
+    if (["ready", "out_for_delivery", "completed", "delivered", "cancelled"].includes(order.status)) {
       return NextResponse.json(
-        { error: "This order can no longer be cancelled." },
+        { error: "This order can no longer be cancelled once it is ready." },
         { status: 400 }
       );
     }

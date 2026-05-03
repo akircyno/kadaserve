@@ -37,7 +37,7 @@ import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const hourLabels = ["7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM"];
+const hourLabels = ["5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM", "12AM"];
 
 function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
@@ -84,7 +84,9 @@ function normalizeWeekday(value: string) {
 function parseHourLabel(label: string) {
   const hourNumber = Number(label.replace(/\D/g, ""));
   const isPm = label.includes("P") && hourNumber !== 12;
+  const isMidnight = label.includes("A") && hourNumber === 12;
 
+  if (isMidnight) return 0;
   return isPm ? hourNumber + 12 : hourNumber;
 }
 
@@ -122,8 +124,217 @@ type AdminSearchSuggestion = {
   targetTab?: AdminTab;
 };
 
+type AdminFeedbackRow = {
+  id: string;
+  overall_rating: number;
+  taste_rating: number;
+  strength_rating: number;
+  comment: string | null;
+  created_at: string;
+  profiles: { full_name: string | null; email: string | null } | null;
+  menu_items: { name: string | null; category: string | null } | null;
+};
+
 function normalizeSuggestion(value: string) {
   return value.trim().replaceAll("_", " ");
+}
+
+function RewardsManagementView({
+  menuItems,
+  orders,
+}: {
+  menuItems: AdminMenuItem[];
+  orders: StaffOrder[];
+}) {
+  const completedOrders = orders.filter((order) =>
+    ["completed", "delivered"].includes(order.status)
+  );
+  const pastryItems = menuItems.filter((item) => item.category === "pastries");
+  const availableRewards = pastryItems.filter((item) => item.isAvailable);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="font-sans text-3xl font-bold text-[#0D2E18]">
+          Rewards Management
+        </h1>
+        <p className="mt-1 font-sans text-sm text-[#684B35]">
+          Manage reward missions from live orders and menu availability.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Completed Orders
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {completedOrders.length}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Pastry Rewards
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {availableRewards.length}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Reward Pool
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {menuItems.filter((item) => item.isAvailable).length}
+          </p>
+        </div>
+      </div>
+
+      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+        <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
+          Active Reward Items
+        </h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {availableRewards.map((item) => (
+            <article
+              key={item.id}
+              className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] p-4"
+            >
+              <p className="font-sans text-lg font-black text-[#0D2E18]">
+                {item.name}
+              </p>
+              <p className="mt-1 font-sans text-sm text-[#684B35]">
+                {peso(item.price)} pastry mission item
+              </p>
+            </article>
+          ))}
+          {availableRewards.length === 0 ? (
+            <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] p-5 font-sans text-sm text-[#8C7A64]">
+              No active pastry rewards. Add or show a pastry in Menu Management.
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FeedbackManagementView({
+  feedbackRows,
+}: {
+  feedbackRows: AdminFeedbackRow[];
+}) {
+  const average =
+    feedbackRows.length > 0
+      ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
+        feedbackRows.length
+      : 0;
+  const byItem = new Map<string, { count: number; total: number }>();
+
+  feedbackRows.forEach((row) => {
+    const itemName = row.menu_items?.name || "Menu item";
+    const current = byItem.get(itemName) ?? { count: 0, total: 0 };
+    byItem.set(itemName, {
+      count: current.count + 1,
+      total: current.total + Number(row.overall_rating),
+    });
+  });
+
+  const itemSummaries = Array.from(byItem.entries())
+    .map(([item, value]) => ({
+      item,
+      count: value.count,
+      average: value.total / value.count,
+    }))
+    .sort((first, second) => second.count - first.count);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="font-sans text-3xl font-bold text-[#0D2E18]">
+          Customer Feedback
+        </h1>
+        <p className="mt-1 font-sans text-sm text-[#684B35]">
+          Aggregate customer responses from completed orders.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Responses
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {feedbackRows.length}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Overall Avg
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {average ? average.toFixed(1) : "N/A"}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Rated Items
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {itemSummaries.length}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
+            Item Averages
+          </h2>
+          <div className="mt-4 space-y-3">
+            {itemSummaries.map((item) => (
+              <div
+                key={item.item}
+                className="grid grid-cols-[1fr_64px_64px] gap-3 rounded-[14px] bg-[#FFF8EF] px-3 py-2 font-sans text-sm"
+              >
+                <span className="font-bold text-[#0D2E18]">{item.item}</span>
+                <span>{item.count}</span>
+                <span>{item.average.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
+            Latest Responses
+          </h2>
+          <div className="mt-4 space-y-3">
+            {feedbackRows.slice(0, 8).map((row) => (
+              <article
+                key={row.id}
+                className="rounded-[14px] border border-[#EFE3CF] bg-[#FFF8EF] p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-sans text-sm font-bold text-[#0D2E18]">
+                    {row.menu_items?.name || "Menu item"}
+                  </p>
+                  <span className="rounded-full bg-[#E7F4EA] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
+                    {Number(row.overall_rating).toFixed(1)} / 5
+                  </span>
+                </div>
+                {row.comment ? (
+                  <p className="mt-2 font-sans text-sm text-[#684B35]">
+                    {row.comment}
+                  </p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 export function AdminDashboard() {
@@ -132,6 +343,7 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
+  const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -652,7 +864,8 @@ export function AdminDashboard() {
       activeTab === "peak-hours" ||
       activeTab === "item-ranking" ||
       activeTab === "satisfaction" ||
-      activeTab === "customer-pref";
+      activeTab === "customer-pref" ||
+      activeTab === "feedback";
 
     if (!shouldAutoSync) {
       return;
@@ -679,13 +892,15 @@ export function AdminDashboard() {
     }
 
     try {
-      const [ordersResponse, menuResponse] = await Promise.all([
+      const [ordersResponse, menuResponse, feedbackResponse] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
+        fetch("/api/feedback", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
       const menuResult = await menuResponse.json();
+      const feedbackResult = await feedbackResponse.json();
 
       if (!ordersResponse.ok) {
         setError(ordersResult.error || "Failed to load admin orders.");
@@ -699,6 +914,9 @@ export function AdminDashboard() {
 
       setOrders(ordersResult.orders ?? []);
       setMenuItems(menuResult.menuItems ?? []);
+      if (feedbackResponse.ok) {
+        setFeedbackRows(feedbackResult.feedback ?? []);
+      }
       setLastSyncedAt(new Date());
     } catch {
       setError("Something went wrong while loading admin data.");
@@ -773,6 +991,10 @@ export function AdminDashboard() {
   function handleTabSelect(tab: AdminTab) {
     setActiveTab(tab);
 
+    if (tab === "feedback" || tab === "rewards") {
+      void loadAdminData({ showLoading: false });
+    }
+
     if (window.innerWidth < 1024) {
       setIsSidebarOpen(false);
     }
@@ -804,7 +1026,7 @@ export function AdminDashboard() {
               }`}
           >
             <p
-              className={`font-display font-semibold leading-none tracking-[-0.04em] transition-all ${isSidebarOpen ? "text-[2rem]" : "text-[1.35rem]"
+              className={`font-sans font-semibold leading-none tracking-[-0.04em] transition-all ${isSidebarOpen ? "text-[2rem]" : "text-[1.35rem]"
                 }`}
             >
               {isSidebarOpen ? "KadaServe" : "KS"}
@@ -884,7 +1106,7 @@ export function AdminDashboard() {
                     Admin Dashboard
                   </p>
                   <div className="mt-1 flex items-center gap-2">
-                    <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                    <h1 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
                       Dashboard Overview
                     </h1>
                     <button
@@ -1070,6 +1292,14 @@ export function AdminDashboard() {
 
             {activeTab === "customer-pref" ? (
               <CustomerPreferenceView orders={scopedCustomerPreferenceOrders} />
+            ) : null}
+
+            {activeTab === "rewards" ? (
+              <RewardsManagementView menuItems={menuItems} orders={orders} />
+            ) : null}
+
+            {activeTab === "feedback" ? (
+              <FeedbackManagementView feedbackRows={feedbackRows} />
             ) : null}
 
             {activeTab === "menu" ? (

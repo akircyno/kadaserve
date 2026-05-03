@@ -133,7 +133,7 @@ export function AdminOrderDetailsDrawer({
               Admin Order Details
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h2 className="font-display text-4xl font-bold text-[#0D2E18]">
+              <h2 className="font-sans text-4xl font-bold text-[#0D2E18]">
                 {formatOrderCode(order.id)}
               </h2>
               <span

@@ -43,6 +43,11 @@ export type StaffOrder = {
   delivery_lng: number | null;
   delivery_email: string | null;
   delivery_phone: string | null;
+  encoded_by?: string | null;
+  encoded_by_profile?: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
   customer_profile: {
     full_name: string | null;
     email: string | null;

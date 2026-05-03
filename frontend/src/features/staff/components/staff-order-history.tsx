@@ -282,7 +282,7 @@ export function StaffOrderHistory() {
             <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
               Staff Workspace
             </p>
-            <h1 className="mt-1 font-display text-4xl font-bold text-[#0D2E18]">
+            <h1 className="mt-1 font-sans text-4xl font-bold text-[#0D2E18]">
               Order History
             </h1>
           </div>
@@ -510,7 +510,7 @@ export function StaffOrderHistory() {
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
                   History Detail
                 </p>
-                <h2 className="mt-1 font-display text-3xl font-bold text-[#0D2E18]">
+                <h2 className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
                   {formatOrderCode(selectedOrder.id)}
                 </h2>
               </div>

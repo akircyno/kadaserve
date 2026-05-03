@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CreditCard,
-  Edit3,
   Pencil,
   Plus,
   ShoppingCart,
@@ -243,6 +242,15 @@ export default function CartPage() {
     updateItem(item.id, getCartUpdatePayload(item, value.slice(0, 220)));
   }
 
+  function handleQuantityChange(item: CartItem, delta: number) {
+    const nextQuantity = Math.max(1, item.quantity + delta);
+
+    updateItem(item.id, {
+      ...getCartUpdatePayload(item, item.special_instructions),
+      quantity: nextQuantity,
+    });
+  }
+
   function openVoucherModal() {
     setVoucherDraft(voucherCode);
     setIsVoucherModalOpen(true);
@@ -450,47 +458,47 @@ export default function CartPage() {
 
         <section className="space-y-5">
           <div className="flex flex-col gap-4 border-b border-[#D8C8A7] pb-5 md:flex-row md:items-start md:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                  Delivery Address
-                </p>
-                {selectedSavedAddress?.is_default ? (
-                  <span className="rounded-full bg-[#E9F5E7] px-2.5 py-1 font-sans text-[11px] font-bold text-[#2D7A40]">
-                    Default Address
-                  </span>
-                ) : selectedSavedAddress ? (
-                  <span className="rounded-full bg-[#FFF8EF] px-2.5 py-1 font-sans text-[11px] font-bold text-[#684B35]">
-                    Saved Address
-                  </span>
-                ) : deliveryAddress.trim() ? (
-                  <span className="rounded-full bg-[#FFF8EF] px-2.5 py-1 font-sans text-[11px] font-bold text-[#684B35]">
-                    Another Address
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-2 flex items-start gap-2">
-                <textarea
-                  ref={deliveryAddressRef}
-                  value={deliveryAddress}
-                  onChange={(event) => {
-                    setDeliveryAddress(event.target.value);
-                    setSelectedAddressId(null);
-                  }}
-                  placeholder="Enter full delivery address"
-                  className="min-h-16 w-full min-w-0 rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] md:w-[34rem]"
-                />
-                <button
-                  type="button"
-                  onClick={openAddressPicker}
-                  title="Choose delivery address"
-                  aria-label="Choose delivery address"
-                  className="mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#0D2E18] transition hover:bg-white"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              </div>
-              {orderType === "delivery" ? (
+            {orderType === "delivery" ? (
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                    Delivery Address
+                  </p>
+                  {selectedSavedAddress?.is_default ? (
+                    <span className="rounded-full bg-[#E9F5E7] px-2.5 py-1 font-sans text-[11px] font-bold text-[#2D7A40]">
+                      Default Address
+                    </span>
+                  ) : selectedSavedAddress ? (
+                    <span className="rounded-full bg-[#FFF8EF] px-2.5 py-1 font-sans text-[11px] font-bold text-[#684B35]">
+                      Saved Address
+                    </span>
+                  ) : deliveryAddress.trim() ? (
+                    <span className="rounded-full bg-[#FFF8EF] px-2.5 py-1 font-sans text-[11px] font-bold text-[#684B35]">
+                      Another Address
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex items-start gap-2">
+                  <textarea
+                    ref={deliveryAddressRef}
+                    value={deliveryAddress}
+                    onChange={(event) => {
+                      setDeliveryAddress(event.target.value);
+                      setSelectedAddressId(null);
+                    }}
+                    placeholder="Enter full delivery address"
+                    className="min-h-16 w-full min-w-0 rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] md:w-[34rem]"
+                  />
+                  <button
+                    type="button"
+                    onClick={openAddressPicker}
+                    title="Choose delivery address"
+                    aria-label="Choose delivery address"
+                    className="mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#0D2E18] transition hover:bg-white"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
                 <DeliveryLocationPicker
                   lat={deliveryLat}
                   lng={deliveryLng}
@@ -504,11 +512,20 @@ export default function CartPage() {
                     }
                   }}
                 />
-              ) : null}
-              <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
-                Estimated delivery time: 25-40mins
-              </p>
-            </div>
+                <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
+                  Estimated delivery time: 25-40mins
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                  Pickup
+                </p>
+                <h1 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Claim at the counter
+                </h1>
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               {(["pickup", "delivery"] as const).map((type) => (
@@ -595,15 +612,6 @@ export default function CartPage() {
                         </div>
 
                         <div className="flex shrink-0 flex-col items-end gap-2">
-                          {!isPastry ? (
-                            <Link
-                              href={`/customer/menu/${item.menu_item_id}?cartItemId=${item.id}`}
-                              className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1.5 font-sans text-xs font-bold text-[#0D2E18]"
-                            >
-                              <Edit3 size={13} />
-                              Edit
-                            </Link>
-                          ) : null}
                           <button
                             type="button"
                             onClick={() => removeItem(item.id)}
@@ -613,6 +621,28 @@ export default function CartPage() {
                             <Trash2 size={16} />
                           </button>
                         </div>
+                      </div>
+
+                      <div className="mt-4 inline-flex items-center rounded-full border border-[#D8C8A7] bg-white/70 p-1">
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, -1)}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                          aria-label={`Decrease ${item.name}`}
+                        >
+                          -
+                        </button>
+                        <span className="min-w-10 text-center font-sans text-sm font-black text-[#0D2E18]">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, 1)}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                          aria-label={`Increase ${item.name}`}
+                        >
+                          +
+                        </button>
                       </div>
 
                       {!isPastry ? (

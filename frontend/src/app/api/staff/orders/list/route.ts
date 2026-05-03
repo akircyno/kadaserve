@@ -16,6 +16,9 @@ type AdminOrderRow = {
   delivery_lng: number | null;
   delivery_email: string | null;
   delivery_phone: string | null;
+  encoded_by: string | null;
+  encoded_by_full_name: string | null;
+  encoded_by_email: string | null;
   customer_full_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
@@ -89,6 +92,9 @@ export async function GET() {
           delivery_lng,
           delivery_email,
           delivery_phone,
+          encoded_by,
+          encoded_by_full_name,
+          encoded_by_email,
           customer_full_name,
           customer_email,
           customer_phone
@@ -160,6 +166,13 @@ export async function GET() {
         delivery_lng: order.delivery_lng,
         delivery_email: order.delivery_email,
         delivery_phone: order.delivery_phone,
+        encoded_by: order.encoded_by,
+        encoded_by_profile: order.encoded_by
+          ? {
+              full_name: order.encoded_by_full_name,
+              email: order.encoded_by_email,
+            }
+          : null,
         customer_profile: order.customer_id
           ? {
               full_name: order.customer_full_name,

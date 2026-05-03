@@ -1,6 +1,67 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export async function GET() {
+  try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "staff"].includes(profile.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { data, error } = await supabase
+      .from("feedback")
+      .select(
+        `
+          id,
+          order_id,
+          order_item_id,
+          customer_id,
+          menu_item_id,
+          taste_rating,
+          strength_rating,
+          overall_rating,
+          comment,
+          created_at,
+          profiles (
+            full_name,
+            email
+          ),
+          menu_items (
+            name,
+            category
+          )
+        `
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ feedback: data ?? [] });
+  } catch {
+    return NextResponse.json(
+      { error: "Something went wrong while loading feedback." },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();

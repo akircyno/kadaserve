@@ -33,7 +33,6 @@ type StaffProfile = {
 
 const categoryButtons: Array<{ key: MenuFilterCategory; label: string }> = [
     { key: "all", label: "All" },
-    { key: "coffee", label: "Coffee" },
     { key: "non-coffee", label: "Non-Coffee" },
     { key: "pastries", label: "Pastries" },
     { key: "latte-series", label: "Latte Series" },
@@ -48,7 +47,7 @@ function formatPrice(value: number) {
 function formatCategory(category: MenuCategory) {
     switch (category) {
         case "coffee":
-            return "Coffee";
+            return "Latte";
         case "non-coffee":
             return "Non-Coffee";
         case "pastries":
@@ -74,7 +73,7 @@ function getCategoryBadgeStyle(category: MenuCategory) {
         case "pastries":
             return "bg-[#FFF0E5] text-[#B76522]";
         case "latte-series":
-            return "bg-[#F1E3FF] text-[#7A3FB4]";
+            return "bg-[#E6F2E8] text-[#0D2E18]";
         case "premium-blends":
             return "bg-[#FFF0DA] text-[#684B35]";
         case "best-deals":
@@ -360,7 +359,7 @@ export function StaffEncodeOrder() {
                             <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
                                 Staff POS
                             </p>
-                            <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                            <h1 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
                                 Encode Order
                             </h1>
                         </div>

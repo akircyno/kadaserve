@@ -91,6 +91,14 @@ function getContactPhone(order: StaffOrder) {
   return order.customer_profile?.phone || order.delivery_phone || "";
 }
 
+function getEncodedByName(order: StaffOrder) {
+  return (
+    order.encoded_by_profile?.full_name?.trim() ||
+    formatNameFromEmail(order.encoded_by_profile?.email ?? null) ||
+    (order.customer_id ? "Customer self-order" : "Staff POS")
+  );
+}
+
 function getManilaDateOnly(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
@@ -561,7 +569,66 @@ export function OrdersView({
           </span>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto pt-3">
+        <div className="grid gap-3 pt-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Status
+            </span>
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as "all" | OrderStatus)
+              }
+              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Type
+            </span>
+            <select
+              value={typeFilter}
+              onChange={(event) =>
+                setTypeFilter(event.target.value as "all" | StaffOrder["order_type"])
+              }
+              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
+            >
+              {typeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Payment
+            </span>
+            <select
+              value={paymentFilter}
+              onChange={(event) =>
+                setPaymentFilter(
+                  event.target.value as "all" | "paid" | "unpaid" | "cash" | "gcash"
+                )
+              }
+              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
+            >
+              {paymentOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="hidden gap-4 overflow-x-auto pt-3">
           <div className="min-w-max">
           <p className="mb-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
             Status
@@ -631,9 +698,10 @@ export function OrdersView({
       </div>
 
       <div className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white">
-        <div className="grid grid-cols-[110px_1.5fr_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF]/50 px-5 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+        <div className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF]/50 px-5 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
           <span>Order ID</span>
           <span>Customer / Items</span>
+          <span>Encoded By</span>
           <span>Type</span>
           <span>Payment</span>
           <span>Status</span>
@@ -646,7 +714,7 @@ export function OrdersView({
           {visibleOrders.map((order) => (
             <div
               key={order.id}
-              className="grid grid-cols-[110px_1.5fr_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 px-5 py-4 font-sans text-sm text-[#0D2E18] transition hover:bg-[#FFF8EF]/70"
+              className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 px-5 py-4 font-sans text-sm text-[#0D2E18] transition hover:bg-[#FFF8EF]/70"
             >
               <span className="font-bold">{formatOrderCode(order.id)}</span>
               <div>
@@ -657,6 +725,9 @@ export function OrdersView({
                   {formatOrderItems(order) || "No items"}
                 </p>
               </div>
+              <span className="font-semibold text-[#684B35]">
+                {getEncodedByName(order)}
+              </span>
               <span
                 className={`w-fit rounded-full px-3 py-1 text-xs font-bold uppercase ${getOrderTypeStyle(
                   order.order_type

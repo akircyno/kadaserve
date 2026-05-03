@@ -3,7 +3,7 @@
 import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const peakHourLabels = ["6A", "7A", "8A", "9A", "10A", "11A", "12P", "1P", "2P", "3P"];
+const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
 
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
@@ -23,7 +23,9 @@ function normalizeWeekday(value: string) {
 function parseHourLabel(label: string) {
   const hourNumber = Number(label.replace(/\D/g, ""));
   const isPm = label.includes("P") && hourNumber !== 12;
+  const isMidnight = label.includes("A") && hourNumber === 12;
 
+  if (isMidnight) return 0;
   return isPm ? hourNumber + 12 : hourNumber;
 }
 
@@ -62,7 +64,7 @@ function Panel({
   return (
     <section className="rounded-[18px] bg-white/72 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.52)]">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-2xl font-bold text-[#0D2E18]">{title}</h2>
+        <h2 className="font-sans text-2xl font-bold text-[#0D2E18]">{title}</h2>
         {rightLabel ? (
           <p className="font-sans text-[15px] uppercase text-[#684B35]">{rightLabel}</p>
         ) : null}

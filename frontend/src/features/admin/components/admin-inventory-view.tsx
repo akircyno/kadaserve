@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 export type InventoryItem = {
   name: string;
   unit: string;
@@ -27,6 +31,8 @@ export function InventoryView({
   inventoryItems: InventoryItem[];
   inventorySummary: InventorySummary;
 }) {
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-4">
@@ -67,13 +73,53 @@ export function InventoryView({
               <span>{item.maxCap}</span>
               <span>{getInventoryStatus(item)}</span>
               <span>{item.supplier}</span>
-              <button className="rounded-full border border-[#D6C6AC] px-3 py-1">
+              <button
+                type="button"
+                onClick={() => setSelectedItem(item)}
+                className="rounded-full border border-[#D6C6AC] px-3 py-1"
+              >
                 Notes
               </button>
             </div>
           ))}
         </div>
       </section>
+
+      {selectedItem ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#0D2E18]/35 px-3 backdrop-blur-sm sm:items-center sm:p-6">
+          <section className="w-full max-w-md rounded-t-[24px] border border-[#DCCFB8] bg-[#FFF8EF] p-5 shadow-[0_18px_40px_rgba(13,46,24,0.18)] sm:rounded-[24px]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                  Inventory Notes
+                </p>
+                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  {selectedItem.name}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="rounded-full bg-white px-3 py-2 font-sans text-sm font-bold text-[#0D2E18]"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-5 space-y-3 rounded-[18px] bg-white p-4 font-sans text-sm text-[#684B35]">
+              <p>Status: {getInventoryStatus(selectedItem)}</p>
+              <p>
+                On hand: {selectedItem.onHand} {selectedItem.unit}
+              </p>
+              <p>
+                Reorder when stock reaches {selectedItem.minNeed}{" "}
+                {selectedItem.unit}. Maximum capacity is {selectedItem.maxCap}{" "}
+                {selectedItem.unit}.
+              </p>
+              <p>Supplier: {selectedItem.supplier}</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

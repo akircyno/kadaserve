@@ -110,7 +110,7 @@ export default function ForgotPasswordPage() {
             <p className="font-sans text-sm font-bold uppercase tracking-[0.16em] text-[#684B35]">
               Account Recovery
             </p>
-            <h1 className="font-display text-4xl font-semibold text-[#0D2E18]">
+            <h1 className="font-sans text-4xl font-semibold text-[#0D2E18]">
               KadaServe
             </h1>
           </div>

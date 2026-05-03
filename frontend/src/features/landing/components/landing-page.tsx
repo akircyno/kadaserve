@@ -10,7 +10,6 @@ import {
   Flame,
   Laptop,
   LineChart,
-  MessageSquareText,
   PackageCheck,
   Smartphone,
   Star,
@@ -91,7 +90,7 @@ export function LandingPage() {
       <LandingNavbar />
 
       <main>
-        <section className="relative isolate px-4 pb-14 pt-28 sm:px-6 lg:px-8 lg:pb-20 lg:pt-32">
+        <section className="relative isolate px-4 pb-10 pt-20 sm:px-6 lg:px-8 lg:pb-14 lg:pt-24">
           <div className="absolute left-[-12rem] top-20 -z-10 h-[36rem] w-[36rem] rounded-full bg-[#0F441D]/15 blur-3xl" />
           <div className="absolute bottom-[-8rem] right-[-10rem] -z-10 h-[34rem] w-[34rem] rounded-full bg-[#684B35]/12 blur-3xl" />
 
@@ -102,7 +101,7 @@ export function LandingPage() {
                 Data-driven cafe system
               </div>
 
-              <h1 className="mt-7 max-w-4xl font-display text-[clamp(3.2rem,6.2vw,6rem)] font-bold leading-[0.92] tracking-[-0.05em] text-[#0D2E18]">
+              <h1 className="mt-7 max-w-4xl font-sans text-[clamp(3.2rem,6.2vw,6rem)] font-bold leading-[0.92] tracking-[-0.05em] text-[#0D2E18]">
                 From guesswork to data-driven cafe decisions.
               </h1>
 
@@ -141,7 +140,7 @@ export function LandingPage() {
                       <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#FFF0DA]/55">
                         Live analytics engine
                       </p>
-                      <h2 className="mt-2 font-display text-3xl font-bold">
+                      <h2 className="mt-2 font-sans text-3xl font-bold">
                         Real cafe signals
                       </h2>
                     </div>
@@ -211,7 +210,7 @@ export function LandingPage() {
                 <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#684B35]">
                   System flow
                 </p>
-                <h2 className="mt-4 font-display text-5xl font-bold leading-tight tracking-[-0.04em]">
+                <h2 className="mt-4 font-sans text-5xl font-bold leading-tight tracking-[-0.04em]">
                   One system, different roles in one workflow.
                 </h2>
               </div>
@@ -237,7 +236,7 @@ export function LandingPage() {
                     <p className="mt-7 text-sm font-bold uppercase tracking-[0.18em] text-[#684B35]">
                       Step {index + 1}
                     </p>
-                    <h3 className="mt-3 font-display text-2xl font-bold">
+                    <h3 className="mt-3 font-sans text-2xl font-bold">
                       {item.label}
                     </h3>
                     <p className="mt-4 text-sm leading-6 text-[#684B35]">
@@ -256,7 +255,7 @@ export function LandingPage() {
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#684B35]">
                 Role experiences
               </p>
-              <h2 className="mt-4 font-display text-5xl font-bold leading-tight tracking-[-0.04em]">
+              <h2 className="mt-4 font-sans text-5xl font-bold leading-tight tracking-[-0.04em]">
                 Customer, staff, and admin all see the same operation from the
                 right angle.
               </h2>
@@ -275,7 +274,7 @@ export function LandingPage() {
                     <p className="mt-8 text-sm font-bold uppercase tracking-[0.18em] text-[#684B35]">
                       {role.eyebrow}
                     </p>
-                    <h3 className="mt-3 font-display text-3xl font-bold">
+                    <h3 className="mt-3 font-sans text-3xl font-bold">
                       {role.title}
                     </h3>
                     <ul className="mt-6 space-y-3">
@@ -293,15 +292,18 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="dashboard" className="bg-[#0D2E18] px-4 py-24 text-[#FFF0DA] sm:px-6 lg:px-8">
+        <section id="dashboard" className="bg-[#0D2E18] px-4 py-16 text-[#FFF0DA] sm:px-6 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div className="space-y-7">
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#FFF0DA]/60">
                 Admin dashboard
               </p>
-              <h2 className="font-display text-5xl font-bold leading-tight tracking-[-0.04em]">
-                The CS core: analytics from real transaction data.
+              <h2 className="font-sans text-5xl font-bold leading-tight tracking-[-0.04em]">
+                Analytics powered by real café transaction data.
               </h2>
+              <span className="inline-flex rounded-full border border-[#FFF0DA]/18 bg-white/10 px-3 py-1 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#FFF0DA]/70">
+                Sample data — preview only
+              </span>
               <p className="text-lg leading-8 text-[#FFF0DA]/75">
                 This is where the panel can see the logic: time-series
                 analytics, peak-hour detection, satisfaction trend, item ranking,
@@ -347,7 +349,7 @@ export function LandingPage() {
                       <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#684B35]">
                         Orders
                       </p>
-                      <h3 className="font-display text-2xl font-bold">
+                      <h3 className="font-sans text-2xl font-bold">
                         Hourly Trend
                       </h3>
                     </div>
@@ -369,7 +371,7 @@ export function LandingPage() {
                 <div className="space-y-5">
                   <div className="rounded-[2rem] bg-white p-5">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-display text-2xl font-bold">
+                      <h3 className="font-sans text-2xl font-bold">
                         Peak Heatmap
                       </h3>
                       <Flame className="h-7 w-7 text-[#684B35]" />
@@ -392,7 +394,7 @@ export function LandingPage() {
 
                   <div className="rounded-[2rem] bg-white p-5">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-display text-2xl font-bold">
+                      <h3 className="font-sans text-2xl font-bold">
                         Recommended Item
                       </h3>
                       <Brain className="h-7 w-7 text-[#0F441D]" />
@@ -407,7 +409,7 @@ export function LandingPage() {
 
               <div className="mt-5 rounded-[2rem] bg-white p-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-2xl font-bold">
+                  <h3 className="font-sans text-2xl font-bold">
                     Item Ranking
                   </h3>
                   <PackageCheck className="h-7 w-7 text-[#0F441D]" />
@@ -426,38 +428,6 @@ export function LandingPage() {
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="relative px-4 py-28 text-center sm:px-6 lg:px-8">
-          <div className="absolute inset-x-0 top-0 -z-10 mx-auto h-64 max-w-5xl rounded-full bg-[#0F441D]/10 blur-3xl" />
-          <div className="mx-auto max-w-4xl">
-            <MessageSquareText className="mx-auto h-12 w-12 text-[#0F441D]" />
-            <h2 className="mt-7 font-display text-5xl font-bold leading-tight tracking-[-0.04em] md:text-6xl">
-              One workflow.
-              <span className="block italic text-[#0F441D]">
-                Different roles. Better decisions.
-              </span>
-            </h2>
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#684B35]">
-              KadaServe is designed as one connected cafe system, not separate
-              screens pretending to work together.
-            </p>
-            <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0F441D] px-8 py-4 text-base font-bold text-white shadow-xl shadow-[#0F441D]/20 transition hover:bg-[#0D2E18]"
-              >
-                Sign in to KadaServe
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-              <a
-                href="#workflow"
-                className="rounded-full border border-[#0D2E18]/25 bg-white/60 px-8 py-4 text-base font-bold text-[#0D2E18] transition hover:bg-white"
-              >
-                Review system flow
-              </a>
             </div>
           </div>
         </section>

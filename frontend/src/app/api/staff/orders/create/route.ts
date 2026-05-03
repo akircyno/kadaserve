@@ -124,9 +124,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
+    const orderPayload = {
         customer_id: null,
         order_type: body.orderType,
         status: "pending",
@@ -140,9 +138,37 @@ export async function POST(request: Request) {
           body.orderType === "delivery" ? body.deliveryEmail?.trim() : null,
         delivery_phone:
           body.orderType === "delivery" ? body.deliveryPhone?.trim() : null,
-      })
+        encoded_by: user.id,
+      };
+
+    let { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert(orderPayload)
       .select("id")
       .single();
+
+    if (orderError && orderError.message.toLowerCase().includes("encoded_by")) {
+      const legacyOrderPayload: Omit<typeof orderPayload, "encoded_by"> = {
+        customer_id: orderPayload.customer_id,
+        order_type: orderPayload.order_type,
+        status: orderPayload.status,
+        payment_method: orderPayload.payment_method,
+        payment_status: orderPayload.payment_status,
+        total_amount: orderPayload.total_amount,
+        walkin_name: orderPayload.walkin_name,
+        delivery_address: orderPayload.delivery_address,
+        delivery_email: orderPayload.delivery_email,
+        delivery_phone: orderPayload.delivery_phone,
+      };
+      const retry = await supabase
+        .from("orders")
+        .insert(legacyOrderPayload)
+        .select("id")
+        .single();
+
+      order = retry.data;
+      orderError = retry.error;
+    }
 
 
     if (orderError || !order) {

@@ -17,7 +17,6 @@ import {
   ChevronRight,
   CheckCircle2,
   ClipboardList,
-  Coffee,
   CupSoda,
   Gift,
   HelpCircle,
@@ -30,7 +29,6 @@ import {
   Search,
   Settings,
   ShoppingCart,
-  SlidersHorizontal,
   Sparkles,
   Star,
   ShieldCheck,
@@ -122,30 +120,11 @@ const menuFilters: Array<{
   label: string;
   icon: typeof CupSoda;
 }> = [
-  { value: "coffee", label: "Coffee", icon: Coffee },
+  { value: "coffee", label: "Latte", icon: CupSoda },
   { value: "non-coffee", label: "Non-Coffee", icon: CupSoda },
   { value: "pastries", label: "Pastries", icon: Gift },
   { value: "best-deals", label: "Best Deals", icon: BadgePercent },
 ];
-
-const localMenuImages: Record<string, string> = {
-  "brown sugar choco latte":
-    "/images/menu/coffee/Brown Suagr Choco Latte.png",
-  "brown sugar latte": "/images/menu/coffee/Brown Sugar Latte.png",
-  "french vanilla latte": "/images/menu/coffee/French Vanilla Latte.png",
-  matcha: "/images/menu/coffee/Matcha Latte.png",
-  "matcha latte": "/images/menu/coffee/Matcha Latte.png",
-  "spanish latte": "/images/menu/coffee/Spanish Latte.png",
-  "choco milk": "/images/menu/non-coffee/Choco Milk Drink.png",
-  "choco milk drink": "/images/menu/non-coffee/Choco Milk Drink.png",
-  "strawberry latte": "/images/menu/non-coffee/Strawberry Latte.png",
-  macchiato: "/images/menu/premium-blends/Caramel Macchiato.png",
-  machiato: "/images/menu/premium-blends/Caramel Macchiato.png",
-  "caramel macchiato": "/images/menu/premium-blends/Caramel Macchiato.png",
-  "caramel machiato": "/images/menu/premium-blends/Caramel Macchiato.png",
-  mocha: "/images/menu/premium-blends/mocha.png",
-  "strawberry matcha": "/images/menu/premium-blends/strawberry matcha.png",
-};
 
 const sugarLevels = [
   { label: "0%", value: 0 },
@@ -340,11 +319,22 @@ function normalizeText(value: string) {
 }
 
 function getMenuImage(item: CustomerMenuItem) {
-  if (item.image_url) {
-    return item.image_url;
+  const imageUrl = item.image_url?.trim();
+
+  if (!imageUrl) {
+    return null;
   }
 
-  return localMenuImages[normalizeText(item.name)] ?? null;
+  const normalizedImageUrl = imageUrl.toLowerCase();
+
+  if (
+    normalizedImageUrl.startsWith("/images/menu/") ||
+    normalizedImageUrl.includes("/images/menu/")
+  ) {
+    return null;
+  }
+
+  return imageUrl;
 }
 
 function isPastryMenuItem(item: Pick<CustomerMenuItem, "category">) {
@@ -458,8 +448,8 @@ function getTrackingSteps(orderType: CustomerOrder["order_type"]) {
   ];
 }
 
-function getOrderItemImage(itemName: string) {
-  return localMenuImages[normalizeText(itemName)] ?? null;
+function getOrderItemImage() {
+  return null;
 }
 
 function getRecommendedItems(
@@ -761,7 +751,6 @@ export function CustomerDashboard({
   const [size, setSize] = useState("medium");
   const [temperature, setTemperature] = useState("iced");
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
-  const [specialInstructions, setSpecialInstructions] = useState("");
   const [customizeMessage, setCustomizeMessage] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -808,7 +797,6 @@ export function CustomerDashboard({
   const menuCategoryRefs = useRef<
     Partial<Record<Exclude<Filter, "all" | "latte-series" | "premium-blends">, HTMLElement | null>>
   >({});
-  const recommendationScrollerRef = useRef<HTMLDivElement>(null);
   const onboardingScrollerRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const trackingTouchStartYRef = useRef<number | null>(null);
@@ -1070,7 +1058,7 @@ export function CustomerDashboard({
         id: item.id,
         quantity: item.quantity,
         name: item.menu_items?.name ?? "Menu item",
-        imageUrl: getOrderItemImage(item.menu_items?.name ?? ""),
+        imageUrl: getOrderItemImage(),
       }))
       .slice(0, 4) ?? [];
 
@@ -1183,28 +1171,24 @@ export function CustomerDashboard({
   const pointsRingStyle = {
     background: `conic-gradient(#0D2E18 ${pointsProgress}%, #E8D9BE ${pointsProgress}% 100%)`,
   };
-  const promoCards = [
-    {
-      title: "Spanish Latte Spotlight",
-      body: "Creamy, balanced, and ranked high by Kada regulars this week.",
-      image: "/images/menu/coffee/Spanish Latte.png",
-    },
-    {
-      title: "Strawberry Matcha Mood",
-      body: "A bright matcha layer for slow afternoons and study breaks.",
-      image: "/images/menu/premium-blends/strawberry matcha.png",
-    },
-    {
-      title: rewardMessage,
-      body: "Every completed drink moves you closer to your next reward.",
-      image: "/images/menu/premium-blends/Caramel Macchiato.png",
-    },
-  ];
-  const activePromo = promoCards[activePromoIndex] ?? promoCards[0];
+  const pastryMissionItem = uniqueMenuItems.find(
+    (item) => item.is_available && isPastryMenuItem(item)
+  );
+  const promoCards = recommendedItems
+    .filter(({ item }) => Boolean(getMenuImage(item)))
+    .slice(0, 3)
+    .map(({ item, reason }) => ({
+      title: item.name,
+      body: item.description || reason,
+      image: getMenuImage(item) as string,
+    }));
+  const activePromo = promoCards[activePromoIndex] ?? null;
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setActivePromoIndex((current) => (current + 1) % promoCards.length);
+      setActivePromoIndex((current) =>
+        promoCards.length > 0 ? (current + 1) % promoCards.length : 0
+      );
     }, 4200);
 
     return () => window.clearInterval(intervalId);
@@ -1213,8 +1197,9 @@ export function CustomerDashboard({
   function showPromo(direction: "previous" | "next") {
     setActivePromoIndex((current) =>
       direction === "next"
-        ? (current + 1) % promoCards.length
-        : (current - 1 + promoCards.length) % promoCards.length
+        ? (current + 1) % Math.max(1, promoCards.length)
+        : (current - 1 + Math.max(1, promoCards.length)) %
+          Math.max(1, promoCards.length)
     );
   }
 
@@ -1237,12 +1222,6 @@ export function CustomerDashboard({
   const activeMenuFilter = menuFilters.some((item) => item.value === filter)
     ? filter
     : "coffee";
-  const recommendationLabels = [
-    "Your Recent Favorite",
-    "All Time Favorite",
-    "High Rating",
-  ];
-
   useEffect(() => {
     if (activeSection !== "menu") {
       return;
@@ -1389,7 +1368,6 @@ export function CustomerDashboard({
     setSize(item.has_size_option === false ? "medium" : "medium");
     setTemperature(item.has_temp_option === false ? "iced" : "iced");
     setSelectedAddons([]);
-    setSpecialInstructions("");
     setCustomizeMessage("");
   }
 
@@ -1468,7 +1446,7 @@ export function CustomerDashboard({
       temperature,
       addons: selectedAddons,
       addon_price: addonTotal + sizeCharge,
-      special_instructions: specialInstructions.trim(),
+      special_instructions: "",
       image_url: getMenuImage(selectedMenuItem),
     });
 
@@ -1768,13 +1746,6 @@ export function CustomerDashboard({
     });
   }
 
-  function scrollRecommendations(direction: "left" | "right") {
-    recommendationScrollerRef.current?.scrollBy({
-      left: direction === "left" ? -320 : 320,
-      behavior: "smooth",
-    });
-  }
-
   return (
     <main className="min-h-screen bg-[#F8EBCF] text-[#123E26]">
       <div className="flex min-h-screen">
@@ -1824,15 +1795,19 @@ export function CustomerDashboard({
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-[#D7C7A9] bg-[#F8F7F4] px-4 py-3 sm:px-5">
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(true)}
-              aria-label="Search menu"
-              className="fixed right-5 top-20 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#0D2E18] shadow-[0_10px_24px_rgba(13,46,24,0.16)] transition hover:bg-[#FFF8EF] sm:static sm:h-11 sm:w-11"
-            >
-              <Search size={20} />
-            </button>
+          <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-[#D7C7A9] bg-[#F8F7F4]/95 px-4 py-3 backdrop-blur sm:px-5">
+            {activeSection !== "home" ? (
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                aria-label="Search menu"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#0D2E18] shadow-[0_10px_24px_rgba(13,46,24,0.16)] transition hover:bg-[#FFF8EF]"
+              >
+                <Search size={20} />
+              </button>
+            ) : (
+              <span aria-hidden="true" className="h-11 w-11" />
+            )}
 
             <button
               type="button"
@@ -1906,8 +1881,8 @@ export function CustomerDashboard({
                       <p className="font-sans text-sm font-bold text-[#684B35]">
                         {greeting}, {firstName}!
                       </p>
-                      <h1 className="mt-2 max-w-3xl font-display text-4xl font-bold leading-[1.02] text-[#0D2E18] sm:text-5xl">
-                        Your coffee hub is ready.
+                      <h1 className="mt-2 max-w-3xl font-sans text-4xl font-bold leading-[1.02] text-[#0D2E18] sm:text-5xl">
+                        Your latte hub is ready.
                       </h1>
                       <p className="mt-3 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
                         Your next favorite cup is a tap away. Pick an intent,
@@ -1955,7 +1930,7 @@ export function CustomerDashboard({
                         <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
                           Promotions
                         </p>
-                        <h2 className="font-display text-3xl font-bold">
+                        <h2 className="font-sans text-3xl font-bold">
                           Promos & cafe notes
                         </h2>
                       </div>
@@ -1980,26 +1955,32 @@ export function CustomerDashboard({
                       </button>
 
                       <div
-                        key={activePromo.title}
+                        key={activePromo?.title ?? rewardMessage}
                         className="grid min-h-[190px] gap-4 transition-transform duration-300 ease-[cubic-bezier(0.2,0.9,0.22,1.12)] sm:grid-cols-[1fr_150px] sm:items-center"
                       >
                         <div>
-                          <p className="font-display text-2xl font-bold leading-tight">
-                            {activePromo.title}
+                          <p className="font-sans text-2xl font-bold leading-tight">
+                            {activePromo?.title ?? "Rewards in motion"}
                           </p>
                           <p className="mt-3 min-h-12 font-sans text-sm leading-6 text-[#684B35]">
-                            {activePromo.body}
+                            {activePromo?.body ?? rewardMessage}
                           </p>
                         </div>
 
                         <div className="h-36 overflow-hidden rounded-[22px] bg-white/55 p-1.5 shadow-[inset_0_0_0_1px_rgba(104,75,53,0.14)]">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={activePromo.image}
-                            alt=""
-                            loading="lazy"
-                            className="h-full w-full rounded-[18px] object-cover"
-                          />
+                          {activePromo?.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={activePromo.image}
+                              alt=""
+                              loading="lazy"
+                              className="h-full w-full rounded-[18px] object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center rounded-[18px] bg-[#E7F4EA] text-4xl">
+                              <Gift />
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2025,7 +2006,7 @@ export function CustomerDashboard({
                     <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                       Reward Mission
                     </p>
-                    <h2 className="mt-1 font-display text-3xl font-bold leading-tight text-[#0D2E18]">
+                    <h2 className="mt-1 font-sans text-3xl font-bold leading-tight text-[#0D2E18]">
                       Got thoughts?
                     </h2>
                     <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
@@ -2080,195 +2061,11 @@ export function CustomerDashboard({
                     </div>
                   </section>
                 ) : null}
-
-                <section className="rounded-[28px] bg-[#FFF8EF]/72 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.55)]">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8A755D]">
-                        Crafted for You
-                      </p>
-                      <h2 className="font-display text-3xl font-bold text-[#0D2E18]">
-                        Recommended next
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveSection("menu")}
-                      className="rounded-full border border-[#D8C8A7] px-4 py-2 font-sans text-xs font-bold text-[#684B35]"
-                    >
-                      Open Menu
-                    </button>
-                  </div>
-
-                  <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {recommendedItems.slice(0, 5).map(({ item, reason, score }) => {
-                      const menuImage = getMenuImage(item);
-                      const isQuickAdded = quickAddFeedback?.itemId === item.id;
-
-                      return (
-                        <article
-                          key={item.id}
-                          className="relative flex w-[270px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-white text-[#123E26] shadow-[0_8px_20px_rgba(13,46,24,0.08)]"
-                        >
-                          {isQuickAdded ? (
-                            <div className="absolute inset-x-3 top-3 z-20 flex animate-bounce items-center justify-center gap-1.5 rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
-                              <CheckCircle2 size={14} />
-                              Added to cart
-                            </div>
-                          ) : null}
-                          <div className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl">
-                            {menuImage ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={menuImage}
-                                alt={item.name}
-                                className="h-full w-full rounded-[16px] object-cover"
-                              />
-                            ) : (
-                              getEmoji(item)
-                            )}
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col p-4">
-                            <h3 className="line-clamp-2 font-sans text-lg font-black leading-tight">
-                              {item.name}
-                            </h3>
-                            <p className="mt-2 font-sans text-xs font-bold text-[#684B35]">
-                              {reason} · {(score * 100).toFixed(0)}
-                            </p>
-                            <div className="mt-auto flex items-center gap-2 pt-4">
-                              <p className="font-sans text-lg font-black text-[#765531]">
-                                {formatPrice(item.base_price)}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => handleQuickAdd(item)}
-                                className="ml-auto rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-bold text-white"
-                              >
-                                Quick Add
-                              </button>
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
               </div>
             )}
 
             {activeSection === "menu" && (
               <div className="mx-auto w-full max-w-[1440px] space-y-4">
-                <section className="group relative overflow-hidden rounded-[22px] bg-[#123E26] px-3 py-3 text-[#FFF0D8] shadow-[0_10px_24px_rgba(18,62,38,0.14)] sm:px-4">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                        Crafted for You
-                      </p>
-                      <h1 className="mt-1 font-display text-2xl font-semibold leading-tight sm:text-3xl">
-                        Your next cup, picked smarter.
-                      </h1>
-                    </div>
-                    <div className="rounded-full bg-[#FFF0D8]/10 px-3 py-1.5 font-sans text-[11px] font-bold text-[#FFF0D8]">
-                      Monthly favorite: {monthlyFavorite}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => scrollRecommendations("left")}
-                    aria-label="Scroll recommendations left"
-                    className="absolute left-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => scrollRecommendations("right")}
-                    aria-label="Scroll recommendations right"
-                    className="absolute right-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
-
-                  <div
-                    ref={recommendationScrollerRef}
-                    className="mt-3 flex snap-x gap-3 overflow-x-auto pr-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  >
-                    {recommendedItems.slice(0, 3).map(({ item, reason, score }, index) => {
-                      const menuImage = getMenuImage(item);
-                      const isQuickAdded = quickAddFeedback?.itemId === item.id;
-
-                      return (
-                        <article
-                          key={item.id}
-                          className="relative flex w-[240px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-[#FFF8EF] text-[#123E26] shadow-[0_8px_18px_rgba(0,0,0,0.12)] sm:w-[270px]"
-                        >
-                          {isQuickAdded ? (
-                            <div className="absolute inset-x-3 top-3 z-20 flex animate-bounce items-center justify-center gap-1.5 rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
-                              <CheckCircle2 size={14} />
-                              Added to cart
-                            </div>
-                          ) : null}
-                          {!isPastryMenuItem(item) ? (
-                            <button
-                              type="button"
-                              onClick={() => openCustomizeModal(item)}
-                              aria-label={`Customize ${item.name}`}
-                              className="absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
-                            >
-                              <SlidersHorizontal size={16} />
-                            </button>
-                          ) : null}
-
-                          <div className="flex aspect-[9/16] w-20 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-3xl">
-                            {menuImage ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={menuImage}
-                                alt={item.name}
-                                className="h-full w-full rounded-[16px] object-cover"
-                              />
-                            ) : (
-                              getEmoji(item)
-                            )}
-                          </div>
-
-                          <div className="flex min-w-0 flex-1 flex-col p-3 pr-10">
-                            <div>
-                              <div>
-                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#0D2E18]">
-                                  {recommendationLabels[index]}
-                                </p>
-                                <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
-                                  {reason} · {(score * 100).toFixed(0)}
-                                </p>
-                                <h2 className="mt-1 line-clamp-2 font-sans text-base font-black leading-tight">
-                                  {item.name}
-                                </h2>
-                              </div>
-                            </div>
-
-                            <div className="mt-auto flex items-center gap-2 pt-4">
-                              <p className="shrink-0 font-sans text-lg font-black text-[#765531]">
-                                {formatPrice(item.base_price)}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => handleQuickAdd(item)}
-                                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-sm font-bold text-white transition hover:bg-[#0D2E18]"
-                              >
-                                <ShoppingCart size={16} />
-                                Add
-                              </button>
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-
                 <div className="grid grid-cols-[74px_1fr] gap-3 md:grid-cols-[92px_1fr]">
                   <aside className="sticky top-2 z-30 h-[calc(100dvh-12rem)] self-start overflow-visible rounded-r-[22px] bg-[#0D2E18] px-1.5 py-2 shadow-[8px_0_18px_rgba(13,46,24,0.16)] md:h-[calc(100dvh-9rem)]">
                     <div className="space-y-1 overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -2401,7 +2198,7 @@ export function CustomerDashboard({
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8A755D]">
                     Order Status
                   </p>
-                  <h1 className="font-display text-4xl font-bold tracking-tight text-[#123E26]">
+                  <h1 className="font-sans text-4xl font-bold tracking-tight text-[#123E26]">
                     My Orders
                   </h1>
                   <p className="mt-1 text-sm text-[#6F634E]">
@@ -2809,15 +2606,30 @@ export function CustomerDashboard({
                           </p>
                           <button
                             type="button"
-                            onClick={claimDiversityMission}
-                            disabled={!hasPastryOrder || diversityMissionClaimed}
+                            onClick={() => {
+                              if (hasPastryOrder) {
+                                claimDiversityMission();
+                                return;
+                              }
+
+                              if (pastryMissionItem) {
+                                handleQuickAdd(pastryMissionItem);
+                                router.push("/customer/cart");
+                              }
+                            }}
+                            disabled={
+                              diversityMissionClaimed ||
+                              (!hasPastryOrder && !pastryMissionItem)
+                            }
                             className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
                           >
                             {diversityMissionClaimed
                               ? "Claimed"
                               : hasPastryOrder
                                 ? "Claim Reward"
-                                : "Order Pastry"}
+                                : pastryMissionItem
+                                  ? `Order ${pastryMissionItem.name}`
+                                  : "No pastry available"}
                           </button>
                         </article>
                       </div>
@@ -3060,7 +2872,6 @@ export function CustomerDashboard({
                       {(
                         [
                           ["Taste Quality", tasteRating, setTasteRating],
-                          ["Overall Experience", overallRating, setOverallRating],
                         ] as const
                       ).map(([label, value, setValue]) => (
                         <div
@@ -3147,6 +2958,36 @@ export function CustomerDashboard({
                         />
                       </div>
 
+                      <div className="rounded-[20px] bg-[#FFF8EE] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-lg font-bold text-[#123E26]">
+                            Overall Experience
+                          </p>
+                          <span className="text-sm font-semibold text-[#8A755D]">
+                            {overallRating > 0 ? `${overallRating}/5` : "Select"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex gap-2">
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              onClick={() =>
+                                handleRatingChange(setOverallRating, score)
+                              }
+                              className={`text-4xl transition hover:text-[#C96A12] ${
+                                score <= overallRating
+                                  ? "text-[#C96A12]"
+                                  : "text-[#D8C8A7]"
+                              }`}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {feedbackMessage ? (
                         <p
                           className={`rounded-xl px-4 py-3 text-sm font-medium ${
@@ -3205,12 +3046,12 @@ export function CustomerDashboard({
                     </g>
                   </svg>
                 </div>
-                <p className="mt-5 font-display text-4xl font-bold text-[#FFF0DA]">
+                <p className="mt-5 font-sans text-4xl font-bold text-[#FFF0DA]">
                   KadaServe
                 </p>
               </div>
 
-              <p className="kada-brand-emerge absolute inset-x-0 top-1/2 -translate-y-1/2 font-display text-4xl italic leading-tight text-[#FFF0DA]">
+              <p className="kada-brand-emerge absolute inset-x-0 top-1/2 -translate-y-1/2 font-sans text-4xl italic leading-tight text-[#FFF0DA]">
                 Every cup tells a story
               </p>
             </div>
@@ -3315,7 +3156,7 @@ export function CustomerDashboard({
       {isTaglineVisible ? (
         <div className="fixed inset-0 z-[88] flex items-center justify-center bg-[#0D2E18] px-6 text-[#FFF0D8]">
           <div className="text-center">
-            <p className="font-display text-5xl font-bold leading-tight sm:text-6xl">
+            <p className="font-sans text-5xl font-bold leading-tight sm:text-6xl">
               Every cup
               <span className="block italic">tells a story.</span>
             </p>
@@ -3374,7 +3215,7 @@ export function CustomerDashboard({
                           <>
                             <div className="absolute inset-4 rounded-full bg-[#FFF0DA]/12" />
                             <div className="relative flex h-24 w-24 items-center justify-center rounded-[32px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_18px_34px_rgba(0,0,0,0.20)]">
-                              <Coffee className="h-12 w-12 text-[#0F441D]" />
+                              <CupSoda className="h-12 w-12 text-[#0F441D]" />
                             </div>
                             <Sparkles className="absolute right-4 top-4 h-7 w-7 text-[#FFF0D8]" />
                           </>
@@ -3417,7 +3258,7 @@ export function CustomerDashboard({
                       <div className="mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#0F441D]">
                         <Icon size={20} />
                       </div>
-                      <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-[#FFF0D8] sm:text-4xl">
+                      <h2 className="mt-4 font-sans text-3xl font-bold leading-tight text-[#FFF0D8] sm:text-4xl">
                         {card.title}
                       </h2>
                       <p className="mt-4 max-w-sm font-sans text-base leading-7 text-[#FFF0D8]/88">
@@ -3552,7 +3393,7 @@ export function CustomerDashboard({
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
                     Quick Feedback
                   </p>
-                  <h2 className="font-display text-2xl font-bold leading-tight text-[#0D2E18]">
+                  <h2 className="font-sans text-2xl font-bold leading-tight text-[#0D2E18]">
                     {selectedFeedbackItem.item_name}
                   </h2>
                 </div>
@@ -3596,7 +3437,6 @@ export function CustomerDashboard({
               {(
                 [
                   ["Taste Quality", tasteRating, setTasteRating],
-                  ["Overall Experience", overallRating, setOverallRating],
                 ] as const
               ).map(([label, value, setValue]) => (
                 <div key={label} className="rounded-[20px] bg-[#FFF8EF] p-4">
@@ -3670,6 +3510,34 @@ export function CustomerDashboard({
                 className="min-h-20 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-3 font-sans text-sm outline-none placeholder:text-[#A49175]"
               />
 
+              <div className="rounded-[20px] bg-[#FFF8EF] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-sans text-base font-black text-[#0D2E18]">
+                    Overall Experience
+                  </p>
+                  <span className="font-sans text-xs font-bold text-[#8A755D]">
+                    {overallRating > 0 ? `${overallRating}/5` : "Select"}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex justify-between gap-1">
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <button
+                      key={score}
+                      type="button"
+                      onClick={() => handleRatingChange(setOverallRating, score)}
+                      className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${
+                        score <= overallRating
+                          ? "text-[#C96A12]"
+                          : "text-[#D8C8A7]"
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {feedbackMessage ? (
                 <p
                   className={`rounded-xl px-4 py-3 text-sm font-bold ${
@@ -3703,7 +3571,7 @@ export function CustomerDashboard({
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
                   Customize Item
                 </p>
-                <h2 className="mt-1 font-display text-3xl font-semibold leading-tight text-[#123E26] sm:text-4xl">
+                <h2 className="mt-1 font-sans text-3xl font-semibold leading-tight text-[#123E26] sm:text-4xl">
                   {selectedMenuItem.name}
                 </h2>
               </div>
@@ -3912,20 +3780,6 @@ export function CustomerDashboard({
                     </div>
                   </div>
 
-                  <div className="mt-5">
-                    <label className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
-                      Special Instructions
-                    </label>
-                    <textarea
-                      value={specialInstructions}
-                      onChange={(event) =>
-                        setSpecialInstructions(event.target.value)
-                      }
-                      placeholder="Add a note for staff"
-                      className="mt-2 min-h-24 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-3 font-sans text-sm outline-none placeholder:text-[#A49175]"
-                    />
-                  </div>
-
                   {customizeMessage ? (
                     <p className="mt-4 rounded-xl bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-bold text-[#0F7A40]">
                       {customizeMessage}
@@ -3979,7 +3833,7 @@ export function CustomerDashboard({
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                   Track Order
                 </p>
-                <h2 className="mt-1 font-display text-3xl font-bold leading-tight text-[#0D2E18] md:text-4xl">
+                <h2 className="mt-1 font-sans text-3xl font-bold leading-tight text-[#0D2E18] md:text-4xl">
                   {formatOrderCode(trackingOrder.id)}
                 </h2>
                 <p className="mt-1 font-sans text-sm text-[#6F634E]">
@@ -4064,7 +3918,7 @@ export function CustomerDashboard({
 
               <div className="mt-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-white p-4">
-                  <h3 className="font-display text-2xl font-bold text-[#0D2E18]">
+                  <h3 className="font-sans text-2xl font-bold text-[#0D2E18]">
                     Order Details
                   </h3>
 
@@ -4100,7 +3954,7 @@ export function CustomerDashboard({
                 </section>
 
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-white p-4">
-                  <h3 className="font-display text-2xl font-bold text-[#0D2E18]">
+                  <h3 className="font-sans text-2xl font-bold text-[#0D2E18]">
                     What Happens Next
                   </h3>
                   <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
@@ -4160,7 +4014,7 @@ export function CustomerDashboard({
         }`}
       >
         <div className="flex items-center justify-between px-7 pb-5 pt-10">
-          <h2 className="font-display text-[2.1rem] font-bold leading-none tracking-[-0.04em] text-[#FFF0D8]">
+          <h2 className="font-sans text-[2.1rem] font-bold leading-none tracking-[-0.04em] text-[#FFF0D8]">
             KadaServe
           </h2>
 
@@ -4255,7 +4109,7 @@ export function CustomerDashboard({
               <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
                 {isProfileSettingsOpen ? "Profile Settings" : "Your Profile"}
               </p>
-              <h2 className="mt-1.5 font-display text-3xl font-bold leading-tight">
+              <h2 className="mt-1.5 font-sans text-3xl font-bold leading-tight">
                 {isProfileSettingsOpen ? "Settings" : displayProfileName}
               </h2>
             </div>
@@ -4348,7 +4202,7 @@ export function CustomerDashboard({
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
                 <div className="flex items-center gap-2">
                   <UserPen className="h-4 w-4 text-[#684B35]" />
-                  <h3 className="font-display text-xl font-bold text-[#0D2E18]">
+                  <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
                     Edit Profile
                   </h3>
                 </div>
@@ -4398,7 +4252,7 @@ export function CustomerDashboard({
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
                 <div className="flex items-center gap-2">
                   <Languages className="h-4 w-4 text-[#684B35]" />
-                  <h3 className="font-display text-xl font-bold text-[#0D2E18]">
+                  <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
                     Language
                   </h3>
                 </div>
@@ -4424,7 +4278,7 @@ export function CustomerDashboard({
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
                 <div className="flex items-center gap-2">
                   <HelpCircle className="h-4 w-4 text-[#684B35]" />
-                  <h3 className="font-display text-xl font-bold text-[#0D2E18]">
+                  <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
                     FAQs
                   </h3>
                 </div>
@@ -4484,13 +4338,13 @@ export function CustomerDashboard({
           ) : (
             <>
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
-                <h3 className="font-display text-xl font-bold text-[#0D2E18]">
+                <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
                   Taste Profile
                 </h3>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   {[
-                    ["Coffee", tasteProfile.coffee],
+                    ["Latte", tasteProfile.coffee],
                     ["Pastries", tasteProfile.pastries],
                     ["Other", tasteProfile.other],
                   ].map(([label, value]) => (
@@ -4523,7 +4377,7 @@ export function CustomerDashboard({
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#DCCFB8]">
                     Hall of Fame
                   </p>
-                  <p className="mt-1 font-display text-xl font-bold">
+                  <p className="mt-1 font-sans text-xl font-bold">
                     {monthlyFavorite}
                   </p>
                 </div>
@@ -4531,7 +4385,7 @@ export function CustomerDashboard({
 
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
                 <div className="flex items-center justify-between gap-3">
-              <h3 className="font-display text-xl font-bold text-[#0D2E18]">
+              <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
                 Recent Orders
               </h3>
                   <button

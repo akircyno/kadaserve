@@ -246,7 +246,18 @@ function requiresPaymentBeforeNextAction(order: StaffOrder) {
 
   return (
     order.payment_status === "unpaid" &&
-    (nextAction === "Complete" || nextAction === "Mark Delivered")
+    order.status === "out_for_delivery" &&
+    nextAction === "Mark Delivered"
+  );
+}
+
+function canMarkPaid(order: StaffOrder) {
+  return order.payment_status === "unpaid" && order.status === "out_for_delivery";
+}
+
+function canCancelOrder(order: StaffOrder) {
+  return !["ready", "out_for_delivery", "completed", "delivered", "cancelled"].includes(
+    order.status
   );
 }
 
@@ -667,6 +678,14 @@ export function StaffDashboard() {
         );
       }
 
+      if (result.nextStatus === "delivered") {
+        setStaffToast(
+          result.receiptSent
+            ? "Delivery receipt sent."
+            : "Delivered. Receipt email not configured."
+        );
+      }
+
       await loadOrders();
       router.refresh();
     } catch {
@@ -699,9 +718,7 @@ export function StaffDashboard() {
       }
 
       setStaffToast(
-        result.receiptSent
-          ? "Receipt Sent"
-          : "Payment marked paid. Receipt not sent."
+        "Payment marked paid. Complete delivery to send the receipt."
       );
 
       await loadOrders();
@@ -752,7 +769,7 @@ export function StaffDashboard() {
               <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
                 Order Queue
               </p>
-              <h1 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+              <h1 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
                 Active Orders
               </h1>
             </div>
@@ -1244,7 +1261,7 @@ export function StaffDashboard() {
                   Order Details
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-3xl font-bold leading-none text-[#0D2E18]">
+                  <h2 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
                     {formatOrderCode(selectedOrder.id)}
                   </h2>
 
@@ -1491,8 +1508,7 @@ export function StaffDashboard() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {selectedOrder.payment_status === "unpaid" &&
-                    !["cancelled"].includes(selectedOrder.status) ? (
+                    {canMarkPaid(selectedOrder) ? (
                       <button
                         type="button"
                         onClick={() => handleMarkPaid(selectedOrder.id)}
@@ -1503,9 +1519,7 @@ export function StaffDashboard() {
                       </button>
                     ) : null}
 
-                    {!["completed", "delivered", "cancelled"].includes(
-                      selectedOrder.status
-                    ) ? (
+                    {canCancelOrder(selectedOrder) ? (
                       <button
                         type="button"
                         onClick={() => setIsConfirmingCancel(true)}

@@ -298,7 +298,7 @@ export default function SignupPage() {
                 />
               </div>
 
-              <h1 className="font-display text-3xl font-semibold text-[#FFF0DA]">
+              <h1 className="font-sans text-3xl font-semibold text-[#FFF0DA]">
                 KadaServe
               </h1>
             </div>
@@ -307,7 +307,7 @@ export default function SignupPage() {
               <p className="font-sans text-sm font-bold uppercase tracking-[0.18em] text-[#CDB898]">
                 Customer Account
               </p>
-              <h2 className="mt-3 max-w-lg font-display text-4xl font-semibold leading-[1.02] text-[#FFF0DA] xl:text-5xl">
+              <h2 className="mt-3 max-w-lg font-sans text-4xl font-semibold leading-[1.02] text-[#FFF0DA] xl:text-5xl">
                 Order easier.
                 <br />
                 Track clearer.
@@ -361,7 +361,7 @@ export default function SignupPage() {
                 />
               </div>
 
-              <h1 className="font-display text-5xl font-semibold tracking-tight text-[#0D2E18]">
+              <h1 className="font-sans text-5xl font-semibold tracking-tight text-[#0D2E18]">
                 KadaServe
               </h1>
             </div>
