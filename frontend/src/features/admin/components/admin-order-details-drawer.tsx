@@ -166,6 +166,12 @@ export function AdminOrderDetailsDrawer({
                 order.payment_status
               )}`}
             />
+            {order.order_type === "delivery" ? (
+              <InfoText label="Delivery Fee" value={peso(order.delivery_fee ?? 0)} />
+            ) : null}
+            {order.reward_code ? (
+              <InfoText label="Reward Applied" value="Free Delivery" />
+            ) : null}
           </div>
 
           <hr className="my-6 border-[#D8C8AA]/70" />

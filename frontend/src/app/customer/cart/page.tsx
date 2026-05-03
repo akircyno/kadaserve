@@ -14,6 +14,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { DeliveryLocationPicker } from "@/features/customer/components/delivery-location-picker";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
 import type { StoreStatusPayload } from "@/lib/store-status";
@@ -23,6 +24,22 @@ type RewardVoucher = {
   title: string;
   expiresAt: string;
   value: string;
+};
+
+type CustomerRewardVoucher = {
+  id: string;
+  code: string;
+  status: "active" | "used" | "expired";
+  expiresAt: string;
+  rewardItem: {
+    id: string;
+    name: string;
+    description: string;
+    type: "delivery_fee";
+    pointsCost: number;
+    value: number;
+    isActive: boolean;
+  } | null;
 };
 
 type CustomerAddress = {
@@ -37,6 +54,14 @@ const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
 
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
+}
+
+function formatRewardDate(value: string) {
+  return new Date(value).toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function formatAddonLabel(value: string) {
@@ -131,6 +156,15 @@ export default function CartPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
+  const [activeRewardVouchers, setActiveRewardVouchers] = useState<
+    CustomerRewardVoucher[]
+  >([]);
+  const [appliedReward, setAppliedReward] = useState<CustomerRewardVoucher | null>(
+    null
+  );
+  const [rewardMessage, setRewardMessage] = useState("");
+  const [isRewardsLoading, setIsRewardsLoading] = useState(true);
+  const [isApplyingReward, setIsApplyingReward] = useState(false);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -146,6 +180,33 @@ export default function CartPage() {
 
   useEffect(() => {
     setRewardWallet(readRewardWallet());
+  }, []);
+
+  async function loadCustomerRewards() {
+    setIsRewardsLoading(true);
+
+    try {
+      const response = await fetch("/api/customer/rewards");
+      const result = (await response.json()) as {
+        activeVouchers?: CustomerRewardVoucher[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setRewardMessage(result.error || "Rewards are unavailable right now.");
+        return;
+      }
+
+      setActiveRewardVouchers(result.activeVouchers ?? []);
+    } catch {
+      setRewardMessage("Rewards are unavailable right now.");
+    } finally {
+      setIsRewardsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCustomerRewards();
   }, []);
 
   async function loadSavedAddresses() {
@@ -183,8 +244,11 @@ export default function CartPage() {
   useEffect(() => {
     if (orderType === "delivery") {
       setPaymentMethod("cash");
+    } else if (appliedReward) {
+      setAppliedReward(null);
+      setRewardMessage("Free Delivery can only be used for delivery orders.");
     }
-  }, [orderType]);
+  }, [orderType, appliedReward]);
 
   useEffect(() => {
     let isMounted = true;
@@ -219,11 +283,17 @@ export default function CartPage() {
   );
   const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
   const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
-  const grandTotal = Math.max(0, subtotal - voucherDiscount);
+  const baseDeliveryFee = orderType === "delivery" ? 50 : 0;
+  const rewardDiscount = appliedReward ? Math.min(baseDeliveryFee, 50) : 0;
+  const deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscount);
+  const grandTotal = Math.max(0, subtotal + deliveryFee - voucherDiscount);
   const pointsEarned = Math.floor(grandTotal / 20);
   const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedVoucher = rewardWallet.find(
     (voucher) => voucher.code === voucherCode.trim().toUpperCase()
+  );
+  const availableDeliveryRewards = activeRewardVouchers.filter(
+    (voucher) => voucher.rewardItem?.type === "delivery_fee"
   );
   const selectedSavedAddress =
     savedAddresses.find((address) => address.id === selectedAddressId) ?? null;
@@ -260,6 +330,48 @@ export default function CartPage() {
     setVoucherCode(code.trim().toUpperCase());
     setVoucherDraft(code.trim().toUpperCase());
     setIsVoucherModalOpen(false);
+  }
+
+  async function applyRewardVoucher(voucher: CustomerRewardVoucher) {
+    setRewardMessage("");
+
+    if (orderType !== "delivery") {
+      setAppliedReward(null);
+      setRewardMessage("Free Delivery can only be used for delivery orders.");
+      return;
+    }
+
+    setIsApplyingReward(true);
+
+    try {
+      const response = await fetch("/api/customer/rewards/apply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rewardId: voucher.id,
+          orderType,
+        }),
+      });
+      const result = (await response.json()) as {
+        reward?: CustomerRewardVoucher;
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !result.reward) {
+        setRewardMessage(result.error || "This reward cannot be applied.");
+        return;
+      }
+
+      setAppliedReward(result.reward);
+      setRewardMessage(result.message || "Free Delivery reward applied.");
+    } catch {
+      setRewardMessage("Something went wrong while applying this reward.");
+    } finally {
+      setIsApplyingReward(false);
+    }
   }
 
   function openAddressPicker() {
@@ -410,6 +522,8 @@ export default function CartPage() {
           deliveryLat,
           deliveryLng,
           voucherCode,
+          rewardId: appliedReward?.id ?? null,
+          rewardCode: appliedReward?.code ?? null,
         }),
       });
 
@@ -426,6 +540,8 @@ export default function CartPage() {
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
       clearCart();
+      setAppliedReward(null);
+      void loadCustomerRewards();
 
       router.replace(`/customer?tab=orders&orderId=${orderId}`);
     } catch {
@@ -678,6 +794,96 @@ export default function CartPage() {
                   </div>
 
                   <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                          Available Rewards
+                        </p>
+                        <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
+                          {isRewardsLoading
+                            ? "Checking rewards..."
+                            : availableDeliveryRewards.length > 0
+                            ? "Free Delivery voucher ready"
+                            : "No delivery rewards available"}
+                        </p>
+                      </div>
+                      {isRewardsLoading ? (
+                        <LoadingSpinner className="h-5 w-5" label="Loading rewards" />
+                      ) : null}
+                    </div>
+
+                    {availableDeliveryRewards.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {availableDeliveryRewards.map((voucher) => {
+                          const isApplied = appliedReward?.id === voucher.id;
+
+                          return (
+                            <div
+                              key={voucher.id}
+                              className={`rounded-[14px] border px-3 py-3 ${
+                                isApplied
+                                  ? "border-[#0D2E18] bg-[#E7F4EA]"
+                                  : "border-[#EFE2C9] bg-[#FFF8EF]"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-sans text-sm font-black text-[#0D2E18]">
+                                    Free Delivery
+                                  </p>
+                                  <p className="truncate font-sans text-xs font-semibold text-[#684B35]">
+                                    {voucher.code}
+                                  </p>
+                                  <p className="font-sans text-xs text-[#8C7A64]">
+                                    Expires {formatRewardDate(voucher.expiresAt)}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => applyRewardVoucher(voucher)}
+                                  disabled={
+                                    isApplyingReward ||
+                                    isApplied ||
+                                    orderType !== "delivery"
+                                  }
+                                  className="shrink-0 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                                >
+                                  {isApplyingReward && !isApplied ? (
+                                    <LoadingSpinner
+                                      className="mr-1 h-3.5 w-3.5 align-[-0.2em]"
+                                      label="Applying reward"
+                                    />
+                                  ) : null}
+                                  {isApplied ? "Applied" : "Apply"}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {appliedReward ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAppliedReward(null);
+                          setRewardMessage("Free Delivery reward removed.");
+                        }}
+                        className="mt-3 font-sans text-xs font-bold text-[#684B35] underline underline-offset-4"
+                      >
+                        Remove Free Delivery
+                      </button>
+                    ) : null}
+
+                    {rewardMessage ? (
+                      <p className="mt-3 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-xs font-semibold text-[#684B35]">
+                        {rewardMessage}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
@@ -723,6 +929,20 @@ export default function CartPage() {
                       <span className="text-[#684B35]">Amount</span>
                       <span className="font-bold">{peso(subtotal)}</span>
                     </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[#684B35]">Delivery Fee</span>
+                      <span className="font-bold">{peso(deliveryFee)}</span>
+                    </div>
+                    {appliedReward ? (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[#684B35]">
+                          Discount/Reward Applied
+                        </span>
+                        <span className="font-bold text-[#0D2E18]">
+                          Free Delivery
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="flex justify-between gap-4">
                       <span className="text-[#684B35]">Voucher Discount</span>
                       <span className="font-bold">-{peso(voucherDiscount)}</span>
@@ -801,6 +1021,12 @@ export default function CartPage() {
                     }
                     className="fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
                   >
+                    {isCheckingOut || isStoreStatusLoading ? (
+                      <LoadingSpinner
+                        className="mr-2 h-5 w-5 align-[-0.2em]"
+                        label={isCheckingOut ? "Processing order" : "Checking store"}
+                      />
+                    ) : null}
                     {isCheckingOut
                       ? "Processing..."
                       : isStoreStatusLoading

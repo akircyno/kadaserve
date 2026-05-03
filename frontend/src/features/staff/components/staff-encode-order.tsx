@@ -9,6 +9,7 @@ import {
     ShoppingCart,
     Trash2,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { MenuCategory, MenuFilterCategory, StaffMenuItem } from "@/types/menu";
 import type { OrderType, PaymentMethod, PaymentStatus } from "@/types/orders";
 
@@ -813,8 +814,9 @@ export function StaffEncodeOrder() {
                                 !hasRequiredCustomerName ||
                                 !hasRequiredDeliveryInfo
                             }
-                            className="mt-5 w-full rounded-[16px] border border-[#0D2E18] bg-[#0D2E18] px-4 py-4 font-sans text-base font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#BFD0B8] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
+                            className="mt-5 flex w-full items-center justify-center gap-2 rounded-[16px] border border-[#0D2E18] bg-[#0D2E18] px-4 py-4 font-sans text-base font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#BFD0B8] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
                         >
+                            {isSubmitting ? <LoadingSpinner label="Submitting order" /> : null}
                             {isSubmitting ? "Submitting..." : "Submit Order Queue"}
                         </button>
                     </div>

@@ -17,6 +17,7 @@ import {
   Truck,
   X,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
@@ -1513,8 +1514,9 @@ export function StaffDashboard() {
                         type="button"
                         onClick={() => handleMarkPaid(selectedOrder.id)}
                         disabled={isMarkingPaid}
-                        className="rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:opacity-60"
                       >
+                        {isMarkingPaid ? <LoadingSpinner label="Marking paid" /> : null}
                         {isMarkingPaid ? "Marking..." : "Mark Paid"}
                       </button>
                     ) : null}
@@ -1540,8 +1542,11 @@ export function StaffDashboard() {
                             );
                           }}
                           disabled={updatingOrderIds.includes(selectedOrder.id)}
-                          className="rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:opacity-60"
                         >
+                          {updatingOrderIds.includes(selectedOrder.id) ? (
+                            <LoadingSpinner label="Updating order" />
+                          ) : null}
                           {updatingOrderIds.includes(selectedOrder.id)
                             ? "Updating..."
                             : getDrawerActionLabel(selectedOrder)}

@@ -5,6 +5,10 @@ import {
   resolveStoreStatus,
   STORE_STATUS_SETTING_KEY,
 } from "@/lib/store-status";
+import {
+  FREE_DELIVERY_FEE,
+  validateDeliveryReward,
+} from "@/lib/reward-service";
 
 type CheckoutItem = {
   menu_item_id: string;
@@ -127,6 +131,8 @@ export async function POST(request: Request) {
     const deliveryLat = getOptionalCoordinate(body.deliveryLat);
     const deliveryLng = getOptionalCoordinate(body.deliveryLng);
     const voucherCode = typeof body.voucherCode === "string" ? body.voucherCode : "";
+    const rewardId = typeof body.rewardId === "string" ? body.rewardId : null;
+    const rewardCode = typeof body.rewardCode === "string" ? body.rewardCode : null;
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -152,6 +158,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (orderType === "delivery" && paymentMethod !== "cash") {
+      return NextResponse.json(
+        { error: "Delivery orders can only use cash payment." },
+        { status: 400 }
+      );
+    }
+
     if (orderType === "delivery") {
       if (!deliveryAddress) {
         return NextResponse.json(
@@ -171,7 +184,36 @@ export async function POST(request: Request) {
     const subtotal = items.reduce((sum, item) => {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
-    const totalAmount = Math.max(0, subtotal - getVoucherDiscount(subtotal, voucherCode));
+    const baseDeliveryFee = orderType === "delivery" ? FREE_DELIVERY_FEE : 0;
+    let deliveryFee = baseDeliveryFee;
+    let rewardDiscountAmount = 0;
+    let appliedRewardCode: string | null = null;
+    let appliedRewardId: string | null = null;
+
+    if (rewardId || rewardCode) {
+      const rewardValidation = await validateDeliveryReward({
+        supabase,
+        customerId: user.id,
+        rewardId,
+        rewardCode,
+        orderType,
+      });
+
+      if (!rewardValidation.ok) {
+        return NextResponse.json(
+          { error: rewardValidation.error },
+          { status: rewardValidation.status }
+        );
+      }
+
+      appliedRewardId = rewardValidation.voucher.id;
+      appliedRewardCode = rewardValidation.voucher.code;
+      rewardDiscountAmount = Math.min(baseDeliveryFee, rewardValidation.discountAmount);
+      deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscountAmount);
+    }
+
+    const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
+    const totalAmount = Math.max(0, subtotal + deliveryFee - voucherDiscount);
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -182,6 +224,9 @@ export async function POST(request: Request) {
         payment_method: paymentMethod,
         payment_status: "unpaid",
         total_amount: totalAmount,
+        delivery_fee: deliveryFee,
+        reward_code: appliedRewardCode,
+        reward_discount_amount: rewardDiscountAmount,
         delivery_address: orderType === "delivery" ? deliveryAddress : null,
         delivery_lat: orderType === "delivery" ? deliveryLat : null,
         delivery_lng: orderType === "delivery" ? deliveryLng : null,
@@ -224,10 +269,38 @@ export async function POST(request: Request) {
       );
     }
 
+    if (appliedRewardId) {
+      const { data: usedVoucher, error: rewardUseError } = await supabase
+        .from("customer_rewards")
+        .update({
+          status: "used",
+          used_at: new Date().toISOString(),
+          order_id: order.id,
+        })
+        .eq("id", appliedRewardId)
+        .eq("customer_id", user.id)
+        .eq("status", "active")
+        .select("id")
+        .maybeSingle();
+
+      if (rewardUseError || !usedVoucher) {
+        return NextResponse.json(
+          {
+            error:
+              rewardUseError?.message ||
+              "This reward could not be marked as used. Please try again.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       orderId: order.id,
       orderType,
+      deliveryFee,
+      rewardCode: appliedRewardCode,
     });
   } catch {
     return NextResponse.json(

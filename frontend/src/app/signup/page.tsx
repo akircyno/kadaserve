@@ -15,6 +15,7 @@ import {
   Phone,
   User,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -658,8 +659,9 @@ export default function SignupPage() {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="w-full rounded-xl bg-[#0F441D] py-2.5 font-sans text-base font-bold text-white transition hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F441D] py-2.5 font-sans text-base font-bold text-white transition hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70"
               >
+                {isLoading ? <LoadingSpinner label="Creating account" /> : null}
                 {isLoading ? "Creating account..." : "Create account"}
               </button>
             </form>

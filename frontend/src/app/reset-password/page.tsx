@@ -11,6 +11,7 @@ import {
   EyeOff,
   Lock,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -212,8 +213,9 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full rounded-xl bg-[#0F441D] py-3 font-sans text-lg font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F441D] py-3 font-sans text-lg font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
           >
+            {isSubmitting ? <LoadingSpinner label="Updating password" /> : null}
             {isSubmitting ? "Updating..." : "Update password"}
           </button>
 

@@ -126,6 +126,8 @@ type AdminSearchSuggestion = {
 
 type AdminFeedbackRow = {
   id: string;
+  customer_id: string | null;
+  menu_item_id: string | null;
   overall_rating: number;
   taste_rating: number;
   strength_rating: number;
@@ -135,22 +137,46 @@ type AdminFeedbackRow = {
   menu_items: { name: string | null; category: string | null } | null;
 };
 
+type AdminRewardPoolItem = {
+  id: string;
+  name: string;
+  description: string;
+  type: "delivery_fee";
+  pointsCost: number;
+  value: number;
+  isActive: boolean;
+  redeemedCount: number;
+  usedCount: number;
+  activeUnusedCount: number;
+};
+
+type AdminRewardsPayload = {
+  rewardPool: AdminRewardPoolItem[];
+  summary: {
+    totalRedeemed: number;
+    totalUsed: number;
+    activeUnused: number;
+    freeDeliveryRedeemed: number;
+    freeDeliveryUsed: number;
+  };
+};
+
 function normalizeSuggestion(value: string) {
   return value.trim().replaceAll("_", " ");
 }
 
 function RewardsManagementView({
-  menuItems,
   orders,
+  adminRewards,
 }: {
-  menuItems: AdminMenuItem[];
   orders: StaffOrder[];
+  adminRewards: AdminRewardsPayload | null;
 }) {
   const completedOrders = orders.filter((order) =>
     ["completed", "delivered"].includes(order.status)
   );
-  const pastryItems = menuItems.filter((item) => item.category === "pastries");
-  const availableRewards = pastryItems.filter((item) => item.isAvailable);
+  const rewardPool = adminRewards?.rewardPool ?? [];
+  const freeDeliveryReward = rewardPool.find((item) => item.type === "delivery_fee");
 
   return (
     <div className="space-y-5">
@@ -159,7 +185,7 @@ function RewardsManagementView({
           Rewards Management
         </h1>
         <p className="mt-1 font-sans text-sm text-[#684B35]">
-          Manage reward missions from live orders and menu availability.
+          Monitor redeemed vouchers, used rewards, and the active reward pool.
         </p>
       </div>
 
@@ -174,10 +200,10 @@ function RewardsManagementView({
         </div>
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
           <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Pastry Rewards
+            Free Delivery Redeemed
           </p>
           <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {availableRewards.length}
+            {adminRewards?.summary.freeDeliveryRedeemed ?? 0}
           </p>
         </div>
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
@@ -185,7 +211,7 @@ function RewardsManagementView({
             Reward Pool
           </p>
           <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {menuItems.filter((item) => item.isAvailable).length}
+            {rewardPool.filter((item) => item.isActive).length}
           </p>
         </div>
       </div>
@@ -195,24 +221,81 @@ function RewardsManagementView({
           Active Reward Items
         </h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {availableRewards.map((item) => (
+          {rewardPool.map((item) => (
             <article
               key={item.id}
               className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] p-4"
             >
               <p className="font-sans text-lg font-black text-[#0D2E18]">
-                {item.name}
+                {item.name.replace(" Voucher", "")}
               </p>
-              <p className="mt-1 font-sans text-sm text-[#684B35]">
-                {peso(item.price)} pastry mission item
+              <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
+                Reward type: Free Delivery
               </p>
+              <p className="mt-2 font-sans text-sm text-[#684B35]">
+                {item.pointsCost} pts - {peso(item.value)} delivery fee waived
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#DCCFB8] pt-3 font-sans text-sm">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
+                    Redeemed
+                  </p>
+                  <p className="font-black text-[#0D2E18]">{item.redeemedCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
+                    Used
+                  </p>
+                  <p className="font-black text-[#0D2E18]">{item.usedCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
+                    Active
+                  </p>
+                  <p className="font-black text-[#0D2E18]">
+                    {item.activeUnusedCount}
+                  </p>
+                </div>
+              </div>
             </article>
           ))}
-          {availableRewards.length === 0 ? (
+          {rewardPool.length === 0 ? (
             <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] p-5 font-sans text-sm text-[#8C7A64]">
-              No active pastry rewards. Add or show a pastry in Menu Management.
+              No reward records yet. Run backend/seed/rewards.sql in Supabase.
             </div>
           ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+        <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
+          Free Delivery Summary
+        </h2>
+        <div className="mt-4 grid gap-3 font-sans text-sm sm:grid-cols-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Total Redeemed
+            </p>
+            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
+              {freeDeliveryReward?.redeemedCount ?? 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Total Used
+            </p>
+            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
+              {freeDeliveryReward?.usedCount ?? 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              Active Unused
+            </p>
+            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
+              {freeDeliveryReward?.activeUnusedCount ?? 0}
+            </p>
+          </div>
         </div>
       </section>
     </div>
@@ -344,6 +427,9 @@ export function AdminDashboard() {
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
+  const [adminRewards, setAdminRewards] = useState<AdminRewardsPayload | null>(
+    null
+  );
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -436,6 +522,8 @@ export function AdminDashboard() {
         order.status,
         order.delivery_email ?? "",
         order.delivery_phone ?? "",
+        order.reward_code ? "Free Delivery Reward Applied" : "",
+        order.delivery_fee?.toString() ?? "",
         order.total_amount.toString(),
       ]
         .join(" ")
@@ -892,15 +980,22 @@ export function AdminDashboard() {
     }
 
     try {
-      const [ordersResponse, menuResponse, feedbackResponse] = await Promise.all([
+      const [
+        ordersResponse,
+        menuResponse,
+        feedbackResponse,
+        rewardsResponse,
+      ] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
+        fetch("/api/admin/rewards", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
       const menuResult = await menuResponse.json();
       const feedbackResult = await feedbackResponse.json();
+      const rewardsResult = await rewardsResponse.json();
 
       if (!ordersResponse.ok) {
         setError(ordersResult.error || "Failed to load admin orders.");
@@ -916,6 +1011,9 @@ export function AdminDashboard() {
       setMenuItems(menuResult.menuItems ?? []);
       if (feedbackResponse.ok) {
         setFeedbackRows(feedbackResult.feedback ?? []);
+      }
+      if (rewardsResponse.ok) {
+        setAdminRewards(rewardsResult);
       }
       setLastSyncedAt(new Date());
     } catch {
@@ -1291,11 +1389,18 @@ export function AdminDashboard() {
             ) : null}
 
             {activeTab === "customer-pref" ? (
-              <CustomerPreferenceView orders={scopedCustomerPreferenceOrders} />
+              <CustomerPreferenceView
+                feedbackRows={feedbackRows}
+                menuItems={menuItems}
+                orders={scopedCustomerPreferenceOrders}
+              />
             ) : null}
 
             {activeTab === "rewards" ? (
-              <RewardsManagementView menuItems={menuItems} orders={orders} />
+              <RewardsManagementView
+                orders={orders}
+                adminRewards={adminRewards}
+              />
             ) : null}
 
             {activeTab === "feedback" ? (

@@ -13,6 +13,7 @@ import {
   Lock,
   Mail,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -272,8 +273,9 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="w-full rounded-xl bg-[#0F441D] py-2.5 font-sans text-base font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F441D] py-2.5 font-sans text-base font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
               >
+                {isLoading ? <LoadingSpinner label="Signing in" /> : null}
                 {isLoading ? "Signing in..." : "Sign in"}
               </button>
             </form>

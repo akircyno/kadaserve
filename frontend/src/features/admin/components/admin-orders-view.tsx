@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type TimeFilter = "today" | "week" | "month" | "year";
@@ -214,6 +215,9 @@ function getExportRows(orders: StaffOrder[]) {
       }))
     ),
     total_amount: order.total_amount,
+    delivery_fee: order.delivery_fee ?? 0,
+    reward_code: order.reward_code ?? "",
+    reward_discount_amount: order.reward_discount_amount ?? 0,
     delivery_address: order.delivery_address ?? "",
     delivery_lat: order.delivery_lat ?? "",
     delivery_lng: order.delivery_lng ?? "",
@@ -235,6 +239,9 @@ function downloadCsv(orders: StaffOrder[], timeFilter: TimeFilter) {
     payment_status: "",
     items_array: "",
     total_amount: "",
+    delivery_fee: "",
+    reward_code: "",
+    reward_discount_amount: "",
     delivery_address: "",
     delivery_lat: "",
     delivery_lng: "",
@@ -417,6 +424,7 @@ export function OrdersView({
   >("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("month");
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isExportingReport, setIsExportingReport] = useState(false);
 
   const visibleOrders = useMemo(() => {
     return filteredOrders.filter((order) => {
@@ -511,10 +519,15 @@ export function OrdersView({
             <button
               type="button"
               onClick={() => setIsExportOpen((current) => !current)}
+              disabled={isExportingReport}
               className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#143D23]"
             >
-              <Download size={16} />
-              Export Data
+              {isExportingReport ? (
+                <LoadingSpinner label="Generating report" />
+              ) : (
+                <Download size={16} />
+              )}
+              {isExportingReport ? "Generating..." : "Export Data"}
               <ChevronDown size={16} />
             </button>
 
@@ -523,8 +536,10 @@ export function OrdersView({
                 <button
                   type="button"
                   onClick={() => {
+                    setIsExportingReport(true);
                     openPdfReport(visibleOrders, timeFilter);
                     setIsExportOpen(false);
+                    window.setTimeout(() => setIsExportingReport(false), 450);
                   }}
                   className="w-full rounded-[12px] px-3 py-2 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
                 >
@@ -533,8 +548,10 @@ export function OrdersView({
                 <button
                   type="button"
                   onClick={() => {
+                    setIsExportingReport(true);
                     downloadCsv(visibleOrders, timeFilter);
                     setIsExportOpen(false);
+                    window.setTimeout(() => setIsExportingReport(false), 450);
                   }}
                   className="w-full rounded-[12px] px-3 py-2 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
                 >
@@ -724,6 +741,11 @@ export function OrdersView({
                 <p className="mt-1 line-clamp-2 font-normal text-[#8C7A64]">
                   {formatOrderItems(order) || "No items"}
                 </p>
+                {order.reward_code ? (
+                  <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
+                    Reward Applied: Free Delivery
+                  </p>
+                ) : null}
               </div>
               <span className="font-semibold text-[#684B35]">
                 {getEncodedByName(order)}

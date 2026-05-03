@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { CustomerDashboard } from "@/features/customer/components/customer-dashboard";
+import type {
+  RecommendationFeedback,
+  RecommendationOrder,
+} from "@/lib/recommendations";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
 
@@ -36,11 +40,69 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     .order("name", { ascending: true });
 
   const menuItems = !menuError && menuData ? menuData : [];
+  let globalRecommendationOrders: RecommendationOrder[] = [];
+  let globalRecommendationFeedback: RecommendationFeedback[] = [];
+
+  const { data: globalOrderData } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        status,
+        ordered_at,
+        order_items (
+          quantity,
+          menu_items (
+            id,
+            name,
+            category
+          )
+        )
+      `
+    )
+    .in("status", ["completed", "delivered"]);
+
+  globalRecommendationOrders =
+    globalOrderData?.map((order) => ({
+      id: String(order.id),
+      customerId: `global-${order.id}`,
+      customerName: "Customer",
+      status: String(order.status),
+      orderedAt: String(order.ordered_at),
+      items:
+        order.order_items?.map((item) => {
+          const menuItem = Array.isArray(item.menu_items)
+            ? item.menu_items[0]
+            : item.menu_items;
+
+          return {
+            menuItemId: menuItem?.id,
+            name: menuItem?.name ?? "Menu item",
+            category: menuItem?.category,
+            quantity: Number(item.quantity) || 1,
+          };
+        }) ?? [],
+    })) ?? [];
+
+  const { data: globalFeedbackData } = await supabase
+    .from("feedback")
+    .select("menu_item_id, taste_rating, strength_rating, overall_rating");
+
+  globalRecommendationFeedback =
+    globalFeedbackData?.map((item) => ({
+      customerId: null,
+      menuItemId: String(item.menu_item_id),
+      tasteRating: Number(item.taste_rating),
+      strengthRating: Number(item.strength_rating),
+      overallRating: Number(item.overall_rating),
+    })) ?? [];
 
   let orders: CustomerOrder[] = fallbackOrders;
   let feedbackItems: FeedbackItem[] = [];
   let preferenceSignals: Array<{
     menuItemId: string;
+    tasteRating: number;
+    strengthRating: number;
     overallRating: number;
   }> = [];
   let customerProfile = {
@@ -83,6 +145,9 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           payment_method,
           payment_status,
           total_amount,
+          delivery_fee,
+          reward_code,
+          reward_discount_amount,
           ordered_at,
           delivery_address,
           delivery_lat,
@@ -148,13 +213,15 @@ export default async function CustomerPage({ searchParams }: PageProps) {
 
     const { data: submittedFeedback } = await supabase
       .from("feedback")
-      .select("menu_item_id, overall_rating")
+      .select("menu_item_id, taste_rating, strength_rating, overall_rating")
       .eq("customer_id", user.id);
 
     preferenceSignals =
       submittedFeedback
         ?.map((item) => ({
           menuItemId: String(item.menu_item_id),
+          tasteRating: Number(item.taste_rating),
+          strengthRating: Number(item.strength_rating),
           overallRating: Number(item.overall_rating),
         }))
         .filter(
@@ -181,6 +248,8 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       orders={orders}
       feedbackItems={feedbackItems}
       preferenceSignals={preferenceSignals}
+      globalRecommendationOrders={globalRecommendationOrders}
+      globalRecommendationFeedback={globalRecommendationFeedback}
       initialSection={initialSection}
       customerProfile={customerProfile}
       isAuthenticated={Boolean(user)}

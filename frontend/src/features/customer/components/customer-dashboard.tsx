@@ -29,6 +29,7 @@ import {
   Search,
   Settings,
   ShoppingCart,
+  SlidersHorizontal,
   Sparkles,
   Star,
   ShieldCheck,
@@ -39,8 +40,15 @@ import {
   UserPen,
   UserRound,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCart } from "@/features/customer/providers/cart-provider";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import {
+  getRecommendationsForCustomer,
+  type RecommendationFeedback,
+  type RecommendationMenuItem,
+  type RecommendationOrder,
+} from "@/lib/recommendations";
 import type { CustomerMenuItem } from "@/types/menu";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
@@ -63,8 +71,12 @@ type CustomerDashboardProps = {
   feedbackItems: FeedbackItem[];
   preferenceSignals?: Array<{
     menuItemId: string;
+    tasteRating?: number;
+    strengthRating?: number;
     overallRating: number;
   }>;
+  globalRecommendationOrders?: RecommendationOrder[];
+  globalRecommendationFeedback?: RecommendationFeedback[];
   initialSection?: Section;
   customerProfile?: {
     fullName: string;
@@ -81,6 +93,31 @@ type RewardVoucher = {
   title: string;
   expiresAt: string;
   value: string;
+};
+
+type ServerRewardItem = {
+  id: string;
+  name: string;
+  description: string;
+  type: "delivery_fee";
+  pointsCost: number;
+  value: number;
+  isActive: boolean;
+};
+
+type ServerRewardVoucher = {
+  id: string;
+  code: string;
+  status: "active" | "used" | "expired";
+  redeemedAt: string;
+  expiresAt: string;
+  rewardItem: ServerRewardItem | null;
+};
+
+type CustomerRewardsPayload = {
+  points: number;
+  redeemableRewards: ServerRewardItem[];
+  activeVouchers: ServerRewardVoucher[];
 };
 
 
@@ -452,128 +489,6 @@ function getOrderItemImage() {
   return null;
 }
 
-function getRecommendedItems(
-  items: CustomerMenuItem[],
-  orders: CustomerOrder[],
-  preferenceSignals: NonNullable<CustomerDashboardProps["preferenceSignals"]>
-) {
-  const orderSignals = new Map<
-    string,
-    {
-      frequency: number;
-      recency: number;
-    }
-  >();
-  const categoryScores = new Map<Filter, number>();
-  const satisfactionScores = new Map<string, number[]>();
-  const now = Date.now();
-  const dayInMs = 1000 * 60 * 60 * 24;
-
-  preferenceSignals.forEach((signal) => {
-    if (!Number.isFinite(signal.overallRating)) {
-      return;
-    }
-
-    const existing = satisfactionScores.get(signal.menuItemId) ?? [];
-    satisfactionScores.set(signal.menuItemId, [
-      ...existing,
-      Math.min(Math.max(signal.overallRating, 1), 5) / 5,
-    ]);
-  });
-
-  orders.forEach((order, orderIndex) => {
-    const orderedAt = new Date(order.ordered_at).getTime();
-    const ageInDays = Number.isFinite(orderedAt)
-      ? Math.max(0, (now - orderedAt) / dayInMs)
-      : orderIndex;
-    const recency = Math.max(0.12, 1 / (1 + ageInDays / 14));
-
-    order.order_items.forEach((orderItem) => {
-      const menuItemId = orderItem.menu_items?.id;
-      const itemName = orderItem.menu_items?.name?.toLowerCase();
-      const frequency = Math.max(1, orderItem.quantity);
-
-      if (menuItemId) {
-        const current = orderSignals.get(menuItemId) ?? {
-          frequency: 0,
-          recency: 0,
-        };
-
-        orderSignals.set(menuItemId, {
-          frequency: current.frequency + frequency,
-          recency: Math.max(current.recency, recency),
-        });
-      }
-
-      if (itemName) {
-        const matchedItem = items.find(
-          (item) => item.name.toLowerCase() === itemName
-        );
-
-        if (matchedItem) {
-          const filter = getFilter(matchedItem.category);
-          categoryScores.set(
-            filter,
-            (categoryScores.get(filter) ?? 0) + frequency + recency
-          );
-        }
-      }
-    });
-  });
-
-  const maxFrequency = Math.max(
-    1,
-    ...Array.from(orderSignals.values()).map((signal) => signal.frequency)
-  );
-  const weights = {
-    recency: 0.35,
-    frequency: 0.4,
-    satisfaction: 0.25,
-  };
-
-  return items
-    .filter((item) => item.is_available)
-    .map((item) => ({
-      item,
-      categoryAffinity: categoryScores.get(getFilter(item.category)) ?? 0,
-      signal: orderSignals.get(item.id) ?? { frequency: 0, recency: 0 },
-      satisfaction:
-        satisfactionScores.get(item.id)?.reduce((sum, rating) => sum + rating, 0) ??
-        null,
-    }))
-    .map(({ item, categoryAffinity, signal, satisfaction }) => {
-      const ratingCount = satisfactionScores.get(item.id)?.length ?? 0;
-      const satisfactionAverage =
-        satisfaction !== null && ratingCount > 0 ? satisfaction / ratingCount : 0.72;
-      const normalizedFrequency =
-        signal.frequency > 0
-          ? signal.frequency / maxFrequency
-          : Math.min(categoryAffinity / 10, 0.45);
-      const normalizedRecency =
-        signal.recency > 0 ? signal.recency : categoryAffinity > 0 ? 0.34 : 0.18;
-      const score =
-        weights.recency * normalizedRecency +
-        weights.frequency * normalizedFrequency +
-        weights.satisfaction * satisfactionAverage;
-      const reason =
-        satisfactionAverage >= 0.9
-          ? "High rating match"
-          : signal.recency >= 0.7
-          ? "Recent favorite"
-          : normalizedFrequency >= 0.6
-          ? "Frequent pick"
-          : "Taste match";
-
-      return {
-        item,
-        reason,
-        score,
-      };
-    })
-    .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
-    .slice(0, 5)
-}
-
 function getMonthlyFavorite(orders: CustomerOrder[]) {
   const counts = new Map<string, number>();
 
@@ -718,6 +633,8 @@ export function CustomerDashboard({
   orders,
   feedbackItems,
   preferenceSignals = [],
+  globalRecommendationOrders = [],
+  globalRecommendationFeedback = [],
   initialSection = "home",
   customerProfile,
   isAuthenticated = false,
@@ -770,6 +687,10 @@ export function CustomerDashboard({
   const [checkedInToday, setCheckedInToday] = useState(false);
   const [claimedMissionIds, setClaimedMissionIds] = useState<string[]>([]);
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
+  const [serverRewards, setServerRewards] =
+    useState<CustomerRewardsPayload | null>(null);
+  const [isServerRewardsLoading, setIsServerRewardsLoading] = useState(false);
+  const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
   const [rewardCelebration, setRewardCelebration] = useState("");
   const profileName = customerProfile?.fullName || "KadaServe Customer";
   const profileEmail = customerProfile?.email;
@@ -794,6 +715,7 @@ export function CustomerDashboard({
   const profileInitials = getInitials(displayProfileName);
   const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
+  const recommendationScrollerRef = useRef<HTMLDivElement>(null);
   const menuCategoryRefs = useRef<
     Partial<Record<Exclude<Filter, "all" | "latte-series" | "premium-blends">, HTMLElement | null>>
   >({});
@@ -922,6 +844,31 @@ export function CustomerDashboard({
       JSON.stringify(rewardWallet)
     );
   }, [rewardWallet]);
+
+  async function loadServerRewards() {
+    setIsServerRewardsLoading(true);
+
+    try {
+      const response = await fetch("/api/customer/rewards");
+      const result = (await response.json()) as CustomerRewardsPayload & {
+        error?: string;
+      };
+
+      if (response.ok) {
+        setServerRewards({
+          points: result.points ?? 0,
+          redeemableRewards: result.redeemableRewards ?? [],
+          activeVouchers: result.activeVouchers ?? [],
+        });
+      }
+    } finally {
+      setIsServerRewardsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadServerRewards();
+  }, []);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -1087,10 +1034,73 @@ export function CustomerDashboard({
     trackingOrder,
   ]);
 
-  const recommendedItems = useMemo(
-    () => getRecommendedItems(uniqueMenuItems, customerOrders, preferenceSignals),
-    [customerOrders, preferenceSignals, uniqueMenuItems]
-  );
+  const recommendationProfile = useMemo(() => {
+    const recommendationMenuItems: RecommendationMenuItem[] = uniqueMenuItems.map(
+      (item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        price: item.base_price,
+        imageUrl: getMenuImage(item),
+        isAvailable: item.is_available,
+      })
+    );
+    const recommendationOrders: RecommendationOrder[] = customerOrders.map(
+      (order) => ({
+        id: order.id,
+        customerId: customerProfile?.email ?? "current-customer",
+        customerName: displayProfileName,
+        status: order.status,
+        orderedAt: order.ordered_at,
+        items: order.order_items.map((item) => ({
+          menuItemId: item.menu_items?.id,
+          name: item.menu_items?.name ?? "Menu item",
+          category: item.menu_items?.category,
+          quantity: item.quantity,
+        })),
+      })
+    );
+    const recommendationFeedback: RecommendationFeedback[] =
+      preferenceSignals.map((signal) => ({
+        customerId: customerProfile?.email ?? "current-customer",
+        menuItemId: signal.menuItemId,
+        tasteRating: signal.tasteRating,
+        strengthRating: signal.strengthRating,
+        overallRating: signal.overallRating,
+      }));
+
+    return getRecommendationsForCustomer({
+      customerId: customerProfile?.email ?? "current-customer",
+      customerName: displayProfileName,
+      menuItems: recommendationMenuItems,
+      orders: [...globalRecommendationOrders, ...recommendationOrders],
+      feedback: [...globalRecommendationFeedback, ...recommendationFeedback],
+    });
+  }, [
+    customerOrders,
+    customerProfile?.email,
+    displayProfileName,
+    globalRecommendationFeedback,
+    globalRecommendationOrders,
+    preferenceSignals,
+    uniqueMenuItems,
+  ]);
+  const recommendedItems = recommendationProfile.recommendations
+    .map((recommendation) => {
+      const item = uniqueMenuItems.find(
+        (menuItem) => menuItem.id === recommendation.item.id
+      );
+
+      return item
+        ? {
+            ...recommendation,
+            item,
+          }
+        : null;
+    })
+    .filter((recommendation): recommendation is NonNullable<typeof recommendation> =>
+      Boolean(recommendation)
+    );
   const monthlyFavorite = useMemo(
     () => getMonthlyFavorite(customerOrders),
     [customerOrders]
@@ -1148,7 +1158,8 @@ export function CustomerDashboard({
       ? "Good afternoon"
       : "Good evening";
   const rewardPoints = rewardDrinkCount * 20;
-  const totalRewardPoints = rewardPoints + bonusRewardPoints;
+  const totalRewardPoints = serverRewards?.points ?? rewardPoints + bonusRewardPoints;
+  const activeServerVouchers = serverRewards?.activeVouchers ?? [];
   const feedbackMissionAvailable = feedbackItems.length > 0;
   const feedbackMissionProgress = Math.min(3, preferenceSignals.length);
   const hasPastryOrder = customerOrders.some((order) =>
@@ -1726,6 +1737,40 @@ export function CustomerDashboard({
     setRewardCelebration(`${reward.title} added to My Rewards.`);
   }
 
+  async function redeemServerReward(reward: ServerRewardItem) {
+    setRedeemingRewardId(reward.id);
+    setRewardCelebration("");
+
+    try {
+      const response = await fetch("/api/customer/rewards/redeem", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rewardItemId: reward.id }),
+      });
+      const result = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setRewardCelebration(result.error || "Could not redeem this reward.");
+        return;
+      }
+
+      await loadServerRewards();
+      setActiveRewardsTab("wallet");
+      setRewardCelebration(
+        result.message || "Free Delivery voucher added to My Rewards."
+      );
+    } catch {
+      setRewardCelebration("Something went wrong while redeeming this reward.");
+    } finally {
+      setRedeemingRewardId(null);
+    }
+  }
+
   function handleFilterSelect(
     value: Exclude<Filter, "all" | "latte-series" | "premium-blends">
   ) {
@@ -1742,6 +1787,13 @@ export function CustomerDashboard({
 
     scroller.scrollTo({
       top: Math.max(0, scroller.scrollTop + sectionRect.top - scrollerRect.top - 12),
+      behavior: "smooth",
+    });
+  }
+
+  function scrollRecommendations(direction: "left" | "right") {
+    recommendationScrollerRef.current?.scrollBy({
+      left: direction === "left" ? -320 : 320,
       behavior: "smooth",
     });
   }
@@ -1878,11 +1930,8 @@ export function CustomerDashboard({
                 <section className="pt-1">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                      <p className="font-sans text-sm font-bold text-[#684B35]">
-                        {greeting}, {firstName}!
-                      </p>
                       <h1 className="mt-2 max-w-3xl font-sans text-4xl font-bold leading-[1.02] text-[#0D2E18] sm:text-5xl">
-                        Your latte hub is ready.
+                        {greeting}, {firstName}
                       </h1>
                       <p className="mt-3 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
                         Your next favorite cup is a tap away. Pick an intent,
@@ -2061,6 +2110,116 @@ export function CustomerDashboard({
                     </div>
                   </section>
                 ) : null}
+
+                <section className="group relative overflow-hidden rounded-[28px] bg-[#123E26] px-4 py-4 text-[#FFF0D8] shadow-[0_14px_32px_rgba(18,62,38,0.18)] sm:px-5">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
+                        {recommendationProfile.isNewCustomer
+                          ? "Popular Picks"
+                          : "Recommended for You"}
+                      </p>
+                      <h2 className="mt-1 font-display text-3xl font-semibold leading-tight sm:text-4xl">
+                        Your next cup, picked smarter.
+                      </h2>
+                    </div>
+                    <div className="rounded-full bg-[#FFF0D8]/10 px-4 py-2 font-sans text-xs font-bold text-[#FFF0D8]">
+                      {recommendationProfile.isNewCustomer
+                        ? "Start ordering to personalize this"
+                        : `Monthly favorite: ${monthlyFavorite}`}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollRecommendations("left")}
+                    aria-label="Scroll recommendations left"
+                    className="absolute left-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollRecommendations("right")}
+                    aria-label="Scroll recommendations right"
+                    className="absolute right-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+
+                  <div
+                    ref={recommendationScrollerRef}
+                    className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  >
+                    {recommendedItems.map(({ item, label }) => {
+                      const menuImage = getMenuImage(item);
+
+                      return (
+                        <article
+                          key={item.id}
+                          className="relative flex w-[280px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#FFF8EF] text-[#123E26] shadow-[0_12px_24px_rgba(0,0,0,0.14)] sm:w-[310px]"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => openCustomizeModal(item)}
+                            aria-label={`Customize ${item.name}`}
+                            className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#684B35] shadow-sm transition hover:bg-white"
+                          >
+                            <SlidersHorizontal size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openCustomizeModal(item)}
+                            className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl"
+                            aria-label={`Open ${item.name}`}
+                          >
+                            {menuImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={menuImage}
+                                alt={item.name}
+                                loading="lazy"
+                                className="h-full w-full rounded-[16px] object-cover"
+                              />
+                            ) : (
+                              getEmoji(item)
+                            )}
+                          </button>
+
+                          <div className="flex min-w-0 flex-1 flex-col p-4 pr-12">
+                            <div>
+                              <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
+                                Recommended
+                              </p>
+                              <h3 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
+                                {item.name}
+                              </h3>
+                              <p className="mt-2 inline-flex rounded-full bg-[#FFF0DA] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
+                                {label}
+                              </p>
+                            </div>
+
+                            <div className="mt-auto flex items-center gap-2 pt-4">
+                              <p className="shrink-0 font-sans text-xl font-black text-[#765531]">
+                                {formatPrice(item.base_price)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickAdd(item)}
+                                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-sm font-bold text-white transition hover:bg-[#0D2E18]"
+                              >
+                                <ShoppingCart size={16} />
+                                Add
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
             )}
 
@@ -2666,7 +2825,60 @@ export function CustomerDashboard({
                       <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
                         KadaServe Rewards
                       </h2>
+                      {isServerRewardsLoading ? (
+                        <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
+                          Syncing rewards...
+                        </p>
+                      ) : null}
                       <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {(serverRewards?.redeemableRewards ?? [])
+                          .filter((reward) => reward.type === "delivery_fee")
+                          .map((reward) => {
+                            const canRedeem = totalRewardPoints >= reward.pointsCost;
+                            const isRedeeming = redeemingRewardId === reward.id;
+
+                            return (
+                              <article
+                                key={reward.id}
+                                className="min-w-[16rem] snap-start overflow-hidden rounded-[22px] border border-[#E8D9BE] bg-white shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                              >
+                                <div className="bg-[#0D2E18] p-5 text-[#FFF0DA]">
+                                  <p className="font-sans text-4xl font-black">
+                                    Free Delivery
+                                  </p>
+                                </div>
+                                <div className="p-4">
+                                  <p className="font-sans text-sm font-bold text-[#684B35]">
+                                    Remove delivery fee on your next delivery order.
+                                  </p>
+                                  <p className="mt-3 font-sans text-sm font-bold text-[#684B35]">
+                                    Redeem with
+                                  </p>
+                                  <p className="font-sans text-2xl font-black text-[#0D2E18]">
+                                    {reward.pointsCost} pts
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => redeemServerReward(reward)}
+                                    disabled={!canRedeem || isRedeeming}
+                                    className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                                  >
+                                    {isRedeeming ? (
+                                      <LoadingSpinner
+                                        className="mr-2 h-4 w-4 align-[-0.2em]"
+                                        label="Redeeming reward"
+                                      />
+                                    ) : null}
+                                    {isRedeeming
+                                      ? "Redeeming..."
+                                      : canRedeem
+                                      ? "Redeem"
+                                      : "Need more points"}
+                                  </button>
+                                </div>
+                              </article>
+                            );
+                          })}
                         {[
                           {
                             code: "KADA10",
@@ -2755,8 +2967,42 @@ export function CustomerDashboard({
 
                 {activeRewardsTab === "wallet" ? (
                   <div className="min-h-[26rem] pb-4">
-                    {rewardWallet.length > 0 ? (
+                    {activeServerVouchers.length > 0 || rewardWallet.length > 0 ? (
                       <div className="space-y-4">
+                        {activeServerVouchers.map((voucher) => (
+                          <article
+                            key={voucher.id}
+                            className="rounded-[24px] border border-[#E8D9BE] bg-white p-5 shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                                  Active Voucher
+                                </p>
+                                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                  Free Delivery
+                                </h2>
+                                <p className="mt-1 font-sans text-sm text-[#684B35]">
+                                  Code {voucher.code}
+                                </p>
+                                <p className="font-sans text-sm text-[#684B35]">
+                                  Expires{" "}
+                                  {new Date(voucher.expiresAt).toLocaleDateString(
+                                    "en-PH",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    }
+                                  )}
+                                </p>
+                              </div>
+                              <div className="flex h-20 w-20 items-center justify-center rounded-[18px] bg-[#0D2E18] text-[#FFF0DA]">
+                                <QrCode className="h-10 w-10" />
+                              </div>
+                            </div>
+                          </article>
+                        ))}
                         {rewardWallet.map((voucher) => (
                           <article
                             key={voucher.code}
@@ -3004,8 +3250,11 @@ export function CustomerDashboard({
                         type="button"
                         onClick={handleSubmitFeedback}
                         disabled={!canSubmitFeedback}
-                        className="w-full rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white disabled:opacity-60"
+                        className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white disabled:opacity-60"
                       >
+                        {isSubmittingFeedback ? (
+                          <LoadingSpinner label="Submitting feedback" />
+                        ) : null}
                         {isSubmittingFeedback
                           ? "Submitting..."
                           : "Submit Feedback"}
@@ -3503,13 +3752,6 @@ export function CustomerDashboard({
                 </div>
               </div>
 
-              <textarea
-                value={feedbackComment}
-                onChange={(event) => setFeedbackComment(event.target.value)}
-                placeholder="Optional note for KadaServe"
-                className="min-h-20 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-3 font-sans text-sm outline-none placeholder:text-[#A49175]"
-              />
-
               <div className="rounded-[20px] bg-[#FFF8EF] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-sans text-base font-black text-[#0D2E18]">
@@ -3538,6 +3780,13 @@ export function CustomerDashboard({
                 </div>
               </div>
 
+              <textarea
+                value={feedbackComment}
+                onChange={(event) => setFeedbackComment(event.target.value)}
+                placeholder="Optional note for KadaServe"
+                className="min-h-20 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-3 font-sans text-sm outline-none placeholder:text-[#A49175]"
+              />
+
               {feedbackMessage ? (
                 <p
                   className={`rounded-xl px-4 py-3 text-sm font-bold ${
@@ -3554,8 +3803,11 @@ export function CustomerDashboard({
                 type="button"
                 onClick={handleSubmitFeedback}
                 disabled={!canSubmitFeedback}
-                className="w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-white transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-55"
+                className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-white transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-55"
               >
+                {isSubmittingFeedback ? (
+                  <LoadingSpinner label="Submitting feedback" />
+                ) : null}
                 {isSubmittingFeedback ? "Submitting..." : "Quick Submit"}
               </button>
             </div>
@@ -3983,6 +4235,15 @@ export function CustomerDashboard({
                         : "Unpaid"}
                     </span>
                   </div>
+
+                  {trackingOrder.reward_code ? (
+                    <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">
+                      Reward applied: Free Delivery. Delivery Fee:{" "}
+                      <span className="font-black">
+                        {formatPrice(trackingOrder.delivery_fee ?? 0)}
+                      </span>
+                    </div>
+                  ) : null}
 
                   {trackingOrder.payment_status === "paid" ||
                   ["out_for_delivery", "delivered"].includes(

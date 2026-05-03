@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  getRecommendationsForCustomer,
+  type RecommendationFeedback,
+  type RecommendationMenuItem,
+  type RecommendationOrder,
+} from "@/lib/recommendations";
+import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
 type RankedItem = {
@@ -7,6 +14,15 @@ type RankedItem = {
   orders: number;
   revenue: number;
   rating: number;
+};
+type AdminPreferenceFeedbackRow = {
+  customer_id: string | null;
+  menu_item_id: string | null;
+  taste_rating: number;
+  strength_rating: number;
+  overall_rating: number;
+  profiles: { full_name: string | null; email: string | null } | null;
+  menu_items: { name: string | null; category: string | null } | null;
 };
 
 function peso(value: number) {
@@ -28,7 +44,9 @@ function formatNameFromEmail(email: string | null) {
 
 function getOrderDisplayName(order: StaffOrder) {
   return (
+    order.customer_profile?.full_name?.trim() ||
     order.walkin_name?.trim() ||
+    formatNameFromEmail(order.customer_profile?.email ?? null) ||
     formatNameFromEmail(order.delivery_email) ||
     (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
   );
@@ -157,80 +175,135 @@ export function SatisfactionView({ itemRanking }: { itemRanking: RankedItem[] })
   );
 }
 
-export function CustomerPreferenceView({ orders }: { orders: StaffOrder[] }) {
-  const profiles = Array.from(
-    orders.reduce((map, order) => {
-      const name = getOrderDisplayName(order);
-      const current = map.get(name) ?? {
-        name,
-        visits: 0,
-        total: 0,
-        items: new Map<string, number>(),
-      };
-
-      current.visits += 1;
-      current.total += order.total_amount;
-
-      for (const item of order.order_items) {
-        const itemName = item.menu_items?.name ?? "Menu item";
-        current.items.set(itemName, (current.items.get(itemName) ?? 0) + item.quantity);
-      }
-
-      map.set(name, current);
-      return map;
-    }, new Map<string, { name: string; visits: number; total: number; items: Map<string, number> }>())
-  )
-    .map(([, value]) => {
-      const topItems = Array.from(value.items.entries())
-        .sort((first, second) => second[1] - first[1])
-        .slice(0, 2)
-        .map(([name]) => name);
+export function CustomerPreferenceView({
+  feedbackRows,
+  menuItems,
+  orders,
+}: {
+  feedbackRows: AdminPreferenceFeedbackRow[];
+  menuItems: AdminMenuItem[];
+  orders: StaffOrder[];
+}) {
+  const recommendationMenuItems: RecommendationMenuItem[] = menuItems.map(
+    (item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      price: item.price,
+      imageUrl: item.imageUrl,
+      isAvailable: item.isAvailable,
+    })
+  );
+  const menuByName = new Map(
+    recommendationMenuItems.map((item) => [item.name.toLowerCase(), item])
+  );
+  const recommendationOrders: RecommendationOrder[] = orders.map((order) => ({
+    id: order.id,
+    customerId: order.customer_id || getOrderDisplayName(order),
+    customerName: getOrderDisplayName(order),
+    status: order.status,
+    orderedAt: order.ordered_at,
+    items: order.order_items.map((item) => {
+      const itemName = item.menu_items?.name ?? "Menu item";
+      const matchedMenuItem = menuByName.get(itemName.toLowerCase());
 
       return {
-        ...value,
-        topItems,
-        score: Math.min(0.99, 0.5 + value.visits / 20 + value.total / 10000),
+        menuItemId: matchedMenuItem?.id,
+        name: itemName,
+        category: matchedMenuItem?.category,
+        quantity: item.quantity,
       };
+    }),
+  }));
+  const recommendationFeedback: RecommendationFeedback[] = feedbackRows.map(
+    (row) => ({
+      customerId: row.customer_id,
+      menuItemId: row.menu_item_id,
+      itemName: row.menu_items?.name,
+      tasteRating: row.taste_rating,
+      strengthRating: row.strength_rating,
+      overallRating: row.overall_rating,
     })
-    .sort((first, second) => second.score - first.score);
+  );
+  const customers = Array.from(
+    recommendationOrders.reduce((map, order) => {
+      if (!map.has(order.customerId)) {
+        map.set(order.customerId, {
+          id: order.customerId,
+          name: order.customerName,
+        });
+      }
+
+      return map;
+    }, new Map<string, { id: string; name: string }>())
+  ).map(([, customer]) =>
+    getRecommendationsForCustomer({
+      customerId: customer.id,
+      customerName: customer.name,
+      menuItems: recommendationMenuItems,
+      orders: recommendationOrders,
+      feedback: recommendationFeedback,
+    })
+  );
+  const profiles = customers.sort(
+    (first, second) => second.preferenceScore - first.preferenceScore
+  );
 
   return (
     <div className="space-y-5">
       <h1 className="font-sans text-3xl font-bold">Customer Preference Scoring</h1>
-      <Panel title="Score Distribution">
-        <div className="mt-20 grid grid-cols-6 gap-8 px-4 pb-5">
-          {["0.0-0.2", "0.2-0.4", "0.4-0.6", "0.6-0.8", "0.8-0.9", "0.9-1.0"].map((label, index) => (
-            <div key={label} className="text-center">
-              <p className="font-sans text-sm">{Math.max(1, profiles.length - index)}</p>
-              <div className="mt-1 h-2 rounded-full bg-[#0D2E18]" />
-              <p className="mt-2 font-sans text-sm">{label}</p>
-            </div>
-          ))}
-        </div>
-      </Panel>
-      <Panel title="Customer Profiles + Top-N Recommendations" rightLabel="RANKED BY SCORE">
-        <div className="mt-6 space-y-6 px-7 pb-5">
+      <Panel title="Customer Profiles + Top-N Recommendations" rightLabel="MONITOR ONLY">
+        <div className="mt-6 space-y-6 px-2 pb-2 sm:px-4">
           {profiles.slice(0, 5).map((profile, index) => (
-            <div key={profile.name} className="grid grid-cols-[40px_72px_1fr_100px] items-center gap-4">
+            <div
+              key={profile.customerId}
+              className="grid gap-4 border-b border-[#0D2E18]/10 pb-6 last:border-b-0 xl:grid-cols-[40px_72px_1fr_1.25fr_100px]"
+            >
               <span className="font-sans text-[#8C7A64]">{index + 1}</span>
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0D2E18] font-sans text-xl font-bold text-[#FFF0DA]">
-                {getInitials(profile.name)}
+                {getInitials(profile.customerName)}
               </div>
               <div>
-                <p className="font-sans text-lg font-semibold">{profile.name}</p>
-                <p className="font-sans text-sm text-[#684B35]">
-                  Most ordered: {profile.topItems[0] ?? "No item"} - {profile.visits} visits
+                <p className="font-sans text-lg font-semibold">
+                  {profile.customerName}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {profile.topItems.map((item) => (
-                    <span key={item} className="rounded-full border border-[#D6C6AC] px-3 py-1 font-sans text-xs">
-                      {item}
-                    </span>
-                  ))}
-                </div>
+                <p className="font-sans text-sm text-[#684B35]">
+                  Most ordered: {profile.mostOrderedItem}
+                </p>
+                <p className="font-sans text-sm text-[#684B35]">
+                  Last ordered: {profile.lastOrderedItem}
+                </p>
+                <p className="font-sans text-sm text-[#684B35]">
+                  Avg feedback:{" "}
+                  {profile.averageFeedbackRating
+                    ? profile.averageFeedbackRating.toFixed(1)
+                    : "No rating yet"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                {profile.recommendations.map((recommendation) => (
+                  <div
+                    key={`${profile.customerId}-${recommendation.label}-${recommendation.item.id}`}
+                    className="rounded-[14px] bg-[#FFF8EF] px-3 py-2 font-sans text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-bold text-[#0D2E18]">
+                        {recommendation.label}: {recommendation.item.name}
+                      </p>
+                      <span className="rounded-full border border-[#D6C6AC] px-2 py-0.5 text-[11px] font-bold uppercase text-[#684B35]">
+                        {recommendation.basis}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-[#684B35]">
+                      {recommendation.reason}
+                    </p>
+                  </div>
+                ))}
               </div>
               <div className="text-right">
-                <p className="font-sans text-xl font-bold">{profile.score.toFixed(2)}</p>
+                <p className="font-sans text-xl font-bold">
+                  {(profile.preferenceScore * 100).toFixed(0)}%
+                </p>
                 <p className="font-sans text-xs text-[#684B35]">PREF SCORE</p>
               </div>
             </div>
