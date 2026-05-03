@@ -468,13 +468,13 @@ export function StaffEncodeOrder() {
                                     className="group rounded-[24px] border border-[#D8C6A8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)]"
                                 >
                                     <div className="flex gap-4">
-                                        <div className="flex h-[112px] w-[112px] shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-[#E7F4EA]">
+                                        <div className="flex aspect-square h-[112px] w-[112px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
                                             {item.imageUrl ? (
                                                 // eslint-disable-next-line @next/next/no-img-element
                                                 <img
                                                     src={item.imageUrl}
                                                     alt={item.name}
-                                                    className="h-full w-full object-cover"
+                                                    className="aspect-square h-full w-full rounded-full object-cover"
                                                 />
                                             ) : (
                                                 <div className="h-12 w-12 rounded-full bg-[#D9D9D9]" />
@@ -717,13 +717,13 @@ export function StaffEncodeOrder() {
                                 className="rounded-[20px] border border-[#E6D7C0] bg-[#FFF8EF] p-4"
                             >
                                 <div className="flex gap-3">
-                                    <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[#E7F4EA]">
+                                    <div className="flex aspect-square h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
                                         {item.imageUrl ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img
                                                 src={item.imageUrl}
                                                 alt={item.name}
-                                                className="h-full w-full object-cover"
+                                                className="aspect-square h-full w-full rounded-full object-cover"
                                             />
                                         ) : (
                                             <div className="h-8 w-8 rounded-full bg-[#D9D9D9]" />

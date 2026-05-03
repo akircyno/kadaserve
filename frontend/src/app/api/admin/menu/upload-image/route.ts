@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-const maxFileSize = 2 * 1024 * 1024;
+const maxFileSize = 1.5 * 1024 * 1024;
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -81,7 +81,10 @@ export async function POST(request: Request) {
 
   if (file.size > maxFileSize) {
     return NextResponse.json(
-      { error: "Image must be 2MB or smaller." },
+      {
+        error:
+          "This image is a bit too large to process. Please try a different photo.",
+      },
       { status: 400 }
     );
   }
@@ -106,7 +109,13 @@ export async function POST(request: Request) {
     });
 
   if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          "This image is a bit too large to process. Please try a different photo.",
+      },
+      { status: 500 }
+    );
   }
 
   const {

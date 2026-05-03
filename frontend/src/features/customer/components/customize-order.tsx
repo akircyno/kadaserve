@@ -162,13 +162,13 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
         <section className="overflow-hidden rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
           <div className="border-b border-[#DECFAF] px-5 py-5 sm:px-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-40 w-full items-center justify-center overflow-hidden rounded-[24px] bg-[#E7F1E6] text-6xl sm:w-48">
+              <div className="flex aspect-square h-40 w-40 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-6xl sm:h-48 sm:w-48">
                 {menuItem.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={menuItem.image_url}
                     alt={menuItem.name}
-                    className="h-full w-full object-cover"
+                    className="aspect-square h-full w-full rounded-full object-cover"
                   />
                 ) : (
                   getEmoji(menuItem.name, menuItem.category)

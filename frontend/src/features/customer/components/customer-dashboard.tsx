@@ -153,14 +153,14 @@ const mobileTabs: Array<
 ];
 
 const menuFilters: Array<{
-  value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
+  value: Exclude<Filter, "latte-series" | "premium-blends">;
   label: string;
-  icon: typeof CupSoda;
 }> = [
-  { value: "coffee", label: "Latte", icon: CupSoda },
-  { value: "non-coffee", label: "Non-Coffee", icon: CupSoda },
-  { value: "pastries", label: "Pastries", icon: Gift },
-  { value: "best-deals", label: "Best Deals", icon: BadgePercent },
+  { value: "all", label: "All" },
+  { value: "coffee", label: "Latte" },
+  { value: "non-coffee", label: "Non-Coffee" },
+  { value: "pastries", label: "Pastries" },
+  { value: "best-deals", label: "Best Deals" },
 ];
 
 const sugarLevels = [
@@ -192,9 +192,76 @@ const temperatures = [
 const onboardingStorageKey = "kadaserve_first_sip_onboarding_seen";
 const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
 const checkInStorageKey = "kadaserve_daily_check_in";
+const checkInRewards = [1, 1, 1, 3, 1, 1, 21];
+const promotionImages = [
+  "/images/promotions/promotion1.png",
+  "/images/promotions/promotion2.png",
+];
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getDayDistance(fromDateKey: string, toDateKey: string) {
+  const fromDate = new Date(`${fromDateKey}T00:00:00`);
+  const toDate = new Date(`${toDateKey}T00:00:00`);
+
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.round(
+    (toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)
+  );
+}
+
+function readCheckInProgress() {
+  if (typeof window === "undefined") {
+    return {
+      checkedInToday: false,
+      streakDay: 0,
+      lastCheckedIn: "",
+    };
+  }
+
+  const todayKey = getTodayKey();
+  const storedValue = window.localStorage.getItem(checkInStorageKey);
+
+  if (!storedValue) {
+    return {
+      checkedInToday: false,
+      streakDay: 0,
+      lastCheckedIn: "",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(storedValue) as {
+      lastCheckedIn?: string;
+      streakDay?: number;
+    };
+    const lastCheckedIn =
+      typeof parsed.lastCheckedIn === "string" ? parsed.lastCheckedIn : "";
+    const storedStreak =
+      typeof parsed.streakDay === "number" && Number.isFinite(parsed.streakDay)
+        ? parsed.streakDay
+        : 0;
+    const checkedInToday = lastCheckedIn === todayKey;
+    const missedMoreThanOneDay =
+      lastCheckedIn && getDayDistance(lastCheckedIn, todayKey) > 1;
+
+    return {
+      checkedInToday,
+      streakDay: missedMoreThanOneDay ? 0 : Math.min(7, Math.max(0, storedStreak)),
+      lastCheckedIn,
+    };
+  } catch {
+    return {
+      checkedInToday: storedValue === todayKey,
+      streakDay: storedValue === todayKey ? 1 : 0,
+      lastCheckedIn: storedValue,
+    };
+  }
 }
 
 function getRewardExpiry(daysFromNow = 30) {
@@ -648,7 +715,7 @@ export function CustomerDashboard({
   const [isTaglineVisible, setIsTaglineVisible] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
-  const [activePromoIndex, setActivePromoIndex] = useState(0);
+  const [activePromotionIndex, setActivePromotionIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCartTrayOpen, setIsCartTrayOpen] = useState(false);
   const [quickAddFeedback, setQuickAddFeedback] = useState<{
@@ -659,7 +726,7 @@ export function CustomerDashboard({
   const [guestActionMessage, setGuestActionMessage] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("coffee");
+  const [filter, setFilter] = useState<Filter>("all");
   const [selectedMenuItem, setSelectedMenuItem] =
     useState<CustomerMenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -673,6 +740,9 @@ export function CustomerDashboard({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
+  const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
+    string | null
+  >(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [selectedFeedbackItemId, setSelectedFeedbackItemId] = useState("");
   const [tasteRating, setTasteRating] = useState(0);
@@ -685,6 +755,7 @@ export function CustomerDashboard({
     useState<RewardsTab>("missions");
   const [bonusRewardPoints, setBonusRewardPoints] = useState(0);
   const [checkedInToday, setCheckedInToday] = useState(false);
+  const [checkInStreakDay, setCheckInStreakDay] = useState(0);
   const [claimedMissionIds, setClaimedMissionIds] = useState<string[]>([]);
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
   const [serverRewards, setServerRewards] =
@@ -716,17 +787,18 @@ export function CustomerDashboard({
   const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
   const recommendationScrollerRef = useRef<HTMLDivElement>(null);
-  const menuCategoryRefs = useRef<
-    Partial<Record<Exclude<Filter, "all" | "latte-series" | "premium-blends">, HTMLElement | null>>
-  >({});
   const onboardingScrollerRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const trackingTouchStartYRef = useRef<number | null>(null);
   const isGuest = !isAuthenticated;
 
+  const visibleFeedbackItems = selectedFeedbackOrderId
+    ? feedbackItems.filter((item) => item.order_id === selectedFeedbackOrderId)
+    : feedbackItems;
   const selectedFeedbackItem =
-    feedbackItems.find((item) => item.order_item_id === selectedFeedbackItemId) ??
-    feedbackItems[0];
+    visibleFeedbackItems.find(
+      (item) => item.order_item_id === selectedFeedbackItemId
+    ) ?? visibleFeedbackItems[0];
   const canSubmitFeedback =
     Boolean(selectedFeedbackItem) && overallRating > 0 && !isSubmittingFeedback;
   const onboardingCards = [
@@ -814,9 +886,10 @@ export function CustomerDashboard({
   }, [orders]);
 
   useEffect(() => {
-    setCheckedInToday(
-      window.localStorage.getItem(checkInStorageKey) === getTodayKey()
-    );
+    const checkInProgress = readCheckInProgress();
+
+    setCheckedInToday(checkInProgress.checkedInToday);
+    setCheckInStreakDay(checkInProgress.streakDay);
     setRewardWallet(readRewardWallet());
   }, []);
 
@@ -924,6 +997,7 @@ export function CustomerDashboard({
 
       setFeedbackMessage("Feedback submitted successfully.");
       setIsFeedbackPromptOpen(false);
+      setSelectedFeedbackOrderId(null);
       setTasteRating(0);
       setStrengthRating(3);
       setOverallRating(0);
@@ -931,8 +1005,9 @@ export function CustomerDashboard({
       setClaimedMissionIds((current) =>
         current.includes("feedback") ? current : [...current, "feedback"]
       );
-      setBonusRewardPoints((current) => current + 15);
-      setRewardCelebration("Feedback mission claimed. +15 points!");
+      setBonusRewardPoints((current) => current + 10);
+      await loadServerRewards();
+      setRewardCelebration("Feedback submitted. +10 points!");
       router.refresh();
     } catch {
       setFeedbackMessage("Something went wrong while submitting feedback.");
@@ -946,6 +1021,14 @@ export function CustomerDashboard({
       setSelectedFeedbackItemId(feedbackItems[0].order_item_id);
     }
   }, [feedbackItems, selectedFeedbackItemId]);
+
+  useEffect(() => {
+    if (!selectedFeedbackOrderId || selectedFeedbackItem) {
+      return;
+    }
+
+    setSelectedFeedbackOrderId(null);
+  }, [selectedFeedbackItem, selectedFeedbackOrderId]);
 
   useEffect(() => {
     if (isAuthenticated && feedbackItems.length > 0) {
@@ -1161,7 +1244,6 @@ export function CustomerDashboard({
   const totalRewardPoints = serverRewards?.points ?? rewardPoints + bonusRewardPoints;
   const activeServerVouchers = serverRewards?.activeVouchers ?? [];
   const feedbackMissionAvailable = feedbackItems.length > 0;
-  const feedbackMissionProgress = Math.min(3, preferenceSignals.length);
   const hasPastryOrder = customerOrders.some((order) =>
     order.order_items.some((item) => {
       const text = `${item.menu_items?.name ?? ""} ${
@@ -1185,34 +1267,18 @@ export function CustomerDashboard({
   const pastryMissionItem = uniqueMenuItems.find(
     (item) => item.is_available && isPastryMenuItem(item)
   );
-  const promoCards = recommendedItems
-    .filter(({ item }) => Boolean(getMenuImage(item)))
-    .slice(0, 3)
-    .map(({ item, reason }) => ({
-      title: item.name,
-      body: item.description || reason,
-      image: getMenuImage(item) as string,
-    }));
-  const activePromo = promoCards[activePromoIndex] ?? null;
+  const activePromotionImage =
+    promotionImages[activePromotionIndex] ?? promotionImages[0];
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setActivePromoIndex((current) =>
-        promoCards.length > 0 ? (current + 1) % promoCards.length : 0
+      setActivePromotionIndex((current) =>
+        (current + 1) % promotionImages.length
       );
-    }, 4200);
+    }, 1500);
 
     return () => window.clearInterval(intervalId);
-  }, [promoCards.length]);
-
-  function showPromo(direction: "previous" | "next") {
-    setActivePromoIndex((current) =>
-      direction === "next"
-        ? (current + 1) % Math.max(1, promoCards.length)
-        : (current - 1 + Math.max(1, promoCards.length)) %
-          Math.max(1, promoCards.length)
-    );
-  }
+  }, []);
 
   const filteredMenu = useMemo(() => {
     const matchingItems = uniqueMenuItems.filter((item) => {
@@ -1226,85 +1292,24 @@ export function CustomerDashboard({
 
     return sortMenuByAvailability(matchingItems);
   }, [debouncedQuery, uniqueMenuItems]);
-  const menuGroups = menuFilters.map((item) => ({
-    ...item,
-    items: filteredMenu.filter((menuItem) => getFilter(menuItem.category) === item.value),
-  }));
+  const categoryMenuFilters = menuFilters.filter(
+    (item) => item.value !== "all"
+  );
+  const visibleMenuFilters =
+    filter === "all"
+      ? categoryMenuFilters
+      : categoryMenuFilters.filter((item) => item.value === filter);
+  const menuGroups = visibleMenuFilters
+    .map((item) => ({
+      ...item,
+      items: filteredMenu.filter(
+        (menuItem) => getFilter(menuItem.category) === item.value
+      ),
+    }))
+    .filter((group) => group.items.length > 0 || filter !== "all");
   const activeMenuFilter = menuFilters.some((item) => item.value === filter)
     ? filter
-    : "coffee";
-  useEffect(() => {
-    if (activeSection !== "menu") {
-      return;
-    }
-
-    const scroller = contentScrollerRef.current;
-
-    if (!scroller || typeof IntersectionObserver === "undefined") {
-      return;
-    }
-
-    const menuValues = menuFilters.map((item) => item.value);
-    const chooseActiveCategory = () => {
-      const scrollerRect = scroller.getBoundingClientRect();
-      const activeLine = scrollerRect.top + Math.max(72, scrollerRect.height * 0.2);
-      const sectionPositions = menuValues
-        .map((value) => {
-          const section = menuCategoryRefs.current[value];
-
-          if (!section) {
-            return null;
-          }
-
-          const rect = section.getBoundingClientRect();
-
-          return {
-            value,
-            top: rect.top,
-            bottom: rect.bottom,
-          };
-        })
-        .filter(Boolean) as Array<{
-        value: Exclude<Filter, "all" | "latte-series" | "premium-blends">;
-        top: number;
-        bottom: number;
-      }>;
-
-      const categoryAtGuideLine = sectionPositions.find(
-        (section) => section.top <= activeLine && section.bottom > activeLine
-      );
-      const nearestPassedCategory = [...sectionPositions]
-        .filter((section) => section.top <= activeLine)
-        .sort((first, second) => second.top - first.top)[0];
-      const nextCategory =
-        categoryAtGuideLine?.value ??
-        nearestPassedCategory?.value ??
-        menuValues[0];
-
-      setFilter((current) => (current === nextCategory ? current : nextCategory));
-    };
-
-    const observer = new IntersectionObserver(chooseActiveCategory, {
-      root: scroller,
-      rootMargin: "-18% 0px -68% 0px",
-      threshold: [0, 0.15, 0.4, 0.7],
-    });
-
-    menuValues.forEach((value) => {
-      const section = menuCategoryRefs.current[value];
-
-      if (section) {
-        observer.observe(section);
-      }
-    });
-
-    const animationFrameId = window.requestAnimationFrame(chooseActiveCategory);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-      observer.disconnect();
-    };
-  }, [activeSection, debouncedQuery, filteredMenu.length]);
+    : "all";
 
   const selectedSize = sizes.find((item) => item.value === size);
   const selectedAddonRows = addons.filter((item) =>
@@ -1710,10 +1715,33 @@ export function CustomerDashboard({
       return;
     }
 
-    window.localStorage.setItem(checkInStorageKey, getTodayKey());
+    const todayKey = getTodayKey();
+    const currentProgress = readCheckInProgress();
+    const wasYesterday =
+      currentProgress.lastCheckedIn &&
+      getDayDistance(currentProgress.lastCheckedIn, todayKey) === 1;
+    const nextStreakDay = wasYesterday
+      ? currentProgress.streakDay >= checkInRewards.length
+        ? 1
+        : currentProgress.streakDay + 1
+      : 1;
+    const earnedPoints = checkInRewards[nextStreakDay - 1] ?? 1;
+
+    window.localStorage.setItem(
+      checkInStorageKey,
+      JSON.stringify({
+        lastCheckedIn: todayKey,
+        streakDay: nextStreakDay,
+      })
+    );
     setCheckedInToday(true);
-    setBonusRewardPoints((current) => current + 1);
-    setRewardCelebration("Daily check-in complete. +1 point!");
+    setCheckInStreakDay(nextStreakDay);
+    setBonusRewardPoints((current) => current + earnedPoints);
+    setRewardCelebration(
+      `Day ${nextStreakDay} check-in complete. +${earnedPoints} point${
+        earnedPoints === 1 ? "" : "s"
+      }!`
+    );
   }
 
   function claimDiversityMission() {
@@ -1735,6 +1763,34 @@ export function CustomerDashboard({
     setRewardWallet((current) => [reward, ...current]);
     setActiveRewardsTab("wallet");
     setRewardCelebration(`${reward.title} added to My Rewards.`);
+  }
+
+  function resetFeedbackForm() {
+    setTasteRating(0);
+    setStrengthRating(3);
+    setOverallRating(0);
+    setFeedbackComment("");
+    setFeedbackMessage("");
+  }
+
+  function closeFeedbackPrompt() {
+    setIsFeedbackPromptOpen(false);
+    setSelectedFeedbackOrderId(null);
+    resetFeedbackForm();
+  }
+
+  function openFeedbackForOrder(order: CustomerOrder) {
+    const feedbackItem = feedbackItems.find((item) => item.order_id === order.id);
+
+    if (!feedbackItem) {
+      setFeedbackMessage("Feedback for this order is already complete.");
+      return;
+    }
+
+    resetFeedbackForm();
+    setSelectedFeedbackOrderId(order.id);
+    setSelectedFeedbackItemId(feedbackItem.order_item_id);
+    setIsFeedbackPromptOpen(true);
   }
 
   async function redeemServerReward(reward: ServerRewardItem) {
@@ -1772,21 +1828,17 @@ export function CustomerDashboard({
   }
 
   function handleFilterSelect(
-    value: Exclude<Filter, "all" | "latte-series" | "premium-blends">
+    value: Exclude<Filter, "latte-series" | "premium-blends">
   ) {
     setFilter(value);
     const scroller = contentScrollerRef.current;
-    const section = menuCategoryRefs.current[value];
 
-    if (!scroller || !section) {
+    if (!scroller) {
       return;
     }
 
-    const scrollerRect = scroller.getBoundingClientRect();
-    const sectionRect = section.getBoundingClientRect();
-
     scroller.scrollTo({
-      top: Math.max(0, scroller.scrollTop + sectionRect.top - scrollerRect.top - 12),
+      top: 0,
       behavior: "smooth",
     });
   }
@@ -1847,7 +1899,7 @@ export function CustomerDashboard({
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-[#D7C7A9] bg-[#F8F7F4]/95 px-4 py-3 backdrop-blur sm:px-5">
+          <header className="sticky top-0 z-40 hidden items-center justify-between gap-3 border-b border-[#D7C7A9] bg-[#F8F7F4]/95 px-4 py-3 backdrop-blur sm:flex sm:px-5">
             {activeSection !== "home" ? (
               <button
                 type="button"
@@ -1923,7 +1975,7 @@ export function CustomerDashboard({
 
           <div
             ref={contentScrollerRef}
-            className="flex-1 overflow-y-auto px-4 py-5 pb-28 sm:px-5 2xl:px-8"
+            className="flex-1 overflow-y-auto px-4 pb-28 pt-0 sm:px-5 sm:py-5 2xl:px-8"
           >
             {activeSection === "home" && (
               <div className="mx-auto w-full max-w-[1180px] space-y-5">
@@ -1973,82 +2025,15 @@ export function CustomerDashboard({
                 </section>
 
                 <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                  <div className="group overflow-hidden rounded-[28px] bg-[#0F441D] p-4 text-[#FFF0D8] shadow-[0_14px_30px_rgba(15,68,29,0.22)]">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                          Promotions
-                        </p>
-                        <h2 className="font-sans text-3xl font-bold">
-                          Promos & cafe notes
-                        </h2>
-                      </div>
-                    </div>
-
-                    <div className="relative mt-4 overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#FFF0DA_0%,#F8EBCF_52%,#0F441D_180%)] p-4 text-[#0D2E18] sm:p-5">
-                      <button
-                        type="button"
-                        onClick={() => showPromo("previous")}
-                        aria-label="Show previous promotion"
-                        className="absolute left-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#0D2E18] opacity-0 shadow-md transition group-hover:opacity-100 lg:flex"
-                      >
-                        <ChevronLeft size={20} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => showPromo("next")}
-                        aria-label="Show next promotion"
-                        className="absolute right-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#0D2E18] opacity-0 shadow-md transition group-hover:opacity-100 lg:flex"
-                      >
-                        <ChevronRight size={20} />
-                      </button>
-
-                      <div
-                        key={activePromo?.title ?? rewardMessage}
-                        className="grid min-h-[190px] gap-4 transition-transform duration-300 ease-[cubic-bezier(0.2,0.9,0.22,1.12)] sm:grid-cols-[1fr_150px] sm:items-center"
-                      >
-                        <div>
-                          <p className="font-sans text-2xl font-bold leading-tight">
-                            {activePromo?.title ?? "Rewards in motion"}
-                          </p>
-                          <p className="mt-3 min-h-12 font-sans text-sm leading-6 text-[#684B35]">
-                            {activePromo?.body ?? rewardMessage}
-                          </p>
-                        </div>
-
-                        <div className="h-36 overflow-hidden rounded-[22px] bg-white/55 p-1.5 shadow-[inset_0_0_0_1px_rgba(104,75,53,0.14)]">
-                          {activePromo?.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={activePromo.image}
-                              alt=""
-                              loading="lazy"
-                              className="h-full w-full rounded-[18px] object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center rounded-[18px] bg-[#E7F4EA] text-4xl">
-                              <Gift />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex gap-2">
-                        {promoCards.map((promo, index) => (
-                          <button
-                            key={promo.title}
-                            type="button"
-                            aria-label={`Show promotion ${index + 1}`}
-                            onClick={() => setActivePromoIndex(index)}
-                            className={`h-2 rounded-full transition-all ${
-                              index === activePromoIndex
-                                ? "w-8 bg-[#0D2E18]"
-                                : "w-2 bg-[#DCCFB8]"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                  <div className="-mx-4 sm:mx-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      key={activePromotionImage}
+                      src={activePromotionImage}
+                      alt="KadaServe promotion"
+                      loading="lazy"
+                      className="block aspect-[4/3] w-full max-w-none rounded-none object-cover shadow-[0_18px_36px_rgba(15,68,29,0.2)] sm:aspect-[16/9] sm:rounded-[22px] lg:rounded-[26px]"
+                    />
                   </div>
 
                   <div className="border-y border-[#DCCFB8] py-4 lg:border-y-0 lg:border-l lg:py-1 lg:pl-5">
@@ -2172,7 +2157,7 @@ export function CustomerDashboard({
                           <button
                             type="button"
                             onClick={() => openCustomizeModal(item)}
-                            className="flex aspect-[9/16] w-24 shrink-0 items-center justify-center overflow-hidden bg-[#E7F1E6] p-1.5 text-4xl"
+                            className="flex aspect-square w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] p-1.5 text-4xl"
                             aria-label={`Open ${item.name}`}
                           >
                             {menuImage ? (
@@ -2181,7 +2166,7 @@ export function CustomerDashboard({
                                 src={menuImage}
                                 alt={item.name}
                                 loading="lazy"
-                                className="h-full w-full rounded-[16px] object-cover"
+                                className="aspect-square h-full w-full rounded-full object-cover"
                               />
                             ) : (
                               getEmoji(item)
@@ -2225,47 +2210,35 @@ export function CustomerDashboard({
 
             {activeSection === "menu" && (
               <div className="mx-auto w-full max-w-[1440px] space-y-4">
-                <div className="grid grid-cols-[74px_1fr] gap-3 md:grid-cols-[92px_1fr]">
-                  <aside className="sticky top-2 z-30 h-[calc(100dvh-12rem)] self-start overflow-visible rounded-r-[22px] bg-[#0D2E18] px-1.5 py-2 shadow-[8px_0_18px_rgba(13,46,24,0.16)] md:h-[calc(100dvh-9rem)]">
-                    <div className="space-y-1 overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]">
-                      {menuFilters.map((item) => {
-                        const Icon = item.icon;
+                <div className="sticky top-0 z-30 -mx-4 border-b border-[#E0D2B7] bg-[#F8EBCF]/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-[22px] sm:border sm:px-3">
+                  <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {menuFilters.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => handleFilterSelect(item.value)}
+                        aria-current={
+                          activeMenuFilter === item.value ? "true" : undefined
+                        }
+                        className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
+                          activeMenuFilter === item.value
+                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                            : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:text-[#0D2E18]"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                        return (
-                        <button
-                          key={item.value}
-                          type="button"
-                          onClick={() => handleFilterSelect(item.value)}
-                          aria-current={
-                            activeMenuFilter === item.value ? "true" : undefined
-                          }
-                          className={`relative flex min-h-[76px] w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-center font-sans text-[10px] font-black leading-tight transition ${
-                            activeMenuFilter === item.value
-                              ? "bg-[#FFF0DA] text-[#0D2E18] shadow-[0_8px_18px_rgba(0,0,0,0.18)]"
-                              : "text-[#F8EBCF] hover:bg-[#164B2A]"
-                          }`}
-                        >
-                          {activeMenuFilter === item.value ? (
-                            <span className="absolute left-0 top-3 h-10 w-1 rounded-r-full bg-[#0D2E18]" />
-                          ) : null}
-                          <Icon size={22} />
-                          <span>{item.label}</span>
-                        </button>
-                        );
-                      })}
-                    </div>
-                  </aside>
-
-                  <div
-                    ref={fullMenuRef}
-                    className="space-y-10 scroll-mt-24 pb-28"
-                  >
+                <div
+                  ref={fullMenuRef}
+                  className="space-y-10 scroll-mt-24 pb-28"
+                >
                     {menuGroups.map((group) => (
                       <section
                         key={group.value}
-                        ref={(element) => {
-                          menuCategoryRefs.current[group.value] = element;
-                        }}
                         className="scroll-mt-4"
                       >
                         <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
@@ -2317,7 +2290,7 @@ export function CustomerDashboard({
                               <img
                                 src={menuImage}
                                 alt={item.name}
-                                className="h-full w-full rounded-full object-cover"
+                              className="aspect-square h-full w-full rounded-full object-cover"
                               />
                             ) : (
                               getEmoji(item)
@@ -2346,7 +2319,6 @@ export function CustomerDashboard({
                           </div>
                         </section>
                       ))}
-                  </div>
                 </div>
               </div>
             )}
@@ -2485,6 +2457,9 @@ export function CustomerDashboard({
                       const itemNames = order.order_items
                         .map((item) => item.menu_items?.name)
                         .filter(Boolean) as string[];
+                      const canGiveFeedback = feedbackItems.some(
+                        (item) => item.order_id === order.id
+                      );
 
                       return (
                         <article
@@ -2523,22 +2498,14 @@ export function CustomerDashboard({
                                 {formatPrice(order.total_amount)}
                               </p>
                             </div>
-                            <div className="flex shrink-0 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => openTrackingModal(order.id)}
-                                className="rounded-full border border-[#D8C8A7] px-3 py-2 font-sans text-xs font-bold text-[#684B35]"
-                              >
-                                Track
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleReorder(order)}
-                                className="rounded-full bg-[#123E26] px-3 py-2 font-sans text-xs font-bold text-white"
-                              >
-                                Reorder
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openFeedbackForOrder(order)}
+                              disabled={!canGiveFeedback}
+                              className="shrink-0 rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                            >
+                              Feedback
+                            </button>
                           </div>
                         </article>
                       );
@@ -2559,6 +2526,9 @@ export function CustomerDashboard({
                           const itemNames = order.order_items
                             .map((item) => item.menu_items?.name)
                             .filter(Boolean) as string[];
+                          const canGiveFeedback = feedbackItems.some(
+                            (item) => item.order_id === order.id
+                          );
 
                           return (
                             <div
@@ -2593,22 +2563,14 @@ export function CustomerDashboard({
                               <p className="font-sans text-base font-black text-[#9D6D48]">
                                 {formatPrice(order.total_amount)}
                               </p>
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => openTrackingModal(order.id)}
-                                  className="rounded-full border border-[#D8C8A7] px-3 py-2 font-sans text-xs font-bold text-[#684B35]"
-                                >
-                                  Track
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleReorder(order)}
-                                  className="rounded-full bg-[#123E26] px-3 py-2 font-sans text-xs font-bold text-white"
-                                >
-                                  Reorder
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => openFeedbackForOrder(order)}
+                                disabled={!canGiveFeedback}
+                                className="w-fit rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                              >
+                                Feedback
+                              </button>
                             </div>
                           );
                         })}
@@ -2687,22 +2649,36 @@ export function CustomerDashboard({
                         <CalendarCheck className="h-6 w-6 text-[#8C7A64]" />
                       </div>
                       <div className="mt-4 grid grid-cols-7 gap-2">
-                        {[1, 1, 1, 3, 1, 1, 21].map((points, index) => (
+                        {checkInRewards.map((points, index) => {
+                          const dayNumber = index + 1;
+                          const isChecked = checkInStreakDay >= dayNumber;
+                          const isToday = checkedInToday && checkInStreakDay === dayNumber;
+                          const isNext = !checkedInToday && checkInStreakDay + 1 === dayNumber;
+
+                          return (
                           <div key={`${points}-${index}`} className="text-center">
                             <div
                               className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full font-sans text-xs font-bold ${
-                                index === 0 && checkedInToday
+                                isChecked
                                   ? "bg-[#0D2E18] text-[#FFF0DA]"
+                                  : isNext
+                                  ? "bg-[#FFF0DA] text-[#0D2E18] ring-2 ring-[#0D2E18]"
                                   : "bg-[#F2EFE9] text-[#B5AA9A]"
                               }`}
                             >
                               {points}pt{points === 1 ? "" : "s"}
                             </div>
                             <p className="mt-1 font-sans text-[11px] font-semibold text-[#A49786]">
-                              Day {index + 1}
+                              Day {dayNumber}
                             </p>
+                            {isToday ? (
+                              <p className="mt-0.5 font-sans text-[10px] font-black text-[#0D2E18]">
+                                Today
+                              </p>
+                            ) : null}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       <button
                         type="button"
@@ -2725,14 +2701,14 @@ export function CustomerDashboard({
                               <Star size={22} />
                             </span>
                             <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-bold text-[#2D7A40]">
-                              +15 pts
+                              +10 pts
                             </span>
                           </div>
                           <h3 className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
-                            Rate 3 orders this week
+                            Rate your recent orders
                           </h3>
                           <p className="mt-1 font-sans text-sm text-[#684B35]">
-                            {feedbackMissionProgress}/3 ratings completed.
+                            Earn 10 points for every submitted feedback.
                           </p>
                           <button
                             type="button"
@@ -3650,7 +3626,7 @@ export function CustomerDashboard({
 
               <button
                 type="button"
-                onClick={() => setIsFeedbackPromptOpen(false)}
+                onClick={closeFeedbackPrompt}
                 aria-label="Review later"
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#0D2E18] transition hover:bg-[#FFF8EF]"
               >
@@ -3659,7 +3635,7 @@ export function CustomerDashboard({
             </div>
 
             <div className="max-h-[calc(88vh-5.5rem)] space-y-4 overflow-y-auto px-5 py-4">
-              {feedbackItems.length > 1 ? (
+              {visibleFeedbackItems.length > 1 ? (
                 <label className="block">
                   <span className="font-sans text-sm font-bold text-[#684B35]">
                     Choose item
@@ -3671,7 +3647,7 @@ export function CustomerDashboard({
                     }
                     className="mt-2 w-full rounded-[16px] border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-3 font-sans text-sm outline-none"
                   >
-                    {feedbackItems.map((item) => (
+                    {visibleFeedbackItems.map((item) => (
                       <option
                         key={item.order_item_id}
                         value={item.order_item_id}
@@ -3718,6 +3694,34 @@ export function CustomerDashboard({
               <div className="rounded-[20px] bg-[#FFF8EF] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-sans text-base font-black text-[#0D2E18]">
+                    Overall Satisfaction
+                  </p>
+                  <span className="font-sans text-xs font-bold text-[#8A755D]">
+                    {overallRating > 0 ? `${overallRating}/5` : "Select"}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex justify-between gap-1">
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <button
+                      key={score}
+                      type="button"
+                      onClick={() => handleRatingChange(setOverallRating, score)}
+                      className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${
+                        score <= overallRating
+                          ? "text-[#C96A12]"
+                          : "text-[#D8C8A7]"
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[20px] bg-[#FFF8EF] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-sans text-base font-black text-[#0D2E18]">
                     Drink Strength
                   </p>
                   <span className="font-sans text-xs font-bold text-[#8A755D]">
@@ -3747,34 +3751,6 @@ export function CustomerDashboard({
                       }`}
                     >
                       {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-[20px] bg-[#FFF8EF] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-sans text-base font-black text-[#0D2E18]">
-                    Overall Experience
-                  </p>
-                  <span className="font-sans text-xs font-bold text-[#8A755D]">
-                    {overallRating > 0 ? `${overallRating}/5` : "Select"}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex justify-between gap-1">
-                  {[1, 2, 3, 4, 5].map((score) => (
-                    <button
-                      key={score}
-                      type="button"
-                      onClick={() => handleRatingChange(setOverallRating, score)}
-                      className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${
-                        score <= overallRating
-                          ? "text-[#C96A12]"
-                          : "text-[#D8C8A7]"
-                      }`}
-                    >
-                      ★
                     </button>
                   ))}
                 </div>
@@ -3842,13 +3818,13 @@ export function CustomerDashboard({
               <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
                 <div>
                   <div className="flex flex-col gap-4 sm:flex-row">
-                    <div className="flex h-44 w-full items-center justify-center overflow-hidden rounded-[24px] bg-[#E7F1E6] text-6xl sm:w-52">
+                    <div className="flex aspect-square h-44 w-44 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-6xl sm:h-52 sm:w-52">
                       {getMenuImage(selectedMenuItem) ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={getMenuImage(selectedMenuItem) ?? ""}
                           alt={selectedMenuItem.name}
-                          className="h-full w-full object-cover"
+                          className="aspect-square h-full w-full rounded-full object-cover"
                         />
                       ) : (
                         getEmoji(selectedMenuItem)
@@ -4180,13 +4156,13 @@ export function CustomerDashboard({
                         key={item.id}
                         className="flex items-center gap-3 rounded-[18px] bg-[#FFF8EF] p-2.5"
                       >
-                        <div className="flex aspect-[9/16] h-20 shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[#E7F1E6] text-2xl">
+                        <div className="flex aspect-square h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-2xl">
                           {item.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={item.imageUrl}
                               alt={item.name}
-                              className="h-full w-full object-cover"
+                              className="aspect-square h-full w-full rounded-full object-cover"
                             />
                           ) : (
                             "☕"

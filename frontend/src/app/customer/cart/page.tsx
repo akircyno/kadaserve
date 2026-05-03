@@ -193,13 +193,13 @@ export default function CartPage() {
       };
 
       if (!response.ok) {
-        setRewardMessage(result.error || "Rewards are unavailable right now.");
+        setRewardMessage(result.error || "Vouchers are unavailable right now.");
         return;
       }
 
       setActiveRewardVouchers(result.activeVouchers ?? []);
     } catch {
-      setRewardMessage("Rewards are unavailable right now.");
+      setRewardMessage("Vouchers are unavailable right now.");
     } finally {
       setIsRewardsLoading(false);
     }
@@ -329,6 +329,8 @@ export default function CartPage() {
   function applyVoucher(code: string) {
     setVoucherCode(code.trim().toUpperCase());
     setVoucherDraft(code.trim().toUpperCase());
+    setAppliedReward(null);
+    setRewardMessage("");
     setIsVoucherModalOpen(false);
   }
 
@@ -366,7 +368,10 @@ export default function CartPage() {
       }
 
       setAppliedReward(result.reward);
+      setVoucherCode("");
+      setVoucherDraft("");
       setRewardMessage(result.message || "Free Delivery reward applied.");
+      setIsVoucherModalOpen(false);
     } catch {
       setRewardMessage("Something went wrong while applying this reward.");
     } finally {
@@ -790,97 +795,7 @@ export default function CartPage() {
                 <section className="border-t border-[#D8C8A7] pt-5 lg:border-t-0 lg:pt-0">
                   <div className="flex items-center gap-2">
                     <TicketPercent className="h-5 w-5 text-[#0D2E18]" />
-                    <h2 className="font-sans text-lg font-black">Rewards</h2>
-                  </div>
-
-                  <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                          Available Rewards
-                        </p>
-                        <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
-                          {isRewardsLoading
-                            ? "Checking rewards..."
-                            : availableDeliveryRewards.length > 0
-                            ? "Free Delivery voucher ready"
-                            : "No delivery rewards available"}
-                        </p>
-                      </div>
-                      {isRewardsLoading ? (
-                        <LoadingSpinner className="h-5 w-5" label="Loading rewards" />
-                      ) : null}
-                    </div>
-
-                    {availableDeliveryRewards.length > 0 ? (
-                      <div className="mt-3 space-y-2">
-                        {availableDeliveryRewards.map((voucher) => {
-                          const isApplied = appliedReward?.id === voucher.id;
-
-                          return (
-                            <div
-                              key={voucher.id}
-                              className={`rounded-[14px] border px-3 py-3 ${
-                                isApplied
-                                  ? "border-[#0D2E18] bg-[#E7F4EA]"
-                                  : "border-[#EFE2C9] bg-[#FFF8EF]"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-sans text-sm font-black text-[#0D2E18]">
-                                    Free Delivery
-                                  </p>
-                                  <p className="truncate font-sans text-xs font-semibold text-[#684B35]">
-                                    {voucher.code}
-                                  </p>
-                                  <p className="font-sans text-xs text-[#8C7A64]">
-                                    Expires {formatRewardDate(voucher.expiresAt)}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => applyRewardVoucher(voucher)}
-                                  disabled={
-                                    isApplyingReward ||
-                                    isApplied ||
-                                    orderType !== "delivery"
-                                  }
-                                  className="shrink-0 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
-                                >
-                                  {isApplyingReward && !isApplied ? (
-                                    <LoadingSpinner
-                                      className="mr-1 h-3.5 w-3.5 align-[-0.2em]"
-                                      label="Applying reward"
-                                    />
-                                  ) : null}
-                                  {isApplied ? "Applied" : "Apply"}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-
-                    {appliedReward ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAppliedReward(null);
-                          setRewardMessage("Free Delivery reward removed.");
-                        }}
-                        className="mt-3 font-sans text-xs font-bold text-[#684B35] underline underline-offset-4"
-                      >
-                        Remove Free Delivery
-                      </button>
-                    ) : null}
-
-                    {rewardMessage ? (
-                      <p className="mt-3 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-xs font-semibold text-[#684B35]">
-                        {rewardMessage}
-                      </p>
-                    ) : null}
+                    <h2 className="font-sans text-lg font-black">Voucher</h2>
                   </div>
 
                   <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
@@ -890,11 +805,17 @@ export default function CartPage() {
                           Voucher
                         </p>
                         <p className="mt-1 truncate font-sans text-sm font-black text-[#0D2E18]">
-                          {voucherCode
+                          {appliedReward
+                            ? "Free Delivery"
+                            : voucherCode
                             ? selectedVoucher?.title ?? voucherCode
                             : "No voucher selected"}
                         </p>
-                        {voucherCode ? (
+                        {appliedReward ? (
+                          <p className="font-sans text-xs font-semibold text-[#684B35]">
+                            Code: {appliedReward.code}
+                          </p>
+                        ) : voucherCode ? (
                           <p className="font-sans text-xs font-semibold text-[#684B35]">
                             Code: {voucherCode}
                           </p>
@@ -908,6 +829,11 @@ export default function CartPage() {
                         Add Voucher
                       </button>
                     </div>
+                    {rewardMessage ? (
+                      <p className="mt-3 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-xs font-semibold text-[#684B35]">
+                        {rewardMessage}
+                      </p>
+                    ) : null}
                   </div>
 
                   <p className="mt-4 font-sans text-sm font-semibold text-[#2D7A40]">
@@ -930,9 +856,15 @@ export default function CartPage() {
                       <span className="font-bold">{peso(subtotal)}</span>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="text-[#684B35]">Delivery Fee</span>
+                      <span className="text-[#684B35]">
+                        Estimated Delivery Fee
+                      </span>
                       <span className="font-bold">{peso(deliveryFee)}</span>
                     </div>
+                    <p className="-mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                      The staff will confirm the final delivery fee to your
+                      email.
+                    </p>
                     {appliedReward ? (
                       <div className="flex justify-between gap-4">
                         <span className="text-[#684B35]">
@@ -1220,12 +1152,71 @@ export default function CartPage() {
             </div>
 
             <div>
-              <h3 className="font-sans text-lg font-black text-[#0D2E18]">
-                Redeem Vouchers with KadaServe Points
-              </h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-sans text-lg font-black text-[#0D2E18]">
+                  Available Vouchers
+                </h3>
+                {isRewardsLoading ? (
+                  <LoadingSpinner className="h-4 w-4" label="Loading vouchers" />
+                ) : null}
+              </div>
 
-              {rewardWallet.length > 0 ? (
+              {isRewardsLoading ? (
+                <div className="mt-4 flex items-center gap-2 rounded-[18px] bg-[#FFF8EF] px-4 py-5 font-sans text-sm font-bold text-[#684B35]">
+                  <LoadingSpinner className="h-4 w-4" label="Loading vouchers" />
+                  <span>Checking available vouchers...</span>
+                </div>
+              ) : availableDeliveryRewards.length > 0 || rewardWallet.length > 0 ? (
                 <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                  {availableDeliveryRewards.map((voucher) => {
+                    const isApplied = appliedReward?.id === voucher.id;
+
+                    return (
+                      <button
+                        key={voucher.id}
+                        type="button"
+                        onClick={() => applyRewardVoucher(voucher)}
+                        disabled={
+                          isApplyingReward ||
+                          isApplied ||
+                          orderType !== "delivery"
+                        }
+                        className={`w-full rounded-[18px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                          isApplied
+                            ? "border-[#0D2E18] bg-[#E7F4EA]"
+                            : "border-[#E8D9BE] bg-[#FFF8EF]"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-sans text-base font-black text-[#0D2E18]">
+                              Free Delivery
+                            </p>
+                            <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
+                              Code: {voucher.code}
+                            </p>
+                            <p className="font-sans text-xs text-[#8C7A64]">
+                              Expires {formatRewardDate(voucher.expiresAt)}
+                            </p>
+                            {orderType !== "delivery" ? (
+                              <p className="mt-1 font-sans text-xs font-bold text-[#9C543D]">
+                                Available for delivery orders only
+                              </p>
+                            ) : null}
+                          </div>
+                          {isApplyingReward && !isApplied ? (
+                            <LoadingSpinner
+                              className="h-5 w-5 text-[#0D2E18]"
+                              label="Applying voucher"
+                            />
+                          ) : (
+                            <TicketPercent className="h-6 w-6 text-[#0D2E18]" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+
                   {rewardWallet.map((voucher) => (
                     <button
                       key={voucher.code}
@@ -1263,28 +1254,20 @@ export default function CartPage() {
                     No Available Voucher
                   </p>
                   <p className="mt-1 font-sans text-sm leading-6 text-[#684B35]">
-                    Complete missions or redeem rewards with points to unlock your first voucher.
+                    Your My Rewards vouchers will appear here when available.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsVoucherModalOpen(false);
-                      router.push("/customer?tab=rewards");
-                    }}
-                    className="mt-4 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA]"
-                  >
-                    Go to Rewards
-                  </button>
                 </div>
               )}
             </div>
 
-            {voucherCode ? (
+            {voucherCode || appliedReward ? (
               <button
                 type="button"
                 onClick={() => {
                   setVoucherCode("");
                   setVoucherDraft("");
+                  setAppliedReward(null);
+                  setRewardMessage("");
                   setIsVoucherModalOpen(false);
                 }}
                 className="mt-4 w-full rounded-full border border-[#D8C8A7] px-4 py-3 font-sans text-sm font-bold text-[#684B35]"

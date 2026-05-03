@@ -1,5 +1,6 @@
 export const FREE_DELIVERY_FEE = 50;
 export const POINTS_PER_COMPLETED_ITEM = 20;
+export const POINTS_PER_FEEDBACK = 10;
 
 export type RewardItemRow = {
   id: string;
@@ -70,6 +71,10 @@ type CompletedOrderRow = {
 type RedeemedRewardRow = {
   id: string;
   reward_items: { points_cost: number } | { points_cost: number }[] | null;
+};
+
+type FeedbackPointRow = {
+  id: string;
 };
 
 function normalizeRewardItem(
@@ -165,6 +170,18 @@ export async function getCustomerRewardPoints(
     return sum + itemCount * POINTS_PER_COMPLETED_ITEM;
   }, 0);
 
+  const { data: feedbackRows, error: feedbackError } = await db
+    .from("feedback")
+    .select("id")
+    .eq("customer_id", customerId)
+    .returns<FeedbackPointRow[]>();
+
+  if (feedbackError) {
+    throw new Error(feedbackError.message);
+  }
+
+  const feedbackPoints = (feedbackRows ?? []).length * POINTS_PER_FEEDBACK;
+
   const { data: redeemedRewards, error: rewardsError } = await db
     .from("customer_rewards")
     .select(
@@ -190,7 +207,7 @@ export async function getCustomerRewardPoints(
     return sum + Number(rewardItem?.points_cost ?? 0);
   }, 0);
 
-  return Math.max(0, earnedPoints - spentPoints);
+  return Math.max(0, earnedPoints + feedbackPoints - spentPoints);
 }
 
 export function generateRewardCode(type: RewardItemRow["type"]) {

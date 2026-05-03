@@ -1,8 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import imageCompression from "browser-image-compression";
+import Cropper, { type Area } from "react-easy-crop";
 import { Search } from "lucide-react";
 import type * as React from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { AdminMenuItem, MenuCategory } from "@/types/menu";
 
 type MenuFormState = {
@@ -32,6 +43,17 @@ const adminMenuCategories: Array<{ value: MenuCategory; label: string }> = [
   { value: "best-deals", label: "Best Deals" },
 ];
 
+const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+const maxInitialImageSize = 10 * 1024 * 1024;
+const maxCompressedImageSize = 1.5 * 1024 * 1024;
+const compressionOptions = {
+  maxSizeMB: 1.45,
+  maxWidthOrHeight: 1400,
+  useWebWorker: true,
+  fileType: "image/webp",
+  initialQuality: 0.88,
+};
+
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
 }
@@ -56,6 +78,53 @@ function EmptyState({ label }: { label: string }) {
     </div>
   );
 }
+
+function loadImage(imageUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new window.Image();
+
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", () =>
+      reject(new Error("Could not read the selected image."))
+    );
+    image.src = imageUrl;
+  });
+}
+
+async function getCroppedImageFile(imageUrl: string, cropArea: Area) {
+  const image = await loadImage(imageUrl);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not prepare the cropped image.");
+  }
+
+  canvas.width = cropArea.width;
+  canvas.height = cropArea.height;
+  context.drawImage(
+    image,
+    cropArea.x,
+    cropArea.y,
+    cropArea.width,
+    cropArea.height,
+    0,
+    0,
+    cropArea.width,
+    cropArea.height
+  );
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/webp", 0.92)
+  );
+
+  if (!blob) {
+    throw new Error("Could not save the cropped image.");
+  }
+
+  return new File([blob], "menu-image.webp", { type: "image/webp" });
+}
+
 export function MenuView({
   menuItems,
   setMenuItems,
@@ -69,6 +138,11 @@ export function MenuView({
   const [menuMessage, setMenuMessage] = useState("");
   const [menuError, setMenuError] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState("");
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("all");
 
@@ -120,74 +194,99 @@ export function MenuView({
   function closeForm() {
     setIsFormOpen(false);
     setForm(emptyMenuForm);
+    closeCropModal();
   }
 
-  function validateSquareImage(file: File) {
-    return new Promise<void>((resolve, reject) => {
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  function closeCropModal() {
+    if (cropImageUrl) {
+      URL.revokeObjectURL(cropImageUrl);
+    }
 
-      if (!allowedTypes.includes(file.type)) {
-        reject(new Error("Only JPG, PNG, and WEBP images are allowed."));
-        return;
-      }
-
-      if (file.size > 2 * 1024 * 1024) {
-        reject(new Error("Image must be 2MB or smaller."));
-        return;
-      }
-
-      const imageUrl = URL.createObjectURL(file);
-      const image = new window.Image();
-
-      image.onload = () => {
-        URL.revokeObjectURL(imageUrl);
-
-        if (image.naturalWidth !== image.naturalHeight) {
-          reject(new Error("Please upload a square 1:1 image."));
-          return;
-        }
-
-        if (image.naturalWidth < 600) {
-          reject(new Error("Image must be at least 600x600px."));
-          return;
-        }
-
-        resolve();
-      };
-
-      image.onerror = () => {
-        URL.revokeObjectURL(imageUrl);
-        reject(new Error("Could not read the selected image."));
-      };
-
-      image.src = imageUrl;
-    });
+    setCropImageUrl("");
+    setCropSourceFile(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
   }
+
+  const handleCropComplete = useCallback(
+    (_croppedArea: Area, nextCroppedAreaPixels: Area) => {
+      setCroppedAreaPixels(nextCroppedAreaPixels);
+    },
+    []
+  );
 
   async function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) return;
 
+    setMenuMessage("");
+    setMenuError("");
+    closeCropModal();
+
+    if (!allowedImageTypes.includes(file.type)) {
+      setMenuError("Please choose a JPG, PNG, or WEBP image.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > maxInitialImageSize) {
+      setMenuError("This image is a bit too large to process. Please try a different photo.");
+      event.target.value = "";
+      return;
+    }
+
+    setCropSourceFile(file);
+    setCropImageUrl(URL.createObjectURL(file));
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    event.target.value = "";
+  }
+
+  async function saveCroppedImage() {
+    if (!cropImageUrl || !cropSourceFile || !croppedAreaPixels) return;
+
     setIsUploadingImage(true);
     setMenuMessage("");
     setMenuError("");
 
     try {
-      await validateSquareImage(file);
+      const croppedFile = await getCroppedImageFile(
+        cropImageUrl,
+        croppedAreaPixels
+      );
+      const compressedImage = await imageCompression(
+        croppedFile,
+        compressionOptions
+      );
 
+      if (compressedImage.size > maxCompressedImageSize) {
+        setMenuError(
+          "This image is a bit too large to process. Please try a different photo."
+        );
+        return;
+      }
+
+      const uploadFile = new File(
+        [compressedImage],
+        `${cropSourceFile.name.replace(/\.[^.]+$/, "") || "menu-image"}.webp`,
+        { type: compressedImage.type || "image/webp" }
+      );
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
 
       const response = await fetch("/api/admin/menu/upload-image", {
         method: "POST",
         body: formData,
       });
-
       const result = await response.json();
 
       if (!response.ok) {
-        setMenuError(result.error || "Failed to upload menu image.");
+        setMenuError(
+          result.error ||
+            "This image is a bit too large to process. Please try a different photo."
+        );
         return;
       }
 
@@ -197,6 +296,7 @@ export function MenuView({
       }));
 
       setMenuMessage("Image uploaded. Save the menu item to apply it.");
+      closeCropModal();
     } catch (error) {
       setMenuError(
         error instanceof Error
@@ -205,7 +305,6 @@ export function MenuView({
       );
     } finally {
       setIsUploadingImage(false);
-      event.target.value = "";
     }
   }
 
@@ -384,13 +483,13 @@ export function MenuView({
               className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_1fr] items-center gap-6 px-6 py-4 font-sans text-sm"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#E7F4EA]">
+                <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
                   {item.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={item.imageUrl}
                       alt={item.name}
-                      className="h-full w-full object-cover"
+                      className="aspect-square h-full w-full rounded-full object-cover"
                     />
                   ) : (
                     <div className="h-5 w-5 rounded-full bg-[#D9D9D9]" />
@@ -543,13 +642,13 @@ export function MenuView({
                 </p>
 
                 <div className="mt-2 flex flex-col gap-4 rounded-[18px] border border-[#D6C6AC] bg-[#FFF8EF] p-4 sm:flex-row sm:items-center">
-                  <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-[#E7F4EA]">
+                  <div className="flex aspect-square h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
                     {form.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={form.imageUrl}
                         alt="Menu preview"
-                        className="h-full w-full object-cover"
+                        className="aspect-square h-full w-full rounded-full object-cover"
                       />
                     ) : (
                       <div className="h-12 w-12 rounded-full bg-[#D9D9D9]" />
@@ -566,14 +665,15 @@ export function MenuView({
                     />
 
                     <p className="mt-2 font-sans text-xs text-[#8C7A64]">
-                      Upload a square 1:1 image. Minimum 600x600px. JPG, PNG,
-                      or WEBP only.
+                      Choose any JPG, PNG, or WEBP photo up to 10MB. You can
+                      crop it for the circular menu frame before upload.
                     </p>
 
                     {isUploadingImage ? (
-                      <p className="mt-2 font-sans text-sm font-semibold text-[#0F441D]">
-                        Uploading image...
-                      </p>
+                      <div className="mt-2 flex items-center gap-2 font-sans text-sm font-semibold text-[#0F441D]">
+                        <LoadingSpinner className="h-4 w-4" label="Uploading image" />
+                        <span>Processing image...</span>
+                      </div>
                     ) : null}
 
                     {form.imageUrl ? (
@@ -602,10 +702,18 @@ export function MenuView({
               <button
                 type="submit"
                 disabled={isSaving || isUploadingImage}
-                className="rounded-[14px] bg-[#0D2E18] px-8 py-3 font-sans text-sm font-bold text-[#FFF0DA] disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-[#0D2E18] px-8 py-3 font-sans text-sm font-bold text-[#FFF0DA] disabled:opacity-60"
               >
+                {isSaving || isUploadingImage ? (
+                  <LoadingSpinner
+                    className="h-4 w-4"
+                    label={isSaving ? "Saving menu item" : "Uploading image"}
+                  />
+                ) : null}
                 {isSaving
                   ? "Saving..."
+                  : isUploadingImage
+                  ? "Processing..."
                   : form.id
                   ? "Save Changes"
                   : "Add Menu Item"}
@@ -614,6 +722,124 @@ export function MenuView({
           </form>
         </div>
       ) : null}
+
+      <Dialog
+        open={Boolean(cropImageUrl)}
+        onOpenChange={(open) => {
+          if (!open && !isUploadingImage) {
+            closeCropModal();
+          }
+        }}
+      >
+        <DialogContent className="font-sans">
+          <div className="flex items-start justify-between gap-4 border-b border-[#EFE3CF] px-5 py-4">
+            <DialogHeader>
+              <DialogDescription className="font-bold uppercase tracking-[0.16em]">
+                Menu image
+              </DialogDescription>
+              <DialogTitle>Crop for circle</DialogTitle>
+            </DialogHeader>
+
+            <button
+              type="button"
+              onClick={closeCropModal}
+              disabled={isUploadingImage}
+              className="rounded-full border border-[#D6C6AC] px-4 py-2 font-sans text-sm font-semibold text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div className="px-5 py-5">
+            <div className="relative h-[330px] overflow-hidden rounded-[22px] bg-[#102F1B] sm:h-[420px]">
+              {cropImageUrl ? (
+                <Cropper
+                  image={cropImageUrl}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={handleCropComplete}
+                />
+              ) : null}
+            </div>
+
+            <label className="mt-5 block font-sans text-sm font-bold text-[#684B35]">
+              Zoom
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={zoom}
+                onChange={(event) => setZoom(Number(event.target.value))}
+                disabled={isUploadingImage}
+                className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-[#DCCFB8] accent-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
+          </div>
+
+          <DialogFooter className="border-t border-[#EFE3CF] px-5 py-4">
+            <button
+              type="button"
+              onClick={closeCropModal}
+              disabled={isUploadingImage}
+              className="rounded-[14px] border border-[#D6C6AC] px-6 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-60"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={saveCroppedImage}
+              disabled={isUploadingImage || !croppedAreaPixels}
+              className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-[#0D2E18] px-8 py-3 font-sans text-sm font-bold text-[#FFF0DA] disabled:opacity-60"
+            >
+              {isUploadingImage ? (
+                <LoadingSpinner className="h-4 w-4" label="Saving crop" />
+              ) : null}
+              {isUploadingImage ? "Saving..." : "Save Crop"}
+            </button>
+          </DialogFooter>
+
+          <style jsx global>{`
+            .reactEasyCrop_Container {
+              position: absolute;
+              inset: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+              overflow: hidden;
+              touch-action: none;
+              user-select: none;
+            }
+
+            .reactEasyCrop_Image,
+            .reactEasyCrop_Video {
+              max-width: 100%;
+              max-height: 100%;
+              will-change: transform;
+            }
+
+            .reactEasyCrop_CropArea {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              box-sizing: border-box;
+              box-shadow: 0 0 0 9999em rgba(13, 46, 24, 0.56);
+              overflow: hidden;
+            }
+
+            .reactEasyCrop_CropAreaRound {
+              border-radius: 9999px;
+            }
+          `}</style>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
