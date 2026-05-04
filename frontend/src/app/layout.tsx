@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
+import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -9,8 +10,17 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   applicationName: "KadaServe",
+  manifest: "/manifest.webmanifest",
   title: "KadaServe",
   description: "KadaServe customer ordering system",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "KadaServe",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -23,6 +33,14 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0f441d",
+  colorScheme: "light",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,7 +51,10 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

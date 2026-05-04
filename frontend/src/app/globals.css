@@ -14,7 +14,7 @@
   --color-kada-white: #ffffff;
   --color-kada-brown: #684b35;
   --font-sans: var(--font-dm-sans);
-  --font-display: var(--font-playfair);
+  --font-display: var(--font-dm-sans);
 }
 
 body {
