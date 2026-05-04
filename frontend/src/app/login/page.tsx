@@ -81,8 +81,12 @@ function LoginForm() {
       } else if (result.role === "staff") {
         router.push("/staff");
       } else if (safeCallbackUrl) {
+        if (safeCallbackUrl.startsWith("/customer")) {
+          window.sessionStorage.setItem("kadaserve_show_customer_splash", "true");
+        }
         router.push(safeCallbackUrl);
       } else {
+        window.sessionStorage.setItem("kadaserve_show_customer_splash", "true");
         router.push("/customer");
       }
 
@@ -206,7 +210,7 @@ function LoginForm() {
                         currentEmail.trim().toLowerCase()
                       );
                     }}
-                    placeholder="you@example.com"
+                    placeholder="Enter your email@example.com"
                     className={inputClass}
                     required
                   />
@@ -239,7 +243,7 @@ function LoginForm() {
                       setPassword(event.target.value);
                       setError("");
                     }}
-                    placeholder="password"
+                    placeholder="Enter your password"
                     className={inputClass}
                     required
                   />

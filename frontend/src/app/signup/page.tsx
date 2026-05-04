@@ -267,7 +267,8 @@ export default function SignupPage() {
         return;
       }
 
-      window.location.assign("/customer");
+      window.sessionStorage.setItem("kadaserve_show_customer_splash", "true");
+      window.location.assign("/customer?splash=1");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -525,7 +526,7 @@ export default function SignupPage() {
                         email: true,
                       }));
                     }}
-                    placeholder="you@example.com"
+                    placeholder="Enter your email@example.com"
                     className={`${inputClass} lowercase`}
                     title="Enter a valid email address, for example name@gmail.com."
                     required

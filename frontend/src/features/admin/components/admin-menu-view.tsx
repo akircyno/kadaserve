@@ -723,9 +723,9 @@ export function MenuView({
               Zoom
               <input
                 type="range"
-                min="1"
-                max="3"
-                step="0.05"
+                min="0.3"
+                max="4"
+                step="0.01"
                 value={zoom}
                 onChange={(event) => setZoom(Number(event.target.value))}
                 disabled={isUploadingImage}

@@ -57,6 +57,10 @@ function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
   return Math.max(0, getNumberValue(totalAmount) - getNumberValue(deliveryFee));
 }
 
+function hasFreeDeliveryVoucher(order: { reward_code?: string | null }) {
+  return Boolean(order.reward_code?.toUpperCase().startsWith("FREEDELIVERY"));
+}
+
 function getNextStatus(
   orderType: "pickup" | "delivery",
   currentStatus: OrderStatus
@@ -438,7 +442,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status, total_amount, delivery_fee")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee, reward_code")
       .eq("id", orderId)
       .single();
 
@@ -500,13 +504,20 @@ export async function POST(request: Request) {
     }
 
     const paymentStatus = order.payment_status as PaymentStatus;
+    const isFreeDeliveryOrder = hasFreeDeliveryVoucher(order);
     const shouldSetFinalDeliveryFee =
-      order.order_type === "delivery" && nextStatus === "out_for_delivery";
+      order.order_type === "delivery" &&
+      nextStatus === "out_for_delivery" &&
+      !isFreeDeliveryOrder;
+    const shouldLockFreeDeliveryFee =
+      order.order_type === "delivery" &&
+      nextStatus === "out_for_delivery" &&
+      isFreeDeliveryOrder;
 
     if (shouldSetFinalDeliveryFee) {
-      if (!Number.isFinite(finalDeliveryFee) || finalDeliveryFee < 0) {
+      if (!Number.isFinite(finalDeliveryFee) || finalDeliveryFee <= 0) {
         return NextResponse.json(
-          { error: "Enter a valid final delivery fee before dispatch." },
+          { error: "Enter the final delivery fee before dispatch." },
           { status: 400 }
         );
       }
@@ -540,6 +551,13 @@ export async function POST(request: Request) {
       updatePayload.delivery_fee = Math.round(finalDeliveryFee);
       updatePayload.total_amount =
         getNumberValue(order.total_amount) - previousDeliveryFee + updatePayload.delivery_fee;
+    } else if (shouldLockFreeDeliveryFee) {
+      const previousDeliveryFee = getNumberValue(order.delivery_fee);
+      updatePayload.delivery_fee = 0;
+      updatePayload.total_amount = Math.max(
+        0,
+        getNumberValue(order.total_amount) - previousDeliveryFee
+      );
     }
 
     const { error: updateError } = await supabase

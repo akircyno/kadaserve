@@ -5,10 +5,7 @@ import {
   resolveStoreStatus,
   STORE_STATUS_SETTING_KEY,
 } from "@/lib/store-status";
-import {
-  FREE_DELIVERY_FEE,
-  validateCheckoutReward,
-} from "@/lib/reward-service";
+import { validateCheckoutReward } from "@/lib/reward-service";
 
 type CheckoutItem = {
   menu_item_id: string;
@@ -184,9 +181,10 @@ export async function POST(request: Request) {
     const subtotal = items.reduce((sum, item) => {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
-    const baseDeliveryFee = orderType === "delivery" ? FREE_DELIVERY_FEE : 0;
+    const baseDeliveryFee = 0;
     let deliveryFee = baseDeliveryFee;
     let rewardDiscountAmount = 0;
+    let rewardSubtotalDiscountAmount = 0;
     let appliedRewardCode: string | null = null;
     let appliedRewardId: string | null = null;
 
@@ -209,18 +207,19 @@ export async function POST(request: Request) {
       appliedRewardId = rewardValidation.voucher.id;
       appliedRewardCode = rewardValidation.voucher.code;
       if (rewardValidation.rewardItem.type === "delivery_fee") {
-        rewardDiscountAmount = Math.min(
-          baseDeliveryFee,
-          rewardValidation.discountAmount
-        );
-        deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscountAmount);
+        rewardDiscountAmount = rewardValidation.discountAmount;
+        deliveryFee = 0;
       } else {
         rewardDiscountAmount = Math.min(subtotal, rewardValidation.discountAmount);
+        rewardSubtotalDiscountAmount = rewardDiscountAmount;
       }
     }
 
     const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
-    const totalAmount = Math.max(0, subtotal + deliveryFee - voucherDiscount);
+    const totalAmount = Math.max(
+      0,
+      subtotal + deliveryFee - voucherDiscount - rewardSubtotalDiscountAmount
+    );
 
     const { data: order, error: orderError } = await supabase
       .from("orders")

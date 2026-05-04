@@ -79,6 +79,10 @@ function cleanSearch(value: string) {
   return value.trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ");
 }
 
+function cleanOrderCodeSearch(value: string) {
+  return value.replace(/[^a-z0-9]/gi, "").trim();
+}
+
 function manilaDate(offsetDays = 0) {
   const base = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -253,6 +257,7 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const search = cleanSearch(url.searchParams.get("q") ?? "");
+    const orderCodeSearch = cleanOrderCodeSearch(search);
     const range = (url.searchParams.get("range") ?? "today") as HistoryRange;
     const customFrom = url.searchParams.get("from");
     const customTo = url.searchParams.get("to");
@@ -301,6 +306,7 @@ export async function GET(request: Request) {
     if (search) {
       const filters = [
         ...(isUuid(search) ? [`id.eq.${search}`] : []),
+        ...(orderCodeSearch ? [`id.ilike.%${orderCodeSearch}%`] : []),
         `walkin_name.ilike.%${search}%`,
         `delivery_phone.ilike.%${search}%`,
         `delivery_email.ilike.%${search}%`,

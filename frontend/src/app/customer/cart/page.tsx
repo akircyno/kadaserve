@@ -284,7 +284,9 @@ export default function CartPage() {
   );
   const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
   const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
-  const baseDeliveryFee = orderType === "delivery" ? 50 : 0;
+  const baseDeliveryFee = 0;
+  const estimatedDeliveryFeeLabel =
+    orderType === "delivery" ? "~P40-P75" : peso(0);
   const appliedRewardType = appliedReward?.rewardItem?.type;
   const rewardDiscount =
     appliedRewardType === "delivery_fee"
@@ -571,6 +573,7 @@ export default function CartPage() {
   }
 
   function handleBackToMenu() {
+    setIsAddressPickerOpen(false);
     setIsReturningToMenu(true);
     window.sessionStorage.setItem("kadaserve_skip_customer_splash", "true");
     router.push("/customer?tab=menu");
@@ -672,19 +675,21 @@ export default function CartPage() {
                     <Pencil className="h-4 w-4" />
                   </button>
                 </div>
-                <DeliveryLocationPicker
-                  lat={deliveryLat}
-                  lng={deliveryLng}
-                  onChange={(location) => {
-                    setDeliveryLat(location.lat);
-                    setDeliveryLng(location.lng);
-                    setSelectedAddressId(null);
+                {!isAddressPickerOpen ? (
+                  <DeliveryLocationPicker
+                    lat={deliveryLat}
+                    lng={deliveryLng}
+                    onChange={(location) => {
+                      setDeliveryLat(location.lat);
+                      setDeliveryLng(location.lng);
+                      setSelectedAddressId(null);
 
-                    if (location.address) {
-                      setDeliveryAddress(location.address);
-                    }
-                  }}
-                />
+                      if (location.address) {
+                        setDeliveryAddress(location.address);
+                      }
+                    }}
+                  />
+                ) : null}
                 <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
                   Estimated delivery time: 25-40mins
                 </p>
@@ -894,26 +899,32 @@ export default function CartPage() {
                       <span className="text-[#684B35]">
                         Estimated Delivery Fee
                       </span>
-                      <span className="font-bold">{peso(deliveryFee)}</span>
+                      <span className="font-bold">
+                        {appliedRewardType === "delivery_fee" && deliveryFee === 0
+                          ? peso(0)
+                          : estimatedDeliveryFeeLabel}
+                      </span>
                     </div>
                     <p className="-mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                      The staff will confirm the final delivery fee to your
-                      email.
+                      fee is depends on the distance. The staff will confirm the final
+                      delivery fee to your email.
                     </p>
                     {appliedReward ? (
                       <div className="flex justify-between gap-4">
-                        <span className="text-[#684B35]">
-                          Discount/Reward Applied
-                        </span>
+                        <span className="text-[#684B35]">Voucher Applied</span>
                         <span className="font-bold text-[#0D2E18]">
-                          -{peso(rewardDiscount)}
+                          {appliedRewardType === "delivery_fee"
+                            ? "Free Delivery"
+                            : `-${peso(rewardDiscount)}`}
                         </span>
                       </div>
                     ) : null}
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[#684B35]">Voucher Discount</span>
-                      <span className="font-bold">-{peso(voucherDiscount)}</span>
-                    </div>
+                    {voucherDiscount > 0 ? (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[#684B35]">Voucher Discount</span>
+                        <span className="font-bold">-{peso(voucherDiscount)}</span>
+                      </div>
+                    ) : null}
                     <div className="border-t border-[#EFE2C9] pt-3">
                       <div className="flex items-center justify-between gap-4">
                         <span className="font-sans text-sm font-bold text-[#684B35]">

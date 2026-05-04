@@ -9,6 +9,7 @@ import type { FeedbackItem } from "@/types/feedback";
 
 type PageProps = {
   searchParams: Promise<{
+    splash?: string;
     tab?: string;
   }>;
 };
@@ -17,6 +18,7 @@ const fallbackOrders: CustomerOrder[] = [];
 
 export default async function CustomerPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
+  const shouldShowEntrySplash = resolvedSearchParams.splash === "1";
   const initialSection =
     resolvedSearchParams.tab === "orders"
       ? "orders"
@@ -251,6 +253,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       globalRecommendationOrders={globalRecommendationOrders}
       globalRecommendationFeedback={globalRecommendationFeedback}
       initialSection={initialSection}
+      shouldShowEntrySplash={shouldShowEntrySplash}
       customerProfile={customerProfile}
       isAuthenticated={Boolean(user)}
     />

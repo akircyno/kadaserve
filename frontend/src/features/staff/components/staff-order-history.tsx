@@ -141,11 +141,15 @@ function getPaymentStatusLabel(order: StaffOrder) {
 }
 
 function getDeliveryFee(order: StaffOrder) {
-  return order.order_type === "delivery" ? 50 : 0;
+  return order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
 }
 
 function getHistoryGrandTotal(order: StaffOrder) {
-  return order.total_amount + getDeliveryFee(order);
+  return Number(order.total_amount ?? 0);
+}
+
+function getHistoryOrderSubtotal(order: StaffOrder) {
+  return Math.max(0, getHistoryGrandTotal(order) - getDeliveryFee(order));
 }
 
 function getSpecialRemarks(order: StaffOrder) {
@@ -303,9 +307,7 @@ export function StaffOrderHistory() {
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
           <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-end">
             <label className="block">
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                Global Search
-              </span>
+              <span className="sr-only">Search orders</span>
               <span className="mt-2 flex h-11 items-center gap-2 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3">
                 <Search size={16} className="text-[#8C7A64]" />
                 <input
@@ -399,13 +401,12 @@ export function StaffOrderHistory() {
         ) : null}
 
         <section className="mt-4 overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
-          <div className="hidden grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr_0.85fr] gap-3 border-b border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35] lg:grid">
+          <div className="hidden grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] gap-3 border-b border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35] lg:grid">
             <span>Order ID</span>
             <span>Customer</span>
             <span>Status</span>
             <span>Total</span>
             <span>Time</span>
-            <span>Action</span>
           </div>
 
           {isLoading ? (
@@ -433,7 +434,7 @@ export function StaffOrderHistory() {
                   key={order.id}
                   type="button"
                   onClick={() => setSelectedOrder(order)}
-                  className="grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition hover:bg-[#FFF8EF] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr_0.85fr] lg:items-center"
+                  className="grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition hover:bg-[#FFF8EF] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] lg:items-center"
                 >
                   <div>
                     <p className="font-sans text-sm font-bold tabular-nums text-[#0D2E18]">
@@ -475,9 +476,6 @@ export function StaffOrderHistory() {
                       {formatDate(order.ordered_at)}
                     </p>
                   </div>
-                  <span className="font-sans text-xs font-bold text-[#684B35]">
-                    Details
-                  </span>
                 </button>
               ))
             : null}
@@ -613,7 +611,7 @@ export function StaffOrderHistory() {
                   <div className="flex justify-between gap-3">
                     <span className="text-[#5F5346]">Order Price</span>
                     <span className="font-bold tabular-nums text-[#0D2E18]">
-                      {peso(selectedOrder.total_amount)}
+                      {peso(getHistoryOrderSubtotal(selectedOrder))}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">

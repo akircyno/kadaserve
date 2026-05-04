@@ -130,12 +130,20 @@ function getDeliveryFee(order: StaffOrder) {
   return order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
 }
 
+function hasFreeDeliveryVoucher(order: StaffOrder) {
+  return Boolean(order.reward_code?.toUpperCase().startsWith("FREEDELIVERY"));
+}
+
 function getOrderSubtotal(order: StaffOrder) {
   return Math.max(0, Number(order.total_amount ?? 0) - getDeliveryFee(order));
 }
 
 function requiresFinalDeliveryFee(order: StaffOrder) {
-  return order.order_type === "delivery" && order.status === "ready";
+  return (
+    order.order_type === "delivery" &&
+    order.status === "ready" &&
+    !hasFreeDeliveryVoucher(order)
+  );
 }
 
 
@@ -572,7 +580,12 @@ export function StaffDashboard() {
 
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
-    setFinalDeliveryFeeInput(String(Math.round(getDeliveryFee(order))));
+    const savedDeliveryFee = Math.round(getDeliveryFee(order));
+    setFinalDeliveryFeeInput(
+      requiresFinalDeliveryFee(order) && savedDeliveryFee === 0
+        ? ""
+        : String(savedDeliveryFee)
+    );
     setIsConfirmingCancel(false);
   }
 
@@ -1410,6 +1423,10 @@ export function StaffDashboard() {
                         placeholder="Enter final delivery fee"
                       />
                     </label>
+                  ) : hasFreeDeliveryVoucher(selectedOrder) ? (
+                    <p className="mt-3 rounded-xl bg-[#E9F5E7] px-3 py-2 font-sans text-sm font-semibold text-[#0D2E18]">
+                      Free Delivery voucher applied. Delivery fee is locked at {peso(0)}.
+                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -1621,9 +1638,9 @@ export function StaffDashboard() {
                             if (
                               shouldRequireFinalDeliveryFee &&
                               (!Number.isFinite(finalDeliveryFee) ||
-                                finalDeliveryFee < 0)
+                                finalDeliveryFee <= 0)
                             ) {
-                              setError("Enter a valid final delivery fee before dispatch.");
+                              setError("Enter the final delivery fee before dispatch.");
                               return;
                             }
 

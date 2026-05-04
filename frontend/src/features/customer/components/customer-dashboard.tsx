@@ -78,6 +78,7 @@ type CustomerDashboardProps = {
   globalRecommendationOrders?: RecommendationOrder[];
   globalRecommendationFeedback?: RecommendationFeedback[];
   initialSection?: Section;
+  shouldShowEntrySplash?: boolean;
   customerProfile?: {
     fullName: string;
     email: string | null;
@@ -190,6 +191,7 @@ const temperatures = [
 ];
 
 const onboardingStorageKey = "kadaserve_first_sip_onboarding_seen";
+const customerSplashSessionKey = "kadaserve_show_customer_splash";
 const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
 const checkInStorageKey = "kadaserve_daily_check_in";
 const checkInRewards = [1, 1, 1, 3, 1, 1, 21];
@@ -696,6 +698,7 @@ export function CustomerDashboard({
   globalRecommendationOrders = [],
   globalRecommendationFeedback = [],
   initialSection = "home",
+  shouldShowEntrySplash = false,
   customerProfile,
   isAuthenticated = false,
 }: CustomerDashboardProps) {
@@ -732,6 +735,9 @@ export function CustomerDashboard({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
+  const [selectedCurrentOrderId, setSelectedCurrentOrderId] = useState<string | null>(null);
+  const [trackingActionMessage, setTrackingActionMessage] = useState("");
+  const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
     string | null
@@ -830,10 +836,23 @@ export function CustomerDashboard({
       }
     };
 
-    if (
-      initialSection === "menu" ||
-      window.sessionStorage.getItem("kadaserve_skip_customer_splash") === "true"
-    ) {
+    const splashRequested =
+      shouldShowEntrySplash ||
+      window.sessionStorage.getItem(customerSplashSessionKey) === "true";
+
+    window.sessionStorage.removeItem(customerSplashSessionKey);
+
+    if (shouldShowEntrySplash) {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete("splash");
+      window.history.replaceState(
+        null,
+        "",
+        `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+      );
+    }
+
+    if (window.sessionStorage.getItem("kadaserve_skip_customer_splash") === "true") {
       window.sessionStorage.removeItem("kadaserve_skip_customer_splash");
       setIsSplashVisible(false);
       setIsTaglineVisible(false);
@@ -841,7 +860,13 @@ export function CustomerDashboard({
       return;
     }
 
-    window.sessionStorage.setItem("kadaserve_opening_seen", "true");
+    if (!splashRequested) {
+      setIsSplashVisible(false);
+      setIsTaglineVisible(false);
+      showOnboardingIfNeeded();
+      return;
+    }
+
     setIsSplashVisible(true);
     const splashTimeoutId = window.setTimeout(() => {
       setIsSplashVisible(false);
@@ -852,7 +877,7 @@ export function CustomerDashboard({
     return () => {
       window.clearTimeout(splashTimeoutId);
     };
-  }, [initialSection]);
+  }, [shouldShowEntrySplash]);
 
   useEffect(() => {
     setProfileAvatarUrl(customerProfile?.avatarUrl ?? "");
@@ -1068,13 +1093,26 @@ export function CustomerDashboard({
 
 
   const uniqueMenuItems = useMemo(() => dedupeMenuItems(menuItems), [menuItems]);
-  const activeOrder = useMemo(
-    () => getActiveOrder(customerOrders),
+  const currentOrders = useMemo(
+    () =>
+      customerOrders.filter(
+        (order) => !["delivered", "completed", "cancelled"].includes(order.status)
+      ),
     [customerOrders]
   );
+  const activeOrder = useMemo(
+    () =>
+      currentOrders.find((order) => order.id === selectedCurrentOrderId) ??
+      getActiveOrder(currentOrders) ??
+      null,
+    [currentOrders, selectedCurrentOrderId]
+  );
   const orderHistory = useMemo(
-    () => customerOrders.filter((order) => order.id !== activeOrder?.id),
-    [activeOrder?.id, customerOrders]
+    () =>
+      customerOrders.filter(
+        (order) => !currentOrders.some((currentOrder) => currentOrder.id === order.id)
+      ),
+    [currentOrders, customerOrders]
   );
   const trackingOrder = useMemo(
     () =>
@@ -1095,6 +1133,10 @@ export function CustomerDashboard({
         imageUrl: getOrderItemImage(),
       }))
       .slice(0, 4) ?? [];
+  const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
+  const hasOrderAttention = currentOrders.some((order) =>
+    ["preparing", "ready", "out_for_delivery"].includes(order.status)
+  );
 
   useEffect(() => {
     document.body.style.overflow =
@@ -1120,6 +1162,20 @@ export function CustomerDashboard({
     selectedMenuItem,
     trackingOrder,
   ]);
+
+  useEffect(() => {
+    if (currentOrders.length === 0) {
+      setSelectedCurrentOrderId(null);
+      return;
+    }
+
+    if (
+      !selectedCurrentOrderId ||
+      !currentOrders.some((order) => order.id === selectedCurrentOrderId)
+    ) {
+      setSelectedCurrentOrderId(currentOrders[0].id);
+    }
+  }, [currentOrders, selectedCurrentOrderId]);
 
   const recommendationProfile = useMemo(() => {
     const recommendationMenuItems: RecommendationMenuItem[] = uniqueMenuItems.map(
@@ -1192,10 +1248,6 @@ export function CustomerDashboard({
     () => getMonthlyFavorite(customerOrders),
     [customerOrders]
   );
-  const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
-  const hasOrderAttention =
-    activeOrder &&
-    ["preparing", "ready", "out_for_delivery"].includes(activeOrder.status);
   const rewardDrinkCount = getRewardDrinkCount(customerOrders);
   const rewardCycleSize = 10;
   const completedInRewardCycle = rewardDrinkCount % rewardCycleSize;
@@ -1553,6 +1605,7 @@ export function CustomerDashboard({
     params.set("orderId", orderId);
     window.history.pushState(null, "", `${window.location.pathname}?${params}`);
     setActiveSection("orders");
+    setTrackingActionMessage("");
     setTrackingOrderId(orderId);
   }
 
@@ -1568,6 +1621,49 @@ export function CustomerDashboard({
     );
     setActiveSection("orders");
     setTrackingOrderId(null);
+    setTrackingActionMessage("");
+  }
+
+  async function handleCancelTrackedOrder() {
+    if (!trackingOrder || trackingOrder.status !== "pending") {
+      return;
+    }
+
+    setTrackingActionMessage("");
+    setIsCancellingTrackedOrder(true);
+
+    try {
+      const response = await fetch("/api/customer/orders/cancel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId: trackingOrder.id }),
+      });
+      const result = (await response.json()) as {
+        order?: { id: string; status: string };
+        error?: string;
+      };
+
+      if (!response.ok || !result.order) {
+        setTrackingActionMessage(result.error || "Failed to cancel order.");
+        return;
+      }
+
+      setCustomerOrders((current) =>
+        current.map((order) =>
+          order.id === trackingOrder.id ? { ...order, status: "cancelled" } : order
+        )
+      );
+      setTrackingActionMessage("Order cancelled. Staff and admin are updated.");
+      window.setTimeout(() => {
+        closeTrackingModal();
+      }, 650);
+    } catch {
+      setTrackingActionMessage("Something went wrong while cancelling the order.");
+    } finally {
+      setIsCancellingTrackedOrder(false);
+    }
   }
 
   async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
@@ -1665,7 +1761,7 @@ export function CustomerDashboard({
         method: "POST",
       });
 
-      router.push("/login");
+      router.replace("/");
       router.refresh();
     } finally {
       setIsLoggingOut(false);
@@ -2351,6 +2447,32 @@ export function CustomerDashboard({
                     Track live orders first, then quickly reorder your usuals.
                   </p>
                 </div>
+
+                {currentOrders.length > 1 ? (
+                  <label className="block">
+                    <span className="sr-only">Choose current order to track</span>
+                    <span className="mb-2 block font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
+                      Current Orders
+                    </span>
+                    <div className="relative">
+                      <select
+                        value={activeOrder?.id ?? ""}
+                        onChange={(event) => setSelectedCurrentOrderId(event.target.value)}
+                        className="min-h-12 w-full appearance-none rounded-full border border-[#DCCFB8] bg-white px-4 pr-12 font-sans text-sm font-semibold text-[#123E26] shadow-[0_6px_16px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/15"
+                      >
+                        {currentOrders.map((order) => (
+                          <option key={order.id} value={order.id}>
+                            {formatOrderCode(order.id)} - {formatStatus(order.status)}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={18}
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#684B35]"
+                      />
+                    </div>
+                  </label>
+                ) : null}
 
                 {activeOrder ? (
                   <article
@@ -3923,10 +4045,6 @@ export function CustomerDashboard({
                 </div>
 
                 <aside className="rounded-[24px] border border-[#E1D0B2] bg-white/72 p-5">
-                  <h3 className="font-sans text-xl font-black text-[#123E26]">
-                    Order Builder
-                  </h3>
-
                   <div className="mt-5">
                     <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
                       Quantity
@@ -4174,7 +4292,7 @@ export function CustomerDashboard({
                     className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${
                       trackingOrder.payment_status === "paid"
                         ? "bg-[#E9F5E7] text-[#2D7A40]"
-                        : "bg-[#FFF0DA] text-[#684B35]"
+                      : "bg-[#FFF0DA] text-[#684B35]"
                     }`}
                   >
                     Payment status:{" "}
@@ -4184,6 +4302,29 @@ export function CustomerDashboard({
                         : "Unpaid"}
                     </span>
                   </div>
+
+                  {trackingOrder.status === "pending" ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3">
+                      <p className="font-sans text-sm font-semibold text-[#9C543D]">
+                        You can still cancel this order while it is pending.
+                      </p>
+                      {trackingActionMessage ? (
+                        <p className="mt-2 font-sans text-xs font-semibold text-[#9C543D]">
+                          {trackingActionMessage}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={handleCancelTrackedOrder}
+                        disabled={isCancellingTrackedOrder}
+                        className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#9C543D] px-4 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#8A4632] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isCancellingTrackedOrder
+                          ? "Cancelling..."
+                          : "Cancel Order"}
+                      </button>
+                    </div>
+                  ) : null}
 
                   {trackingOrder.reward_code ? (
                     <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">

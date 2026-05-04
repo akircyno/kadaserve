@@ -39,7 +39,6 @@ import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const hourLabels = ["5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM", "12AM"];
-const inventoryStorageKey = "kadaserve-admin-inventory";
 
 function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
@@ -160,6 +159,12 @@ type AdminRewardsPayload = {
     freeDeliveryRedeemed: number;
     freeDeliveryUsed: number;
   };
+};
+
+type AdminInventoryPayload = {
+  inventoryItems?: InventoryItem[];
+  item?: InventoryItem;
+  error?: string;
 };
 
 function normalizeSuggestion(value: string) {
@@ -439,8 +444,10 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
-  const [inventoryItems, setInventoryItems] = useState(initialInventoryItems);
-  const [hasLoadedStoredInventory, setHasLoadedStoredInventory] = useState(false);
+  const [inventoryItems, setInventoryItems] =
+    useState<InventoryItem[]>(initialInventoryItems);
+  const [isInventorySaving, setIsInventorySaving] = useState(false);
+  const [inventoryMessage, setInventoryMessage] = useState("");
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
   const [adminRewards, setAdminRewards] = useState<AdminRewardsPayload | null>(
     null
@@ -509,33 +516,6 @@ export function AdminDashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [search]);
-
-  useEffect(() => {
-    try {
-      const storedInventory = window.localStorage.getItem(inventoryStorageKey);
-
-      if (storedInventory) {
-        const parsedInventory = JSON.parse(storedInventory) as InventoryItem[];
-
-        if (Array.isArray(parsedInventory)) {
-          setInventoryItems(parsedInventory);
-        }
-      }
-    } catch {
-      window.localStorage.removeItem(inventoryStorageKey);
-    } finally {
-      setHasLoadedStoredInventory(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hasLoadedStoredInventory) return;
-
-    window.localStorage.setItem(
-      inventoryStorageKey,
-      JSON.stringify(inventoryItems)
-    );
-  }, [hasLoadedStoredInventory, inventoryItems]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -1023,6 +1003,7 @@ export function AdminDashboard() {
       activeTab === "item-ranking" ||
       activeTab === "satisfaction" ||
       activeTab === "customer-pref" ||
+      activeTab === "inventory" ||
       activeTab === "feedback";
 
     if (!shouldAutoSync) {
@@ -1053,17 +1034,20 @@ export function AdminDashboard() {
       const [
         ordersResponse,
         menuResponse,
+        inventoryResponse,
         feedbackResponse,
         rewardsResponse,
       ] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
+        fetch("/api/admin/inventory", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
         fetch("/api/admin/rewards", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
       const menuResult = await menuResponse.json();
+      const inventoryResult = (await inventoryResponse.json()) as AdminInventoryPayload;
       const feedbackResult = await feedbackResponse.json();
       const rewardsResult = await rewardsResponse.json();
 
@@ -1079,6 +1063,15 @@ export function AdminDashboard() {
 
       setOrders(ordersResult.orders ?? []);
       setMenuItems(menuResult.menuItems ?? []);
+      if (inventoryResponse.ok) {
+        setInventoryItems(inventoryResult.inventoryItems ?? []);
+        setInventoryMessage("");
+      } else {
+        setInventoryMessage(
+          inventoryResult.error ||
+            "Inventory is not set up yet. Run backend/seed/inventory-items.sql in Supabase."
+        );
+      }
       if (feedbackResponse.ok) {
         setFeedbackRows(feedbackResult.feedback ?? []);
       }
@@ -1139,6 +1132,136 @@ export function AdminDashboard() {
     }
   }
 
+  function replaceInventoryItem(savedItem: InventoryItem) {
+    setInventoryItems((currentItems) => {
+      const itemIndex = currentItems.findIndex(
+        (item) =>
+          (savedItem.id && item.id === savedItem.id) ||
+          item.name.toLowerCase() === savedItem.name.toLowerCase()
+      );
+
+      if (itemIndex === -1) {
+        return [savedItem, ...currentItems];
+      }
+
+      return currentItems.map((item, index) =>
+        index === itemIndex ? savedItem : item
+      );
+    });
+  }
+
+  async function saveInventoryItem(item: InventoryItem) {
+    const existingItem = inventoryItems.find(
+      (currentItem) =>
+        currentItem.id === item.id ||
+        currentItem.name.toLowerCase() === item.name.toLowerCase()
+    );
+    const optimisticItem = { ...existingItem, ...item };
+
+    replaceInventoryItem(optimisticItem);
+    setIsInventorySaving(true);
+    setInventoryMessage("Saving inventory to Supabase...");
+
+    try {
+      const response = await fetch("/api/admin/inventory", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(optimisticItem),
+      });
+      const result = (await response.json()) as AdminInventoryPayload;
+
+      if (!response.ok || !result.item) {
+        setInventoryMessage(result.error || "Failed to save inventory item.");
+        void loadAdminData({ showLoading: false });
+        return;
+      }
+
+      replaceInventoryItem(result.item);
+      setInventoryMessage("Inventory saved.");
+    } catch {
+      setInventoryMessage("Something went wrong while saving inventory.");
+      void loadAdminData({ showLoading: false });
+    } finally {
+      setIsInventorySaving(false);
+    }
+  }
+
+  async function setInventoryStock(item: InventoryItem, onHand: number) {
+    replaceInventoryItem({ ...item, onHand });
+
+    if (!item.id) {
+      await saveInventoryItem({ ...item, onHand });
+      return;
+    }
+
+    setIsInventorySaving(true);
+    setInventoryMessage("Saving stock level...");
+
+    try {
+      const response = await fetch("/api/admin/inventory", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: item.id, onHand }),
+      });
+      const result = (await response.json()) as AdminInventoryPayload;
+
+      if (!response.ok || !result.item) {
+        setInventoryMessage(result.error || "Failed to update stock level.");
+        void loadAdminData({ showLoading: false });
+        return;
+      }
+
+      replaceInventoryItem(result.item);
+      setInventoryMessage("Stock level saved.");
+    } catch {
+      setInventoryMessage("Something went wrong while updating stock.");
+      void loadAdminData({ showLoading: false });
+    } finally {
+      setIsInventorySaving(false);
+    }
+  }
+
+  async function addInventoryStock(item: InventoryItem, amount: number) {
+    replaceInventoryItem({ ...item, onHand: item.onHand + amount });
+
+    if (!item.id) {
+      await saveInventoryItem({ ...item, onHand: item.onHand + amount });
+      return;
+    }
+
+    setIsInventorySaving(true);
+    setInventoryMessage("Adding stock delivery...");
+
+    try {
+      const response = await fetch("/api/admin/inventory", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: item.id, addStock: amount }),
+      });
+      const result = (await response.json()) as AdminInventoryPayload;
+
+      if (!response.ok || !result.item) {
+        setInventoryMessage(result.error || "Failed to add stock.");
+        void loadAdminData({ showLoading: false });
+        return;
+      }
+
+      replaceInventoryItem(result.item);
+      setInventoryMessage("Stock delivery saved.");
+    } catch {
+      setInventoryMessage("Something went wrong while adding stock.");
+      void loadAdminData({ showLoading: false });
+    } finally {
+      setIsInventorySaving(false);
+    }
+  }
+
   function handleSearchSuggestionSelect(suggestion: AdminSearchSuggestion) {
     setSearch(suggestion.query);
     setIsSearchFocused(false);
@@ -1159,7 +1282,7 @@ export function AdminDashboard() {
   function handleTabSelect(tab: AdminTab) {
     setActiveTab(tab);
 
-    if (tab === "feedback" || tab === "rewards") {
+    if (tab === "feedback" || tab === "rewards" || tab === "inventory") {
       void loadAdminData({ showLoading: false });
     }
 
@@ -1468,7 +1591,11 @@ export function AdminDashboard() {
               <InventoryView
                 inventoryItems={scopedInventoryItems}
                 inventorySummary={inventorySummary}
-                setInventoryItems={setInventoryItems}
+                onSetStock={setInventoryStock}
+                onAddStock={addInventoryStock}
+                onSaveItem={saveInventoryItem}
+                isInventorySaving={isInventorySaving}
+                inventoryMessage={inventoryMessage}
               />
             ) : null}
           </div>

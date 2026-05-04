@@ -1,9 +1,10 @@
 "use client";
 
 import { Plus, Save } from "lucide-react";
-import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { useState, type FormEvent } from "react";
 
 export type InventoryItem = {
+  id?: string;
   name: string;
   unit: string;
   onHand: number;
@@ -62,38 +63,37 @@ function sanitizeInventoryNumber(value: number, fallback = 0) {
 export function InventoryView({
   inventoryItems,
   inventorySummary,
-  setInventoryItems,
+  onSetStock,
+  onAddStock,
+  onSaveItem,
+  isInventorySaving = false,
+  inventoryMessage = "",
 }: {
   inventoryItems: InventoryItem[];
   inventorySummary: InventorySummary;
-  setInventoryItems: Dispatch<SetStateAction<InventoryItem[]>>;
+  onSetStock: (item: InventoryItem, onHand: number) => void | Promise<void>;
+  onAddStock: (item: InventoryItem, amount: number) => void | Promise<void>;
+  onSaveItem: (item: InventoryItem) => void | Promise<void>;
+  isInventorySaving?: boolean;
+  inventoryMessage?: string;
 }) {
   const [newItem, setNewItem] = useState<InventoryItem>(emptyInventoryItem);
   const [stockAdds, setStockAdds] = useState<Record<string, string>>({});
 
-  function updateItemStock(itemName: string, value: string) {
+  function updateItemStock(item: InventoryItem, value: string) {
     const nextStock = sanitizeInventoryNumber(Number(value));
 
-    setInventoryItems((currentItems) =>
-      currentItems.map((item) =>
-        item.name === itemName ? { ...item, onHand: nextStock } : item
-      )
-    );
+    void onSetStock(item, nextStock);
   }
 
-  function addStock(itemName: string) {
-    const amount = sanitizeInventoryNumber(Number(stockAdds[itemName]), 0);
+  function addStock(item: InventoryItem) {
+    const itemKey = item.id ?? item.name;
+    const amount = sanitizeInventoryNumber(Number(stockAdds[itemKey]), 0);
 
     if (amount <= 0) return;
 
-    setInventoryItems((currentItems) =>
-      currentItems.map((item) =>
-        item.name === itemName
-          ? { ...item, onHand: item.onHand + amount }
-          : item
-      )
-    );
-    setStockAdds((currentAdds) => ({ ...currentAdds, [itemName]: "" }));
+    void onAddStock(item, amount);
+    setStockAdds((currentAdds) => ({ ...currentAdds, [itemKey]: "" }));
   }
 
   function addInventoryItem(event: FormEvent<HTMLFormElement>) {
@@ -105,37 +105,13 @@ export function InventoryView({
 
     if (!name || !unit) return;
 
-    setInventoryItems((currentItems) => {
-      const existingItem = currentItems.find(
-        (item) => item.name.toLowerCase() === name.toLowerCase()
-      );
-
-      if (existingItem) {
-        return currentItems.map((item) =>
-          item.name.toLowerCase() === name.toLowerCase()
-            ? {
-                ...item,
-                unit,
-                supplier,
-                onHand: sanitizeInventoryNumber(newItem.onHand),
-                minNeed: sanitizeInventoryNumber(newItem.minNeed),
-                maxCap: sanitizeInventoryNumber(newItem.maxCap),
-              }
-            : item
-        );
-      }
-
-      return [
-        {
-          name,
-          unit,
-          supplier,
-          onHand: sanitizeInventoryNumber(newItem.onHand),
-          minNeed: sanitizeInventoryNumber(newItem.minNeed),
-          maxCap: sanitizeInventoryNumber(newItem.maxCap),
-        },
-        ...currentItems,
-      ];
+    void onSaveItem({
+      name,
+      unit,
+      supplier,
+      onHand: sanitizeInventoryNumber(newItem.onHand),
+      minNeed: sanitizeInventoryNumber(newItem.minNeed),
+      maxCap: sanitizeInventoryNumber(newItem.maxCap),
     });
     setNewItem(emptyInventoryItem);
   }
@@ -159,6 +135,11 @@ export function InventoryView({
             <p className="font-sans text-sm text-[#7B6248]">
               Update remaining stock, add new deliveries, and track reorder status.
             </p>
+            {inventoryMessage ? (
+              <p className="mt-1 font-sans text-xs font-bold text-[#684B35]">
+                {inventoryMessage}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -203,6 +184,7 @@ export function InventoryView({
           />
           <button
             type="submit"
+            disabled={isInventorySaving}
             className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-[12px] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-white transition hover:bg-[#154626]"
           >
             <Plus size={16} />
@@ -230,7 +212,7 @@ export function InventoryView({
 
                 return (
                   <div
-                    key={item.name}
+                    key={item.id ?? item.name}
                     className="grid grid-cols-[44px_1.4fr_0.65fr_0.9fr_0.75fr_0.75fr_1fr_1fr_1.15fr] items-center gap-3 rounded-[14px] border border-[#E5D8C1] bg-white px-4 py-3 font-sans text-sm text-[#1E2B18]"
                   >
                     <span className="font-bold text-[#8C7558]">{index + 1}</span>
@@ -241,8 +223,9 @@ export function InventoryView({
                       min="0"
                       value={item.onHand}
                       onChange={(event) =>
-                        updateItemStock(item.name, event.target.value)
+                        updateItemStock(item, event.target.value)
                       }
+                      disabled={isInventorySaving}
                       className="h-10 w-full rounded-[10px] border border-[#D8C8AA] bg-[#FFFDF8] px-3 font-sans font-bold text-[#0D2E18] outline-none focus:border-[#0D2E18]"
                     />
                     <span>{item.minNeed}</span>
@@ -257,19 +240,21 @@ export function InventoryView({
                       <input
                         type="number"
                         min="0"
-                        value={stockAdds[item.name] ?? ""}
+                        value={stockAdds[item.id ?? item.name] ?? ""}
                         onChange={(event) =>
                           setStockAdds((currentAdds) => ({
                             ...currentAdds,
-                            [item.name]: event.target.value,
+                            [item.id ?? item.name]: event.target.value,
                           }))
                         }
+                        disabled={isInventorySaving}
                         placeholder="Qty"
                         className="h-10 w-20 rounded-[10px] border border-[#D8C8AA] bg-[#FFFDF8] px-3 font-sans text-sm outline-none focus:border-[#0D2E18]"
                       />
                       <button
                         type="button"
-                        onClick={() => addStock(item.name)}
+                        onClick={() => addStock(item)}
+                        disabled={isInventorySaving}
                         className="inline-flex h-10 items-center justify-center rounded-[10px] bg-[#F2E2C5] px-3 font-sans text-sm font-bold text-[#0D2E18] transition hover:bg-[#E8D0A8]"
                         aria-label={`Add stock for ${item.name}`}
                       >
