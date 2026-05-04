@@ -62,9 +62,9 @@ function Panel({
   title: string;
 }) {
   return (
-    <section className="rounded-[18px] bg-white/72 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.52)]">
+    <section className="rounded-[16px] bg-white/80 p-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.52)]">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-sans text-2xl font-bold text-[#0D2E18]">{title}</h2>
+        <h2 className="font-sans text-xl font-bold text-[#0D2E18]">{title}</h2>
         {rightLabel ? (
           <p className="font-sans text-[15px] uppercase text-[#684B35]">{rightLabel}</p>
         ) : null}
@@ -76,11 +76,11 @@ function Panel({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[16px] bg-[#FFF0DA] px-5 py-4 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.45)]">
+    <div className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 shadow-[0_8px_18px_rgba(13,46,24,0.05)]">
       <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
         {label}
       </p>
-      <p className="mt-5 font-sans text-4xl font-black tabular-nums text-[#0D2E18]">{value}</p>
+      <p className="mt-3 font-sans text-3xl font-black tabular-nums text-[#0D2E18]">{value}</p>
     </div>
   );
 }
@@ -225,10 +225,7 @@ export function DashboardView({
     { label: "Total Orders", value: nonCancelledOrders.length.toString() },
     { label: "Gross Sales", value: peso(grossIncomeSales) },
     { label: "Avg Order Value", value: peso(averageOrderValue) },
-    {
-      label: "Average Rating",
-      value: averageRating ? averageRating.toFixed(1) : "N/A",
-    },
+    { label: "Avg Rating", value: averageRating ? averageRating.toFixed(1) : "N/A" },
   ];
   const visibleMetricCards = keyword
     ? metricCards.filter(
@@ -265,9 +262,9 @@ export function DashboardView({
     showHourly;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {visibleMetricCards.length > 0 ? (
-        <div className="grid gap-5 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {visibleMetricCards.map((metric) => (
             <div
               key={metric.label}
@@ -284,23 +281,23 @@ export function DashboardView({
       ) : null}
 
       {showOrdersWeek || showPeakHours ? (
-        <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         {showOrdersWeek ? (
           <div id="admin-orders-week" className="scroll-mt-28">
           <Panel title="Orders - Week">
-          <div className="flex h-[190px] items-end gap-5">
+          <div className="flex h-[160px] items-end gap-4">
             {weekdayCounts.map((item) => (
               <div key={item.day} className="flex flex-1 flex-col items-center gap-3">
-                <p className="font-sans text-[15px] font-semibold tabular-nums text-[#0D2E18]">
+                <p className="font-sans text-sm font-semibold tabular-nums text-[#0D2E18]">
                   {item.orders}
                 </p>
                 <div
                   className="w-full max-w-[54px] rounded-t-[10px] bg-[#0D2E18]"
                   style={{
-                    height: `${Math.max(18, (item.orders / maxWeekdayOrders) * 120)}px`,
+                    height: `${Math.max(16, (item.orders / maxWeekdayOrders) * 104)}px`,
                   }}
                 />
-                <p className="font-sans text-[15px] text-[#0D2E18]">{item.day}</p>
+                <p className="font-sans text-sm text-[#0D2E18]">{item.day}</p>
               </div>
             ))}
           </div>
@@ -319,11 +316,11 @@ export function DashboardView({
       ) : null}
 
       {showTopItems || showSatisfaction ? (
-        <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         {showTopItems ? (
           <div id="admin-top-items" className="scroll-mt-28">
           <Panel title="Top Items" rightLabel="ORDERS">
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             {visibleItemRanking.slice(0, 5).map((item, index) => (
               <RankingRow
                 key={item.item}
@@ -342,7 +339,7 @@ export function DashboardView({
         {showSatisfaction ? (
           <div id="admin-satisfaction" className="scroll-mt-28">
           <Panel title="Satisfaction" rightLabel="AVG / 5">
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             {visibleItemRanking.slice(0, 5).map((item) => (
               <RatingRow key={item.item} item={item.item} rating={item.rating} />
             ))}
@@ -357,7 +354,7 @@ export function DashboardView({
       {showHourly ? (
         <div id="admin-hourly-order-volume" className="scroll-mt-28">
         <Panel title="Hourly Order Volume">
-        <div className="mt-8 flex items-end gap-4 overflow-x-auto pb-2">
+        <div className="mt-5 flex items-end gap-3 overflow-x-auto pb-2">
           {hourlyCounts.map((item) => (
             <div key={item.label} className="flex min-w-[62px] flex-col items-center gap-2">
               <p className="font-sans text-[15px] tabular-nums text-[#0D2E18]">{item.orders}</p>

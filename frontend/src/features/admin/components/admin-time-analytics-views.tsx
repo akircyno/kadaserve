@@ -95,9 +95,9 @@ function Panel({
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="font-sans text-xs text-[#684B35]">{label}</p>
-      <p className="mt-1 font-sans text-xl font-semibold text-[#0D2E18]">
+    <div className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 shadow-[0_8px_18px_rgba(13,46,24,0.05)]">
+      <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">{label}</p>
+      <p className="mt-2 font-sans text-2xl font-black text-[#0D2E18]">
         {value}
       </p>
     </div>
@@ -171,88 +171,89 @@ export function TimeSeriesView({
     : 0;
 
   return (
-    <div className="space-y-8 lg:space-y-10">
-      <h1 className="font-sans text-2xl font-bold text-[#0D2E18] sm:text-3xl">
-        Time Series Analytics
-      </h1>
-
-      <section>
-        <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
-          Hourly Order Volume
-        </h2>
-        <div className="mt-16 flex min-w-0 items-end gap-3 overflow-x-auto pb-3 sm:mt-24 sm:gap-4 lg:mt-32">
-          {hourlyCounts.map((item) => (
-            <div
-              key={item.label}
-              className="flex min-w-[48px] flex-col items-center gap-2 sm:min-w-[62px]"
-            >
-              <p
-                className={`font-sans text-sm ${
-                  item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
-                }`}
-              >
-                {item.orders}
-              </p>
-              <div
-                className="w-9 rounded-full sm:w-12"
-                style={{
-                  backgroundColor: item.orders === 0 ? "rgba(13,46,24,0.18)" : "#0D2E18",
-                  height: `${Math.max(8, (item.orders / maxHourlyOrders) * 72)}px`,
-                }}
-              />
-              <p className="font-sans text-sm text-[#0D2E18]">{item.label}</p>
-            </div>
-          ))}
+    <div className="space-y-5">
+      <div className="rounded-[18px] border border-[#DCCFB8] bg-white px-5 py-4 shadow-[0_10px_24px_rgba(13,46,24,0.06)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+            5:00 PM - 12:00 AM
+          </p>
+          <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
+            {total} total orders
+          </span>
         </div>
-      </section>
+      </div>
 
-      <div className="grid gap-8 xl:grid-cols-[0.72fr_1fr] xl:gap-12">
-        <section>
-          <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
-            Statistics
-          </h2>
-          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 sm:gap-x-10">
-            <MiniStat label="Peak" value={`${peak.orders} orders`} />
-            <MiniStat label="Low" value={`${low} orders`} />
-            <MiniStat label="Avg" value={`${avg} orders`} />
-            <MiniStat label="Total" value={`${total} orders`} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniStat label="Peak" value={`${peak.orders} orders`} />
+        <MiniStat label="Low" value={`${low} orders`} />
+        <MiniStat label="Avg" value={`${avg} orders`} />
+        <MiniStat label="Total" value={`${total} orders`} />
+      </div>
+
+      <Panel title="Hourly Order Volume" rightLabel={peak.label}>
+        <div className="mt-5 rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] px-4 py-5">
+          <div className="flex min-w-0 items-end gap-3 overflow-x-auto pb-2 sm:gap-4">
+            {hourlyCounts.map((item) => (
+              <div
+                key={item.label}
+                className="flex min-w-[54px] flex-col items-center gap-2 sm:min-w-[68px]"
+              >
+                <p
+                  className={`font-sans text-sm font-semibold tabular-nums ${
+                    item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
+                  }`}
+                >
+                  {item.orders}
+                </p>
+                <div className="flex h-[118px] items-end">
+                  <div
+                    className="w-10 rounded-t-[10px] sm:w-12"
+                    style={{
+                      backgroundColor:
+                        item.orders === 0 ? "rgba(13,46,24,0.18)" : "#0D2E18",
+                      height: `${Math.max(10, (item.orders / maxHourlyOrders) * 104)}px`,
+                    }}
+                  />
+                </div>
+                <p className="font-sans text-sm font-semibold text-[#0D2E18]">
+                  {item.label}
+                </p>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </Panel>
 
-        <section>
-          <h2 className="font-sans text-base font-semibold text-[#0D2E18] sm:text-lg">
-            Data Table
-          </h2>
-          <div className="mt-5 overflow-x-auto">
-            <div className="min-w-[360px]">
-              <div className="grid grid-cols-3 gap-4 border-b border-[#0D2E18]/10 pb-2 font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C7A64]">
-                <span>Period</span>
-                <span>Orders</span>
-                <span>Trend</span>
-              </div>
-              <div>
-                {hourlyCounts.slice(0, 8).map((item, index, list) => {
-                  const previous = list[index - 1]?.orders ?? item.orders;
-                  return (
-                    <div
-                      key={item.label}
-                      className="grid grid-cols-3 gap-4 border-b border-[#0D2E18]/10 py-3 font-sans text-sm text-[#0D2E18]"
-                    >
-                      <span className="font-semibold">{item.label}</span>
-                      <span className="font-semibold tabular-nums">
-                        {item.orders}
-                      </span>
-                      <span className="text-[#684B35]">
-                        {item.orders >= previous ? "Up" : "Down"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+      <Panel title="Data Table" rightLabel="Orders / trend">
+        <div className="mt-4 overflow-x-auto rounded-[16px] border border-[#EFE3CF] bg-white">
+          <div className="min-w-[420px]">
+            <div className="grid grid-cols-3 gap-4 bg-[#FFF8EF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8C7A64]">
+              <span>Period</span>
+              <span>Orders</span>
+              <span>Trend</span>
+            </div>
+            <div>
+              {hourlyCounts.slice(0, 8).map((item, index, list) => {
+                const previous = list[index - 1]?.orders ?? item.orders;
+                return (
+                  <div
+                    key={item.label}
+                    className="grid grid-cols-3 gap-4 border-t border-[#EFE3CF] px-4 py-3 font-sans text-sm text-[#0D2E18]"
+                  >
+                    <span className="font-semibold">{item.label}</span>
+                    <span className="font-semibold tabular-nums">
+                      {item.orders}
+                    </span>
+                    <span className="font-semibold text-[#684B35]">
+                      {item.orders >= previous ? "Up" : "Down"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -262,7 +263,6 @@ export function PeakHoursView({ orders }: { orders: StaffOrder[] }) {
 
   return (
     <div className="space-y-5">
-      <h1 className="font-sans text-3xl font-bold">Peak Hours</h1>
       <Panel title="Hourly Order Volume">
         <Heatmap orders={orders} />
       </Panel>

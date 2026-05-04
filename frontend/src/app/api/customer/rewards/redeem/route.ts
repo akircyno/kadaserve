@@ -121,7 +121,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Free Delivery voucher added to My Rewards.",
+      message: `${rewardItem.name} added to My Rewards.`,
       points: Math.max(0, points - rewardItem.points_cost),
       voucher: serializeCustomerReward(voucher),
     });

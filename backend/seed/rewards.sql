@@ -7,8 +7,18 @@ create table if not exists public.reward_items (
   value numeric not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
-  constraint reward_items_type_check check (type in ('delivery_fee'))
+  constraint reward_items_type_check check (
+    type in ('delivery_fee', 'voucher_discount', 'addon_reward')
+  )
 );
+
+alter table public.reward_items
+  drop constraint if exists reward_items_type_check;
+
+alter table public.reward_items
+  add constraint reward_items_type_check check (
+    type in ('delivery_fee', 'voucher_discount', 'addon_reward')
+  );
 
 create unique index if not exists reward_items_name_type_key
 on public.reward_items (name, type);
@@ -119,14 +129,39 @@ insert into public.reward_items (
   value,
   is_active
 )
-values (
-  'Free Delivery Voucher',
-  'Redeem this voucher to remove the delivery fee from your order.',
-  'delivery_fee',
-  300,
-  50,
-  true
-)
+values
+  (
+    'Free Delivery Voucher',
+    'Redeem this voucher to remove the delivery fee from your order.',
+    'delivery_fee',
+    300,
+    50,
+    true
+  ),
+  (
+    'KADA10 Discount Voucher',
+    'Redeem this voucher for P10 off checkout.',
+    'voucher_discount',
+    500,
+    10,
+    true
+  ),
+  (
+    'KADA30 Discount Voucher',
+    'Redeem this voucher for P30 off checkout.',
+    'voucher_discount',
+    1500,
+    30,
+    true
+  ),
+  (
+    'Free Creamy Add-on',
+    'Exclusive reward for a free creamy add-on.',
+    'addon_reward',
+    0,
+    15,
+    true
+  )
 on conflict (name, type) do update
 set
   description = excluded.description,

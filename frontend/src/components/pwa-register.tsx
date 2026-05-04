@@ -8,6 +8,26 @@ export function PwaRegister() {
       return;
     }
 
+    const clearLocalServiceWorkers = async () => {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations.map((registration) => registration.unregister())
+        );
+
+        if ("caches" in window) {
+          const cacheKeys = await caches.keys();
+          await Promise.all(
+            cacheKeys
+              .filter((key) => key.startsWith("kadaserve-pwa-"))
+              .map((key) => caches.delete(key))
+          );
+        }
+      } catch (error) {
+        console.warn("KadaServe local PWA cleanup failed", error);
+      }
+    };
+
     const registerServiceWorker = async () => {
       try {
         await navigator.serviceWorker.register("/sw.js", { scope: "/" });
@@ -16,7 +36,11 @@ export function PwaRegister() {
       }
     };
 
-    void registerServiceWorker();
+    if (process.env.NODE_ENV === "production") {
+      void registerServiceWorker();
+    } else {
+      void clearLocalServiceWorkers();
+    }
   }, []);
 
   return null;

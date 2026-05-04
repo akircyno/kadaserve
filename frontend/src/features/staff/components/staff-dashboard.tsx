@@ -126,6 +126,18 @@ function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
 }
 
+function getDeliveryFee(order: StaffOrder) {
+  return order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
+}
+
+function getOrderSubtotal(order: StaffOrder) {
+  return Math.max(0, Number(order.total_amount ?? 0) - getDeliveryFee(order));
+}
+
+function requiresFinalDeliveryFee(order: StaffOrder) {
+  return order.order_type === "delivery" && order.status === "ready";
+}
+
 
 function formatStatus(status: OrderStatus) {
   switch (status) {
@@ -328,6 +340,7 @@ export function StaffDashboard() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+  const [finalDeliveryFeeInput, setFinalDeliveryFeeInput] = useState("");
   const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [dispatchToast, setDispatchToast] = useState("");
@@ -422,6 +435,11 @@ export function StaffDashboard() {
       letter.toUpperCase()
     ) || "Staff";
   const staffChipLabel = `Staff ${staffFirstName}`;
+  const selectedFinalDeliveryFee = Number(finalDeliveryFeeInput);
+  const selectedProjectedTotal =
+    selectedOrder && Number.isFinite(selectedFinalDeliveryFee)
+      ? getOrderSubtotal(selectedOrder) + Math.max(0, selectedFinalDeliveryFee)
+      : selectedOrder?.total_amount ?? 0;
   const syncMeta = isLoading || isSyncing
     ? "Syncing..."
     : `Auto-sync 15s${
@@ -554,11 +572,13 @@ export function StaffDashboard() {
 
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
+    setFinalDeliveryFeeInput(String(Math.round(getDeliveryFee(order))));
     setIsConfirmingCancel(false);
   }
 
   function closeOrder() {
     setSelectedOrder(null);
+    setFinalDeliveryFeeInput("");
     setIsConfirmingCancel(false);
   }
 
@@ -644,7 +664,11 @@ export function StaffDashboard() {
     }
   }
 
-  async function handleAdvance(orderId: string, expectedStatus: OrderStatus) {
+  async function handleAdvance(
+    orderId: string,
+    expectedStatus: OrderStatus,
+    options: { finalDeliveryFee?: number } = {}
+  ) {
     if (updatingOrderIds.includes(orderId)) {
       return;
     }
@@ -658,7 +682,11 @@ export function StaffDashboard() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ orderId, expectedStatus }),
+        body: JSON.stringify({
+          orderId,
+          expectedStatus,
+          finalDeliveryFee: options.finalDeliveryFee,
+        }),
       });
 
       const result = await response.json();
@@ -1104,6 +1132,12 @@ export function StaffDashboard() {
                                   return;
                                 }
 
+                                if (requiresFinalDeliveryFee(order)) {
+                                  openOrder(order);
+                                  setStaffToast("Add final delivery fee before dispatch.");
+                                  return;
+                                }
+
                                 handleAdvance(order.id, order.status);
                               }}
                               disabled={isUpdatingOrder}
@@ -1329,12 +1363,56 @@ export function StaffDashboard() {
                 </div>
 
                 <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs text-[#8C7A64]">Total</p>
+                  <p className="font-sans text-xs text-[#8C7A64]">Current Total</p>
                   <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
                     {peso(selectedOrder.total_amount)}
                   </p>
                 </div>
               </div>
+
+              {selectedOrder.order_type === "delivery" ? (
+                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
+                        Final Delivery Fee
+                      </p>
+                      <p className="mt-1 font-sans text-sm text-[#5F5346]">
+                        Current saved fee: {peso(getDeliveryFee(selectedOrder))}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="font-sans text-xs text-[#8C7A64]">
+                        Updated total
+                      </p>
+                      <p className="mt-1 font-sans text-base font-bold text-[#0D2E18]">
+                        {peso(selectedProjectedTotal)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {requiresFinalDeliveryFee(selectedOrder) ? (
+                    <label className="mt-3 block">
+                      <span className="font-sans text-sm font-semibold text-[#0D2E18]">
+                        Final Delivery Fee:
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="999"
+                        inputMode="numeric"
+                        value={finalDeliveryFeeInput}
+                        onChange={(event) =>
+                          setFinalDeliveryFeeInput(event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                        placeholder="Enter final delivery fee"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
                 <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
@@ -1536,9 +1614,27 @@ export function StaffDashboard() {
                         <button
                           type="button"
                           onClick={async () => {
+                            const shouldRequireFinalDeliveryFee =
+                              requiresFinalDeliveryFee(selectedOrder);
+                            const finalDeliveryFee = Number(finalDeliveryFeeInput);
+
+                            if (
+                              shouldRequireFinalDeliveryFee &&
+                              (!Number.isFinite(finalDeliveryFee) ||
+                                finalDeliveryFee < 0)
+                            ) {
+                              setError("Enter a valid final delivery fee before dispatch.");
+                              return;
+                            }
+
                             await handleAdvance(
                               selectedOrder.id,
-                              selectedOrder.status
+                              selectedOrder.status,
+                              {
+                                finalDeliveryFee: shouldRequireFinalDeliveryFee
+                                  ? finalDeliveryFee
+                                  : undefined,
+                              }
                             );
                           }}
                           disabled={updatingOrderIds.includes(selectedOrder.id)}

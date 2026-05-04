@@ -35,7 +35,7 @@ type CustomerRewardVoucher = {
     id: string;
     name: string;
     description: string;
-    type: "delivery_fee";
+    type: "delivery_fee" | "voucher_discount" | "addon_reward";
     pointsCost: number;
     value: number;
     isActive: boolean;
@@ -165,6 +165,7 @@ export default function CartPage() {
   const [rewardMessage, setRewardMessage] = useState("");
   const [isRewardsLoading, setIsRewardsLoading] = useState(true);
   const [isApplyingReward, setIsApplyingReward] = useState(false);
+  const [isReturningToMenu, setIsReturningToMenu] = useState(false);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -244,7 +245,7 @@ export default function CartPage() {
   useEffect(() => {
     if (orderType === "delivery") {
       setPaymentMethod("cash");
-    } else if (appliedReward) {
+    } else if (appliedReward?.rewardItem?.type === "delivery_fee") {
       setAppliedReward(null);
       setRewardMessage("Free Delivery can only be used for delivery orders.");
     }
@@ -284,16 +285,29 @@ export default function CartPage() {
   const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
   const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
   const baseDeliveryFee = orderType === "delivery" ? 50 : 0;
-  const rewardDiscount = appliedReward ? Math.min(baseDeliveryFee, 50) : 0;
-  const deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscount);
-  const grandTotal = Math.max(0, subtotal + deliveryFee - voucherDiscount);
+  const appliedRewardType = appliedReward?.rewardItem?.type;
+  const rewardDiscount =
+    appliedRewardType === "delivery_fee"
+      ? Math.min(baseDeliveryFee, Number(appliedReward?.rewardItem?.value ?? 0))
+      : Math.min(subtotal, Number(appliedReward?.rewardItem?.value ?? 0));
+  const deliveryFee =
+    appliedRewardType === "delivery_fee"
+      ? Math.max(0, baseDeliveryFee - rewardDiscount)
+      : baseDeliveryFee;
+  const rewardItemDiscount =
+    appliedRewardType && appliedRewardType !== "delivery_fee" ? rewardDiscount : 0;
+  const grandTotal = Math.max(
+    0,
+    subtotal + deliveryFee - voucherDiscount - rewardItemDiscount
+  );
   const pointsEarned = Math.floor(grandTotal / 20);
   const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedVoucher = rewardWallet.find(
     (voucher) => voucher.code === voucherCode.trim().toUpperCase()
   );
-  const availableDeliveryRewards = activeRewardVouchers.filter(
-    (voucher) => voucher.rewardItem?.type === "delivery_fee"
+  const applicableRewardVouchers = activeRewardVouchers.filter(
+    (voucher) =>
+      voucher.rewardItem?.type !== "delivery_fee" || orderType === "delivery"
   );
   const selectedSavedAddress =
     savedAddresses.find((address) => address.id === selectedAddressId) ?? null;
@@ -337,7 +351,7 @@ export default function CartPage() {
   async function applyRewardVoucher(voucher: CustomerRewardVoucher) {
     setRewardMessage("");
 
-    if (orderType !== "delivery") {
+    if (voucher.rewardItem?.type === "delivery_fee" && orderType !== "delivery") {
       setAppliedReward(null);
       setRewardMessage("Free Delivery can only be used for delivery orders.");
       return;
@@ -370,7 +384,7 @@ export default function CartPage() {
       setAppliedReward(result.reward);
       setVoucherCode("");
       setVoucherDraft("");
-      setRewardMessage(result.message || "Free Delivery reward applied.");
+      setRewardMessage(result.message || "Reward applied.");
       setIsVoucherModalOpen(false);
     } catch {
       setRewardMessage("Something went wrong while applying this reward.");
@@ -556,17 +570,33 @@ export default function CartPage() {
     }
   }
 
+  function handleBackToMenu() {
+    setIsReturningToMenu(true);
+    window.sessionStorage.setItem("kadaserve_skip_customer_splash", "true");
+    router.push("/customer?tab=menu");
+  }
+
   return (
     <main className="min-h-screen bg-[#FFF0DA] px-4 pb-28 pt-5 text-[#0D2E18]">
+      {isReturningToMenu ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#FFF0DA]">
+          <div
+            aria-label="Loading menu"
+            className="h-12 w-12 animate-spin rounded-full border-4 border-[#DCCFB8] border-t-[#0D2E18]"
+          />
+        </div>
+      ) : null}
+
       <div className="mx-auto max-w-5xl">
         <header className="mb-5 flex items-center justify-between gap-3">
-          <Link
-            href="/customer?tab=menu"
+          <button
+            type="button"
+            onClick={handleBackToMenu}
             className="inline-flex items-center gap-2 rounded-full border border-[#0D2E18]/20 bg-white/75 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm transition hover:bg-white"
           >
             <ArrowLeft size={16} />
             Back to Menu
-          </Link>
+          </button>
 
           <Link
             href="/customer?tab=menu"
@@ -578,7 +608,29 @@ export default function CartPage() {
         </header>
 
         <section className="space-y-5">
-          <div className="flex flex-col gap-4 border-b border-[#D8C8A7] pb-5 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-4 border-b border-[#D8C8A7] pb-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                Order Method
+              </p>
+              <div className="flex rounded-full border border-[#D8C8A7] bg-[#FFF8EF] p-1 shadow-sm">
+                {(["pickup", "delivery"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setOrderType(type)}
+                    className={`min-w-24 rounded-full px-4 py-2 font-sans text-sm font-bold transition ${
+                      orderType === type
+                        ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                        : "text-[#684B35] hover:text-[#0D2E18]"
+                    }`}
+                  >
+                    {type === "pickup" ? "Pickup" : "Delivery"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {orderType === "delivery" ? (
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -647,23 +699,6 @@ export default function CartPage() {
                 </h1>
               </div>
             )}
-
-            <div className="flex flex-wrap gap-2">
-              {(["pickup", "delivery"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setOrderType(type)}
-                  className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${
-                    orderType === type
-                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                      : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
-                  }`}
-                >
-                  {type === "pickup" ? "Pickup" : "Delivery"}
-                </button>
-              ))}
-            </div>
           </div>
 
           {items.length === 0 ? (
@@ -806,7 +841,7 @@ export default function CartPage() {
                         </p>
                         <p className="mt-1 truncate font-sans text-sm font-black text-[#0D2E18]">
                           {appliedReward
-                            ? "Free Delivery"
+                            ? appliedReward.rewardItem?.name ?? appliedReward.code
                             : voucherCode
                             ? selectedVoucher?.title ?? voucherCode
                             : "No voucher selected"}
@@ -871,7 +906,7 @@ export default function CartPage() {
                           Discount/Reward Applied
                         </span>
                         <span className="font-bold text-[#0D2E18]">
-                          Free Delivery
+                          -{peso(rewardDiscount)}
                         </span>
                       </div>
                     ) : null}
@@ -1166,10 +1201,11 @@ export default function CartPage() {
                   <LoadingSpinner className="h-4 w-4" label="Loading vouchers" />
                   <span>Checking available vouchers...</span>
                 </div>
-              ) : availableDeliveryRewards.length > 0 || rewardWallet.length > 0 ? (
+              ) : applicableRewardVouchers.length > 0 || rewardWallet.length > 0 ? (
                 <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
-                  {availableDeliveryRewards.map((voucher) => {
+                  {applicableRewardVouchers.map((voucher) => {
                     const isApplied = appliedReward?.id === voucher.id;
+                    const isDeliveryOnly = voucher.rewardItem?.type === "delivery_fee";
 
                     return (
                       <button
@@ -1179,7 +1215,7 @@ export default function CartPage() {
                         disabled={
                           isApplyingReward ||
                           isApplied ||
-                          orderType !== "delivery"
+                          (isDeliveryOnly && orderType !== "delivery")
                         }
                         className={`w-full rounded-[18px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${
                           isApplied
@@ -1190,7 +1226,7 @@ export default function CartPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="font-sans text-base font-black text-[#0D2E18]">
-                              Free Delivery
+                              {voucher.rewardItem?.name ?? "Reward Voucher"}
                             </p>
                             <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
                               Code: {voucher.code}
@@ -1198,7 +1234,7 @@ export default function CartPage() {
                             <p className="font-sans text-xs text-[#8C7A64]">
                               Expires {formatRewardDate(voucher.expiresAt)}
                             </p>
-                            {orderType !== "delivery" ? (
+                            {isDeliveryOnly && orderType !== "delivery" ? (
                               <p className="mt-1 font-sans text-xs font-bold text-[#9C543D]">
                                 Available for delivery orders only
                               </p>

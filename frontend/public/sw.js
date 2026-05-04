@@ -1,6 +1,9 @@
-const CACHE_VERSION = "kadaserve-pwa-v1";
+const CACHE_VERSION = "kadaserve-pwa-v2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
+const IS_LOCAL_DEV = ["localhost", "127.0.0.1", "::1"].includes(
+  self.location.hostname,
+);
 
 const STATIC_ASSETS = [
   "/favicon.ico",
@@ -14,6 +17,11 @@ const STATIC_ASSETS = [
 const CACHEABLE_PAGES = new Set(["/", "/customer/menu"]);
 
 self.addEventListener("install", (event) => {
+  if (IS_LOCAL_DEV) {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
+
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
@@ -23,6 +31,23 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  if (IS_LOCAL_DEV) {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) =>
+          Promise.all(
+            keys
+              .filter((key) => key.startsWith("kadaserve-pwa-"))
+              .map((key) => caches.delete(key)),
+          ),
+        )
+        .then(() => self.registration.unregister())
+        .then(() => self.clients.claim()),
+    );
+    return;
+  }
+
   event.waitUntil(
     caches
       .keys()
@@ -38,6 +63,10 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (IS_LOCAL_DEV) {
+    return;
+  }
+
   const { request } = event;
 
   if (request.method !== "GET") {

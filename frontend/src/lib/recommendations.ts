@@ -6,8 +6,8 @@ export type RecommendationBasis =
 
 export type RecommendationLabel =
   | "Best for you"
-  | "Your favorite"
-  | "Trending now"
+  | "Your Favorite"
+  | "Popular Now"
   | "Most popular"
   | "Highest rated";
 
@@ -294,18 +294,18 @@ export function getRecommendationsForCustomer({
         mostPopular
           ? makeRecommendation(
               mostPopular,
-              "Most popular",
+              "Popular Now",
               "popularity",
-              `${globalStats.popularity.get(itemKey(mostPopular)) ?? 0} completed orders`,
+              "Global top-selling item for discovery.",
               globalStats.popularity.get(itemKey(mostPopular)) ?? 0
             )
           : null,
         highestRated
           ? makeRecommendation(
               highestRated,
-              "Highest rated",
+              "Best for you",
               "rating",
-              `${(average(globalStats.ratingMap.get(itemKey(highestRated)) ?? []) ?? 0).toFixed(1)} average rating`,
+              "Top-N starter result based on available ratings.",
               average(globalStats.ratingMap.get(itemKey(highestRated)) ?? []) ?? 0
             )
           : null,
@@ -366,36 +366,36 @@ export function getRecommendationsForCustomer({
           scoredItems[0].item,
           "Best for you",
           "preference",
-          `Preference score ${(scoredItems[0].score * 100).toFixed(0)}%`,
+          "Top-N result based on frequency, recency, and feedback rating.",
           scoredItems[0].score
         )
       : null,
     favorite
       ? makeRecommendation(
           favorite.item,
-          "Your favorite",
+          "Your Favorite",
           "frequency",
-          `${favorite.frequency} cups ordered`,
+          `Most frequently ordered item: ${favorite.frequency} ordered.`,
           favorite.frequency
         )
       : null,
     discover
       ? makeRecommendation(
           discover,
-          "Trending now",
+          "Popular Now",
           (globalStats.popularity.get(itemKey(discover)) ?? 0) > 0
             ? "popularity"
             : "rating",
-          `${globalStats.popularity.get(itemKey(discover)) ?? 0} completed orders`,
+          "Global top-selling or high-rated item for discovery.",
           globalStats.popularity.get(itemKey(discover)) ?? 0
         )
       : null,
     ...fallbackItems.map((item) =>
       makeRecommendation(
         item,
-        "Trending now",
+        "Popular Now",
         "popularity",
-        `${globalStats.popularity.get(itemKey(item)) ?? 0} completed orders`,
+        "Global top-selling or high-rated item for discovery.",
         globalStats.popularity.get(itemKey(item)) ?? 0
       )
     ),

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Plus, Save } from "lucide-react";
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 
 export type InventoryItem = {
   name: string;
@@ -16,121 +17,349 @@ type InventorySummary = {
   normal: number;
   low: number;
   critical: number;
+  overstocked: number;
 };
 
 export function getInventoryStatus(item: InventoryItem) {
+  if (item.onHand > item.maxCap) return "Overstocked";
   if (item.onHand <= item.minNeed / 2) return "Critical";
   if (item.onHand <= item.minNeed) return "Low Stock";
-  return "Good Stock";
+  return "Normal";
+}
+
+type InventoryStatus = ReturnType<typeof getInventoryStatus>;
+
+const emptyInventoryItem: InventoryItem = {
+  name: "",
+  unit: "",
+  onHand: 0,
+  minNeed: 0,
+  maxCap: 0,
+  supplier: "",
+};
+
+function statusStyles(status: InventoryStatus) {
+  if (status === "Critical") {
+    return "border-[#F2B3A5] bg-[#FFF1EC] text-[#9B2F18]";
+  }
+
+  if (status === "Low Stock") {
+    return "border-[#EAC46C] bg-[#FFF8D8] text-[#7A5300]";
+  }
+
+  if (status === "Overstocked") {
+    return "border-[#B8D5F0] bg-[#EDF7FF] text-[#24577A]";
+  }
+
+  return "border-[#BFDCC6] bg-[#EDF8EF] text-[#0D5A26]";
+}
+
+function sanitizeInventoryNumber(value: number, fallback = 0) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.round(value));
 }
 
 export function InventoryView({
   inventoryItems,
   inventorySummary,
+  setInventoryItems,
 }: {
   inventoryItems: InventoryItem[];
   inventorySummary: InventorySummary;
+  setInventoryItems: Dispatch<SetStateAction<InventoryItem[]>>;
 }) {
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [newItem, setNewItem] = useState<InventoryItem>(emptyInventoryItem);
+  const [stockAdds, setStockAdds] = useState<Record<string, string>>({});
+
+  function updateItemStock(itemName: string, value: string) {
+    const nextStock = sanitizeInventoryNumber(Number(value));
+
+    setInventoryItems((currentItems) =>
+      currentItems.map((item) =>
+        item.name === itemName ? { ...item, onHand: nextStock } : item
+      )
+    );
+  }
+
+  function addStock(itemName: string) {
+    const amount = sanitizeInventoryNumber(Number(stockAdds[itemName]), 0);
+
+    if (amount <= 0) return;
+
+    setInventoryItems((currentItems) =>
+      currentItems.map((item) =>
+        item.name === itemName
+          ? { ...item, onHand: item.onHand + amount }
+          : item
+      )
+    );
+    setStockAdds((currentAdds) => ({ ...currentAdds, [itemName]: "" }));
+  }
+
+  function addInventoryItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = newItem.name.trim();
+    const unit = newItem.unit.trim();
+    const supplier = newItem.supplier.trim() || "Supplier";
+
+    if (!name || !unit) return;
+
+    setInventoryItems((currentItems) => {
+      const existingItem = currentItems.find(
+        (item) => item.name.toLowerCase() === name.toLowerCase()
+      );
+
+      if (existingItem) {
+        return currentItems.map((item) =>
+          item.name.toLowerCase() === name.toLowerCase()
+            ? {
+                ...item,
+                unit,
+                supplier,
+                onHand: sanitizeInventoryNumber(newItem.onHand),
+                minNeed: sanitizeInventoryNumber(newItem.minNeed),
+                maxCap: sanitizeInventoryNumber(newItem.maxCap),
+              }
+            : item
+        );
+      }
+
+      return [
+        {
+          name,
+          unit,
+          supplier,
+          onHand: sanitizeInventoryNumber(newItem.onHand),
+          minNeed: sanitizeInventoryNumber(newItem.minNeed),
+          maxCap: sanitizeInventoryNumber(newItem.maxCap),
+        },
+        ...currentItems,
+      ];
+    });
+    setNewItem(emptyInventoryItem);
+  }
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-4">
-        <MetricCard label="Total Items" value={inventorySummary.total.toString()} />
-        <MetricCard label="Normal" value={inventorySummary.normal.toString()} />
-        <MetricCard label="Low Stock" value={inventorySummary.low.toString()} />
-        <MetricCard label="Critical" value={inventorySummary.critical.toString()} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard label="Total Items" value={inventorySummary.total.toString()} tone="neutral" />
+        <MetricCard label="Normal" value={inventorySummary.normal.toString()} tone="normal" />
+        <MetricCard label="Low Stock" value={inventorySummary.low.toString()} tone="low" />
+        <MetricCard label="Critical" value={inventorySummary.critical.toString()} tone="critical" />
+        <MetricCard label="Overstocked" value={inventorySummary.overstocked.toString()} tone="overstocked" />
       </div>
 
-      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-        <h2 className="font-sans text-lg font-bold text-[#0D2E18]">
-          Inventory Monitoring
-        </h2>
-
-        <div className="grid grid-cols-[50px_1.4fr_0.8fr_1fr_1fr_1fr_1fr_1fr_0.7fr] gap-4 px-6 py-4 font-sans text-sm font-bold uppercase">
-          <span>#</span>
-          <span>Ingredient</span>
-          <span>Unit</span>
-          <span>Onhand</span>
-          <span>Min. Need</span>
-          <span>Max. Cap</span>
-          <span>Status</span>
-          <span>Supplier</span>
-          <span>Action</span>
+      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-sans text-lg font-bold text-[#0D2E18]">
+              Inventory Monitoring
+            </h2>
+            <p className="font-sans text-sm text-[#7B6248]">
+              Update remaining stock, add new deliveries, and track reorder status.
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-4 px-6 pb-6">
-          {inventoryItems.map((item, index) => (
-            <div
-              key={item.name}
-              className="grid grid-cols-[50px_1.4fr_0.8fr_1fr_1fr_1fr_1fr_1fr_0.7fr] gap-4 font-sans text-sm"
-            >
-              <span>{index + 1}</span>
-              <span className="font-semibold">{item.name}</span>
-              <span>{item.unit}</span>
-              <span>{item.onHand}</span>
-              <span>{item.minNeed}</span>
-              <span>{item.maxCap}</span>
-              <span>{getInventoryStatus(item)}</span>
-              <span>{item.supplier}</span>
-              <button
-                type="button"
-                onClick={() => setSelectedItem(item)}
-                className="rounded-full border border-[#D6C6AC] px-3 py-1"
-              >
-                Notes
-              </button>
+        <form
+          onSubmit={addInventoryItem}
+          className="mt-5 grid gap-3 rounded-[14px] border border-[#E5D8C1] bg-[#FFF8EF] p-4 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.7fr_0.7fr_1fr_auto]"
+        >
+          <InventoryInput
+            label="Item"
+            value={newItem.name}
+            onChange={(value) => setNewItem((item) => ({ ...item, name: value }))}
+            placeholder="Ingredient/item"
+          />
+          <InventoryInput
+            label="Unit"
+            value={newItem.unit}
+            onChange={(value) => setNewItem((item) => ({ ...item, unit: value }))}
+            placeholder="kg, pcs"
+          />
+          <InventoryNumberInput
+            label="On hand"
+            value={newItem.onHand}
+            onChange={(value) => setNewItem((item) => ({ ...item, onHand: value }))}
+          />
+          <InventoryNumberInput
+            label="Min"
+            value={newItem.minNeed}
+            onChange={(value) => setNewItem((item) => ({ ...item, minNeed: value }))}
+          />
+          <InventoryNumberInput
+            label="Max"
+            value={newItem.maxCap}
+            onChange={(value) => setNewItem((item) => ({ ...item, maxCap: value }))}
+          />
+          <InventoryInput
+            label="Supplier"
+            value={newItem.supplier}
+            onChange={(value) =>
+              setNewItem((item) => ({ ...item, supplier: value }))
+            }
+            placeholder="Supplier"
+          />
+          <button
+            type="submit"
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-[12px] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-white transition hover:bg-[#154626]"
+          >
+            <Plus size={16} />
+            Add
+          </button>
+        </form>
+
+        <div className="mt-5 overflow-x-auto">
+          <div className="min-w-[980px]">
+            <div className="grid grid-cols-[44px_1.4fr_0.65fr_0.9fr_0.75fr_0.75fr_1fr_1fr_1.15fr] gap-3 rounded-[12px] bg-[#F7EFDF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#684B35]">
+              <span>#</span>
+              <span>Ingredient</span>
+              <span>Unit</span>
+              <span>Remaining</span>
+              <span>Min</span>
+              <span>Max</span>
+              <span>Status</span>
+              <span>Supplier</span>
+              <span>Add Stock</span>
             </div>
-          ))}
+
+            <div className="mt-3 space-y-3">
+              {inventoryItems.map((item, index) => {
+                const status = getInventoryStatus(item);
+
+                return (
+                  <div
+                    key={item.name}
+                    className="grid grid-cols-[44px_1.4fr_0.65fr_0.9fr_0.75fr_0.75fr_1fr_1fr_1.15fr] items-center gap-3 rounded-[14px] border border-[#E5D8C1] bg-white px-4 py-3 font-sans text-sm text-[#1E2B18]"
+                  >
+                    <span className="font-bold text-[#8C7558]">{index + 1}</span>
+                    <span className="font-bold text-[#0D2E18]">{item.name}</span>
+                    <span>{item.unit}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.onHand}
+                      onChange={(event) =>
+                        updateItemStock(item.name, event.target.value)
+                      }
+                      className="h-10 w-full rounded-[10px] border border-[#D8C8AA] bg-[#FFFDF8] px-3 font-sans font-bold text-[#0D2E18] outline-none focus:border-[#0D2E18]"
+                    />
+                    <span>{item.minNeed}</span>
+                    <span>{item.maxCap}</span>
+                    <span
+                      className={`w-fit rounded-full border px-3 py-1 text-xs font-black ${statusStyles(status)}`}
+                    >
+                      {status}
+                    </span>
+                    <span className="truncate">{item.supplier}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={stockAdds[item.name] ?? ""}
+                        onChange={(event) =>
+                          setStockAdds((currentAdds) => ({
+                            ...currentAdds,
+                            [item.name]: event.target.value,
+                          }))
+                        }
+                        placeholder="Qty"
+                        className="h-10 w-20 rounded-[10px] border border-[#D8C8AA] bg-[#FFFDF8] px-3 font-sans text-sm outline-none focus:border-[#0D2E18]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addStock(item.name)}
+                        className="inline-flex h-10 items-center justify-center rounded-[10px] bg-[#F2E2C5] px-3 font-sans text-sm font-bold text-[#0D2E18] transition hover:bg-[#E8D0A8]"
+                        aria-label={`Add stock for ${item.name}`}
+                      >
+                        <Save size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </section>
-
-      {selectedItem ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#0D2E18]/35 px-3 backdrop-blur-sm sm:items-center sm:p-6">
-          <section className="w-full max-w-md rounded-t-[24px] border border-[#DCCFB8] bg-[#FFF8EF] p-5 shadow-[0_18px_40px_rgba(13,46,24,0.18)] sm:rounded-[24px]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                  Inventory Notes
-                </p>
-                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                  {selectedItem.name}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedItem(null)}
-                className="rounded-full bg-white px-3 py-2 font-sans text-sm font-bold text-[#0D2E18]"
-              >
-                Close
-              </button>
-            </div>
-            <div className="mt-5 space-y-3 rounded-[18px] bg-white p-4 font-sans text-sm text-[#684B35]">
-              <p>Status: {getInventoryStatus(selectedItem)}</p>
-              <p>
-                On hand: {selectedItem.onHand} {selectedItem.unit}
-              </p>
-              <p>
-                Reorder when stock reaches {selectedItem.minNeed}{" "}
-                {selectedItem.unit}. Maximum capacity is {selectedItem.maxCap}{" "}
-                {selectedItem.unit}.
-              </p>
-              <p>Supplier: {selectedItem.supplier}</p>
-            </div>
-          </section>
-        </div>
-      ) : null}
     </div>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function InventoryInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
   return (
-    <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-5">
+    <label className="space-y-1 font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#684B35]">
+      <span>{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-[12px] border border-[#D8C8AA] bg-white px-3 font-sans text-sm normal-case tracking-normal text-[#0D2E18] outline-none focus:border-[#0D2E18]"
+      />
+    </label>
+  );
+}
+
+function InventoryNumberInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="space-y-1 font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#684B35]">
+      <span>{label}</span>
+      <input
+        type="number"
+        min="0"
+        value={value}
+        onChange={(event) => onChange(sanitizeInventoryNumber(Number(event.target.value)))}
+        className="h-11 w-full rounded-[12px] border border-[#D8C8AA] bg-white px-3 font-sans text-sm normal-case tracking-normal text-[#0D2E18] outline-none focus:border-[#0D2E18]"
+      />
+    </label>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "normal" | "low" | "critical" | "overstocked";
+}) {
+  const toneClass =
+    tone === "normal"
+      ? "border-[#BFDCC6] bg-[#F3FBF4]"
+      : tone === "low"
+      ? "border-[#EAC46C] bg-[#FFF8D8]"
+      : tone === "critical"
+      ? "border-[#F2B3A5] bg-[#FFF1EC]"
+      : tone === "overstocked"
+      ? "border-[#B8D5F0] bg-[#EDF7FF]"
+      : "border-[#DCCFB8] bg-white";
+
+  return (
+    <div className={`rounded-[16px] border p-4 ${toneClass}`}>
       <p className="font-sans text-sm font-bold uppercase text-[#0D2E18]">
         {label}
       </p>
-      <p className="mt-7 font-sans text-4xl font-bold text-[#0D2E18]">{value}</p>
+      <p className="mt-4 font-sans text-3xl font-bold text-[#0D2E18]">{value}</p>
     </div>
   );
 }

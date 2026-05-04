@@ -488,15 +488,7 @@ export function OrdersView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-sans text-3xl font-bold tracking-[0.02em] text-[#0D2E18]">
-            All Orders
-          </h1>
-          <p className="mt-1 font-sans text-sm text-[#684B35]">
-            Monitor customer, payment, and fulfillment status across all orders.
-          </p>
-        </div>
-
+        <div className="hidden sm:block" />
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-1">
             {timeOptions.map((option) => (

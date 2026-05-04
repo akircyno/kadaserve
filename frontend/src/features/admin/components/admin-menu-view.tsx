@@ -371,49 +371,9 @@ export function MenuView({
     }
   }
 
-  async function toggleAvailability(item: AdminMenuItem) {
-    setMenuMessage("");
-    setMenuError("");
-
-    try {
-      const response = await fetch("/api/admin/menu", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: item.id,
-          isAvailable: !item.isAvailable,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setMenuError(result.error || "Failed to update availability.");
-        return;
-      }
-
-      if (result.menuItem) {
-        syncMenuItem(result.menuItem);
-      }
-
-      setMenuMessage("Availability updated.");
-    } catch {
-      setMenuError("Something went wrong while updating availability.");
-    }
-  }
-
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-sans text-3xl font-bold">Menu Management</h1>
-          <p className="mt-1 font-sans text-sm text-[#684B35]">
-            Add, edit, and hide menu items from staff/customer ordering.
-          </p>
-        </div>
-
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={openCreateForm}
@@ -468,7 +428,7 @@ export function MenuView({
       </div>
 
       <div className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white">
-        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_1fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
           <span>Item</span>
           <span>Category</span>
           <span>Price</span>
@@ -480,7 +440,7 @@ export function MenuView({
           {filteredMenuItems.map((item) => (
             <div
               key={item.id}
-              className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_1fr] items-center gap-6 px-6 py-4 font-sans text-sm"
+              className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
             >
               <div className="flex items-center gap-3">
                 <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
@@ -517,14 +477,6 @@ export function MenuView({
                   className="rounded-full bg-[#F4EEE6] px-5 py-2 font-semibold text-[#0D2E18]"
                 >
                   Edit
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleAvailability(item)}
-                  className="rounded-full border border-[#D6C6AC] px-5 py-2 font-semibold text-[#684B35]"
-                >
-                  {item.isAvailable ? "Hide" : "Show"}
                 </button>
               </div>
             </div>

@@ -99,7 +99,7 @@ type ServerRewardItem = {
   id: string;
   name: string;
   description: string;
-  type: "delivery_fee";
+  type: "delivery_fee" | "voucher_discount" | "addon_reward";
   pointsCost: number;
   value: number;
   isActive: boolean;
@@ -262,13 +262,6 @@ function readCheckInProgress() {
       lastCheckedIn: storedValue,
     };
   }
-}
-
-function getRewardExpiry(daysFromNow = 30) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromNow);
-
-  return date.toISOString().slice(0, 10);
 }
 
 function readRewardWallet() {
@@ -837,6 +830,17 @@ export function CustomerDashboard({
       }
     };
 
+    if (
+      initialSection === "menu" ||
+      window.sessionStorage.getItem("kadaserve_skip_customer_splash") === "true"
+    ) {
+      window.sessionStorage.removeItem("kadaserve_skip_customer_splash");
+      setIsSplashVisible(false);
+      setIsTaglineVisible(false);
+      showOnboardingIfNeeded();
+      return;
+    }
+
     window.sessionStorage.setItem("kadaserve_opening_seen", "true");
     setIsSplashVisible(true);
     const splashTimeoutId = window.setTimeout(() => {
@@ -848,7 +852,7 @@ export function CustomerDashboard({
     return () => {
       window.clearTimeout(splashTimeoutId);
     };
-  }, []);
+  }, [initialSection]);
 
   useEffect(() => {
     setProfileAvatarUrl(customerProfile?.avatarUrl ?? "");
@@ -1754,17 +1758,6 @@ export function CustomerDashboard({
     setRewardCelebration("Diversity mission claimed. +10 points!");
   }
 
-  function redeemReward(reward: RewardVoucher) {
-    if (rewardWallet.some((item) => item.code === reward.code)) {
-      setActiveRewardsTab("wallet");
-      return;
-    }
-
-    setRewardWallet((current) => [reward, ...current]);
-    setActiveRewardsTab("wallet");
-    setRewardCelebration(`${reward.title} added to My Rewards.`);
-  }
-
   function resetFeedbackForm() {
     setTasteRating(0);
     setStrengthRating(3);
@@ -1818,7 +1811,7 @@ export function CustomerDashboard({
       await loadServerRewards();
       setActiveRewardsTab("wallet");
       setRewardCelebration(
-        result.message || "Free Delivery voucher added to My Rewards."
+        result.message || `${reward.name} added to My Rewards.`
       );
     } catch {
       setRewardCelebration("Something went wrong while redeeming this reward.");
@@ -1970,6 +1963,50 @@ export function CustomerDashboard({
               >
                 <X size={18} />
               </button>
+            </div>
+          ) : null}
+
+          {activeSection === "menu" ? (
+            <div className="z-30 border-b border-[#DCCFB8] bg-[#F8EBCF]/96 px-4 py-3 shadow-[0_10px_24px_rgba(13,46,24,0.08)] backdrop-blur sm:px-5">
+              <div className="mx-auto w-full max-w-[1440px]">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-sans text-[11px] font-bold uppercase tracking-[0.16em] text-[#8A755D]">
+                      KadaServe Menu
+                    </p>
+                    <h1 className="truncate font-sans text-2xl font-black leading-tight text-[#0D2E18] sm:text-3xl">
+                      Menu
+                    </h1>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchOpen(true)}
+                    aria-label="Search menu"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[#0D2E18] shadow-[0_8px_18px_rgba(13,46,24,0.14)] transition hover:bg-[#FFF8EF]"
+                  >
+                    <Search size={19} />
+                  </button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {menuFilters.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => handleFilterSelect(item.value)}
+                      aria-current={
+                        activeMenuFilter === item.value ? "true" : undefined
+                      }
+                      className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
+                        activeMenuFilter === item.value
+                          ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                          : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:text-[#0D2E18]"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -2137,7 +2174,7 @@ export function CustomerDashboard({
                     ref={recommendationScrollerRef}
                     className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    {recommendedItems.map(({ item, label }) => {
+                    {recommendedItems.map(({ item, label, reason }) => {
                       const menuImage = getMenuImage(item);
 
                       return (
@@ -2176,13 +2213,13 @@ export function CustomerDashboard({
                           <div className="flex min-w-0 flex-1 flex-col p-4 pr-12">
                             <div>
                               <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
-                                Recommended
+                                {label}
                               </p>
                               <h3 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
                                 {item.name}
                               </h3>
-                              <p className="mt-2 inline-flex rounded-full bg-[#FFF0DA] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
-                                {label}
+                              <p className="mt-2 line-clamp-2 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-[11px] font-bold leading-snug text-[#684B35]">
+                                {reason}
                               </p>
                             </div>
 
@@ -2210,28 +2247,6 @@ export function CustomerDashboard({
 
             {activeSection === "menu" && (
               <div className="mx-auto w-full max-w-[1440px] space-y-4">
-                <div className="sticky top-0 z-30 -mx-4 border-b border-[#E0D2B7] bg-[#F8EBCF]/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-[22px] sm:border sm:px-3">
-                  <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {menuFilters.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => handleFilterSelect(item.value)}
-                        aria-current={
-                          activeMenuFilter === item.value ? "true" : undefined
-                        }
-                        className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
-                          activeMenuFilter === item.value
-                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
-                            : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:text-[#0D2E18]"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div
                   ref={fullMenuRef}
                   className="space-y-10 scroll-mt-24 pb-28"
@@ -2808,7 +2823,7 @@ export function CustomerDashboard({
                       ) : null}
                       <div className="mt-4 flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {(serverRewards?.redeemableRewards ?? [])
-                          .filter((reward) => reward.type === "delivery_fee")
+                          .filter((reward) => reward.type !== "addon_reward")
                           .map((reward) => {
                             const canRedeem = totalRewardPoints >= reward.pointsCost;
                             const isRedeeming = redeemingRewardId === reward.id;
@@ -2820,12 +2835,12 @@ export function CustomerDashboard({
                               >
                                 <div className="bg-[#0D2E18] p-5 text-[#FFF0DA]">
                                   <p className="font-sans text-4xl font-black">
-                                    Free Delivery
+                                    {reward.name.replace(" Voucher", "")}
                                   </p>
                                 </div>
                                 <div className="p-4">
                                   <p className="font-sans text-sm font-bold text-[#684B35]">
-                                    Remove delivery fee on your next delivery order.
+                                    {reward.description}
                                   </p>
                                   <p className="mt-3 font-sans text-sm font-bold text-[#684B35]">
                                     Redeem with
@@ -2855,48 +2870,6 @@ export function CustomerDashboard({
                               </article>
                             );
                           })}
-                        {[
-                          {
-                            code: "KADA10",
-                            title: "\u20B110 Discount",
-                            expiresAt: getRewardExpiry(),
-                            value: "\u20B110 off",
-                            cost: 500,
-                          },
-                          {
-                            code: "KADA30",
-                            title: "\u20B130 Discount",
-                            expiresAt: getRewardExpiry(),
-                            value: "\u20B130 off",
-                            cost: 1500,
-                          },
-                        ].map((reward) => (
-                          <article
-                            key={reward.code}
-                            className="min-w-[16rem] snap-start overflow-hidden rounded-[22px] border border-[#E8D9BE] bg-white shadow-[0_10px_22px_rgba(13,46,24,0.08)]"
-                          >
-                            <div className="bg-[#0D2E18] p-5 text-[#FFF0DA]">
-                              <p className="font-sans text-5xl font-black">
-                                {reward.title}
-                              </p>
-                            </div>
-                            <div className="p-4">
-                              <p className="font-sans text-sm font-bold text-[#684B35]">
-                                Redeem with
-                              </p>
-                              <p className="font-sans text-2xl font-black text-[#0D2E18]">
-                                {reward.cost} pts
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => redeemReward(reward)}
-                                className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA]"
-                              >
-                                Redeem
-                              </button>
-                            </div>
-                          </article>
-                        ))}
                       </div>
                     </section>
 
@@ -2922,14 +2895,14 @@ export function CustomerDashboard({
                         <button
                           type="button"
                           disabled={!flavorBadges.includes("Loves Creamy")}
-                          onClick={() =>
-                            redeemReward({
-                              code: "CREAMYADDON",
-                              title: "Free Creamy Add-on",
-                              expiresAt: getRewardExpiry(21),
-                              value: "Free add-on",
-                            })
-                          }
+                          onClick={() => {
+                            const creamyAddonReward = serverRewards?.redeemableRewards.find(
+                              (reward) => reward.type === "addon_reward"
+                            );
+
+                            if (!creamyAddonReward) return;
+                            redeemServerReward(creamyAddonReward);
+                          }}
                           className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
                         >
                           {flavorBadges.includes("Loves Creamy")

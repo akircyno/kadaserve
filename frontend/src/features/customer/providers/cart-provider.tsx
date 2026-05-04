@@ -71,18 +71,34 @@ export function CartProvider({
   children: ReactNode;
   isAuthenticated?: boolean;
 }) {
-  const [items, setItems] = useState<CartItem[]>(() =>
-    readStoredItems(isAuthenticated)
-  );
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [hasLoadedStoredItems, setHasLoadedStoredItems] = useState(false);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setItems(isAuthenticated ? readStoredItems(isAuthenticated) : []);
+      setHasLoadedStoredItems(true);
+    }, 0);
+
+    if (!isAuthenticated) {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!hasLoadedStoredItems) {
+      return;
+    }
+
     if (!isAuthenticated) {
       window.localStorage.removeItem(STORAGE_KEY);
       return;
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [isAuthenticated, items]);
+  }, [hasLoadedStoredItems, isAuthenticated, items]);
 
   function addItem(item: AddCartItemInput) {
     if (!isAuthenticated) {

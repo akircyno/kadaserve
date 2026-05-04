@@ -1,12 +1,13 @@
 export const FREE_DELIVERY_FEE = 50;
 export const POINTS_PER_COMPLETED_ITEM = 20;
 export const POINTS_PER_FEEDBACK = 10;
+export type RewardItemType = "delivery_fee" | "voucher_discount" | "addon_reward";
 
 export type RewardItemRow = {
   id: string;
   name: string;
   description: string;
-  type: "delivery_fee";
+  type: RewardItemType;
   points_cost: number;
   value: number;
   is_active: boolean;
@@ -217,10 +218,18 @@ export function generateRewardCode(type: RewardItemRow["type"]) {
     return `FREEDELIVERY-${randomCode}`;
   }
 
+  if (type === "voucher_discount") {
+    return `KADAVOUCHER-${randomCode}`;
+  }
+
+  if (type === "addon_reward") {
+    return `KADAADDON-${randomCode}`;
+  }
+
   return `KADA-${randomCode}`;
 }
 
-export async function validateDeliveryReward({
+export async function validateCheckoutReward({
   supabase,
   customerId,
   rewardId,
@@ -233,14 +242,6 @@ export async function validateDeliveryReward({
   rewardCode?: string | null;
   orderType: "pickup" | "delivery";
 }) {
-  if (orderType !== "delivery") {
-    return {
-      ok: false as const,
-      error: "Free Delivery can only be used for delivery orders.",
-      status: 400,
-    };
-  }
-
   const db = supabase as SupabaseLike;
   let query = db
     .from("customer_rewards")
@@ -314,10 +315,18 @@ export async function validateDeliveryReward({
     };
   }
 
-  if (rewardItem.type !== "delivery_fee" || !rewardItem.is_active) {
+  if (!rewardItem.is_active) {
     return {
       ok: false as const,
       error: "This reward cannot be applied to checkout.",
+      status: 400,
+    };
+  }
+
+  if (rewardItem.type === "delivery_fee" && orderType !== "delivery") {
+    return {
+      ok: false as const,
+      error: "Free Delivery can only be used for delivery orders.",
       status: 400,
     };
   }
@@ -326,6 +335,11 @@ export async function validateDeliveryReward({
     ok: true as const,
     voucher,
     rewardItem,
-    discountAmount: Math.min(FREE_DELIVERY_FEE, Number(rewardItem.value)),
+    discountAmount:
+      rewardItem.type === "delivery_fee"
+        ? Math.min(FREE_DELIVERY_FEE, Number(rewardItem.value))
+        : Math.max(0, Number(rewardItem.value)),
   };
 }
+
+export const validateDeliveryReward = validateCheckoutReward;

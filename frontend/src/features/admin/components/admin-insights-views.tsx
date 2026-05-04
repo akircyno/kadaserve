@@ -16,11 +16,14 @@ type RankedItem = {
   rating: number;
 };
 type AdminPreferenceFeedbackRow = {
+  id?: string;
   customer_id: string | null;
   menu_item_id: string | null;
   taste_rating: number;
   strength_rating: number;
   overall_rating: number;
+  comment?: string | null;
+  created_at?: string;
   profiles: { full_name: string | null; email: string | null } | null;
   menu_items: { name: string | null; category: string | null } | null;
 };
@@ -96,6 +99,24 @@ function ProgressBar({ max, value }: { max: number; value: number }) {
   );
 }
 
+const topItemStyles = [
+  {
+    badge: "bg-[#0D2E18] text-[#FFF0DA]",
+    card: "border-[#0D2E18]/20 bg-[#F7FBF5]",
+    bar: "#0D2E18",
+  },
+  {
+    badge: "bg-[#684B35] text-[#FFF0DA]",
+    card: "border-[#684B35]/20 bg-[#FFF8EF]",
+    bar: "#684B35",
+  },
+  {
+    badge: "bg-[#A77B5D] text-white",
+    card: "border-[#A77B5D]/25 bg-[#FFF0DA]",
+    bar: "#A77B5D",
+  },
+];
+
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
@@ -111,13 +132,57 @@ export function ItemRankingView({
   itemRanking: RankedItem[];
   maxItemOrders: number;
 }) {
+  const topItems = itemRanking.slice(0, 3);
+  const rankedItems = itemRanking.slice(0, 10);
+
   return (
-    <div className="space-y-5">
-      <h1 className="font-sans text-3xl font-bold tracking-[0.08em]">
-        Item Ranking
-      </h1>
-      <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-8">
-        <div className="grid grid-cols-[50px_2fr_1fr_1fr_1fr_1.2fr] gap-5 font-sans text-base font-bold uppercase">
+    <div className="space-y-4">
+      {topItems.length > 0 ? (
+        <div className="grid gap-3 lg:grid-cols-3">
+          {topItems.map((item, index) => {
+            const style = topItemStyles[index] ?? topItemStyles[0];
+
+            return (
+              <article
+                key={`top-${item.item}`}
+                className={`rounded-[16px] border px-4 py-3 ${style.card}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-black ${style.badge}`}
+                    >
+                      #{index + 1}
+                    </span>
+                    <h2 className="mt-3 truncate font-sans text-lg font-black text-[#0D2E18]">
+                      {item.item}
+                    </h2>
+                  </div>
+                  <p className="font-sans text-2xl font-black tabular-nums text-[#0D2E18]">
+                    {item.orders}
+                  </p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, (item.orders / maxItemOrders) * 100))}%`,
+                      backgroundColor: style.bar,
+                    }}
+                  />
+                </div>
+                <div className="mt-3 flex items-center justify-between font-sans text-xs font-semibold text-[#684B35]">
+                  <span>{peso(item.revenue)}</span>
+                  <span>{item.rating.toFixed(1)} rating</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white">
+        <div className="grid grid-cols-[44px_minmax(180px,1.8fr)_0.7fr_0.8fr_0.7fr_1fr] gap-4 bg-[#FFF8EF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
           <span>#</span>
           <span>Item</span>
           <span>Orders</span>
@@ -125,49 +190,156 @@ export function ItemRankingView({
           <span>Rating</span>
           <span>Order Bar</span>
         </div>
-        <div className="mt-6 space-y-5">
-          {itemRanking.slice(0, 8).map((item, index) => (
+        <div className="divide-y divide-[#EFE3CF]">
+          {rankedItems.map((item, index) => (
             <div
               key={item.item}
-              className="grid grid-cols-[50px_2fr_1fr_1fr_1fr_1.2fr] items-center gap-5 font-sans text-base"
+              className="grid grid-cols-[44px_minmax(180px,1.8fr)_0.7fr_0.8fr_0.7fr_1fr] items-center gap-4 px-4 py-3 font-sans text-sm text-[#0D2E18]"
             >
-              <span>{index + 1}</span>
-              <span className="font-bold">{item.item}</span>
-              <span>{item.orders}</span>
-              <span>{peso(item.revenue)}</span>
-              <span>Rating {item.rating.toFixed(1)}</span>
+              <span className="font-black text-[#684B35]">{index + 1}</span>
+              <span className="truncate font-bold">{item.item}</span>
+              <span className="font-semibold tabular-nums">{item.orders}</span>
+              <span className="font-semibold tabular-nums">{peso(item.revenue)}</span>
+              <span className="font-semibold tabular-nums">{item.rating.toFixed(1)}</span>
               <ProgressBar value={item.orders} max={maxItemOrders} />
             </div>
           ))}
-          {itemRanking.length === 0 ? <EmptyState label="No ranked items yet" /> : null}
+          {rankedItems.length === 0 ? <EmptyState label="No ranked items yet" /> : null}
         </div>
       </div>
     </div>
   );
 }
 
-export function SatisfactionView({ itemRanking }: { itemRanking: RankedItem[] }) {
+function average(values: number[]) {
+  return values.length
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : 0;
+}
+
+function formatRating(value: number) {
+  return value ? value.toFixed(1) : "N/A";
+}
+
+export function SatisfactionView({
+  feedbackRows,
+}: {
+  feedbackRows: AdminPreferenceFeedbackRow[];
+}) {
+  const overallAverage = average(
+    feedbackRows.map((row) => Number(row.overall_rating)).filter(Number.isFinite)
+  );
+  const tasteAverage = average(
+    feedbackRows.map((row) => Number(row.taste_rating)).filter(Number.isFinite)
+  );
+  const strengthAverage = average(
+    feedbackRows.map((row) => Number(row.strength_rating)).filter(Number.isFinite)
+  );
+  const byItem = new Map<
+    string,
+    {
+      count: number;
+      taste: number;
+      strength: number;
+      overall: number;
+      latestComment: string | null;
+    }
+  >();
+
+  feedbackRows.forEach((row) => {
+    const itemName = row.menu_items?.name || "Menu item";
+    const current = byItem.get(itemName) ?? {
+      count: 0,
+      taste: 0,
+      strength: 0,
+      overall: 0,
+      latestComment: null,
+    };
+
+    byItem.set(itemName, {
+      count: current.count + 1,
+      taste: current.taste + Number(row.taste_rating),
+      strength: current.strength + Number(row.strength_rating),
+      overall: current.overall + Number(row.overall_rating),
+      latestComment: current.latestComment || row.comment?.trim() || null,
+    });
+  });
+
+  const itemSummaries = Array.from(byItem.entries())
+    .map(([item, value]) => ({
+      item,
+      count: value.count,
+      taste: value.taste / value.count,
+      strength: value.strength / value.count,
+      overall: value.overall / value.count,
+      latestComment: value.latestComment,
+    }))
+    .sort((first, second) => second.overall - first.overall);
+
   return (
     <div className="space-y-5">
-      <h1 className="font-sans text-3xl font-bold tracking-[0.08em]">
-        Satisfaction Analytics
-      </h1>
-      <p className="font-sans text-sm text-[#684B35]">
-        Ratings are estimated from order activity until the feedback reporting endpoint is connected.
-      </p>
-      {itemRanking.length === 0 ? <EmptyState label="No feedback data yet" /> : null}
-      {itemRanking.slice(0, 4).map((item) => (
-        <Panel key={item.item} title={item.item} rightLabel="AVG RATINGS">
-          <div className="mt-4 space-y-4 px-8 pb-4">
-            {["Taste", "Strength", "Overall"].map((label, index) => (
-              <div key={label} className="grid grid-cols-[100px_1fr_70px] items-center gap-5">
-                <span className="font-sans text-lg font-bold">{label}</span>
-                <ProgressBar value={item.rating - index * 0.1} max={5} />
-                <span className="font-sans text-sm">
-                  Rating {Math.max(0, item.rating - index * 0.1).toFixed(1)}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Responses
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {feedbackRows.length}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Overall
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {formatRating(overallAverage)}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Taste
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {formatRating(tasteAverage)}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+            Strength
+          </p>
+          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
+            {formatRating(strengthAverage)}
+          </p>
+        </div>
+      </div>
+
+      {itemSummaries.length === 0 ? <EmptyState label="No feedback data yet" /> : null}
+      {itemSummaries.map((item) => (
+        <Panel key={item.item} title={item.item} rightLabel={`${item.count} responses`}>
+          <div className="mt-4 space-y-4 px-2 pb-2 sm:px-4">
+            {[
+              { label: "Overall", value: item.overall },
+              { label: "Taste", value: item.taste },
+              { label: "Strength", value: item.strength },
+            ].map((rating) => (
+              <div
+                key={`${item.item}-${rating.label}`}
+                className="grid grid-cols-[92px_1fr_52px] items-center gap-4"
+              >
+                <span className="font-sans text-sm font-bold text-[#0D2E18]">
+                  {rating.label}
+                </span>
+                <ProgressBar value={rating.value} max={5} />
+                <span className="font-sans text-sm font-bold tabular-nums text-[#684B35]">
+                  {rating.value.toFixed(1)}
                 </span>
               </div>
             ))}
+            {item.latestComment ? (
+              <p className="rounded-[14px] bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#684B35]">
+                {item.latestComment}
+              </p>
+            ) : null}
           </div>
         </Panel>
       ))}
@@ -251,7 +423,11 @@ export function CustomerPreferenceView({
 
   return (
     <div className="space-y-5">
-      <h1 className="font-sans text-3xl font-bold">Customer Preference Scoring</h1>
+      <div className="rounded-[18px] border border-[#DCCFB8] bg-white px-5 py-4">
+        <p className="w-fit rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
+          Preference Score = (0.5 x Frequency) + (0.3 x Recency) + (0.2 x Feedback Rating)
+        </p>
+      </div>
       <Panel title="Customer Profiles + Top-N Recommendations" rightLabel="MONITOR ONLY">
         <div className="mt-6 space-y-6 px-2 pb-2 sm:px-4">
           {profiles.slice(0, 5).map((profile, index) => (

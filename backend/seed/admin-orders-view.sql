@@ -1,5 +1,6 @@
 alter table public.orders
-  add column if not exists encoded_by uuid references public.profiles(id);
+  add column if not exists encoded_by uuid references public.profiles(id),
+  add column if not exists delivery_fee numeric not null default 0;
 
 create or replace view public.admin_orders_view
 with (security_invoker = true)

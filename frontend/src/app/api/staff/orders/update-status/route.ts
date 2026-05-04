@@ -43,14 +43,18 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function getFixedDeliveryFee() {
-  const value = Number(process.env.DELIVERY_FEE || 0);
-
-  return Number.isFinite(value) && value > 0 ? value : 0;
+function peso(value: number) {
+  return `\u20B1${Math.round(value)}`;
 }
 
-function peso(value: number) {
-  return `₱${Math.round(value)}`;
+function getNumberValue(value: unknown) {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
+  return Math.max(0, getNumberValue(totalAmount) - getNumberValue(deliveryFee));
 }
 
 function getNextStatus(
@@ -103,6 +107,7 @@ async function triggerDispatchNotification(
         customer_id,
         order_type,
         total_amount,
+        delivery_fee,
         delivery_email,
         delivery_phone,
         delivery_address,
@@ -161,8 +166,10 @@ async function triggerDispatchNotification(
       })
       .join("\n") ?? "";
 
-  const deliveryFee = order.order_type === "delivery" ? getFixedDeliveryFee() : 0;
-  const totalAmountDue = order.total_amount + deliveryFee;
+  const deliveryFee =
+    order.order_type === "delivery" ? getNumberValue(order.delivery_fee) : 0;
+  const subtotal = getBaseAmount(order.total_amount, deliveryFee);
+  const totalAmountDue = getNumberValue(order.total_amount);
   const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
   const text = `Hi ${customerName},
 
@@ -171,7 +178,7 @@ Good news! Your order is now out for delivery.
 Order:
 ${orderSummary || "Order details unavailable"}
 
-Price: ${peso(order.total_amount)}
+Items Total: ${peso(subtotal)}
 Delivery Fee: ${peso(deliveryFee)}
 Total Amount Due: ${peso(totalAmountDue)}
 
@@ -190,7 +197,7 @@ Thank you for ordering from Kada Cafe PH.`;
           orderSummary || "Order details unavailable"
         )}</pre>
         <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
-          <p style="margin: 0;">Price: <strong>${peso(order.total_amount)}</strong></p>
+          <p style="margin: 0;">Items Total: <strong>${peso(subtotal)}</strong></p>
           <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
           <p style="margin: 8px 0 0; font-size: 16px;">Total Amount Due: <strong>${peso(
             totalAmountDue
@@ -251,6 +258,7 @@ async function triggerPaymentReceiptNotification(
         customer_id,
         order_type,
         total_amount,
+        delivery_fee,
         payment_method,
         delivery_email,
         walkin_name,
@@ -310,8 +318,10 @@ async function triggerPaymentReceiptNotification(
       })
       .join("\n") ?? "";
 
-  const deliveryFee = order.order_type === "delivery" ? getFixedDeliveryFee() : 0;
-  const totalPaid = order.total_amount + deliveryFee;
+  const deliveryFee =
+    order.order_type === "delivery" ? getNumberValue(order.delivery_fee) : 0;
+  const subtotal = getBaseAmount(order.total_amount, deliveryFee);
+  const totalPaid = getNumberValue(order.total_amount);
   const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
   const paymentMethod =
     order.payment_method === "gcash"
@@ -326,7 +336,7 @@ Payment received. Thank you for paying for your Kada Cafe PH order.
 Receipt:
 ${orderSummary || "Order details unavailable"}
 
-Price: ${peso(order.total_amount)}
+Items Total: ${peso(subtotal)}
 Delivery Fee: ${peso(deliveryFee)}
 Total Paid: ${peso(totalPaid)}
 Payment Method: ${paymentMethod}
@@ -346,7 +356,7 @@ Thank you for ordering from Kada Cafe PH.`;
           orderSummary || "Order details unavailable"
         )}</pre>
         <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
-          <p style="margin: 0;">Price: <strong>${peso(order.total_amount)}</strong></p>
+          <p style="margin: 0;">Items Total: <strong>${peso(subtotal)}</strong></p>
           <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
           <p style="margin: 8px 0 0; font-size: 16px;">Total Paid: <strong>${peso(
             totalPaid
@@ -417,6 +427,7 @@ export async function POST(request: Request) {
     const orderId = body.orderId as string;
     const expectedStatus = body.expectedStatus as OrderStatus | undefined;
     const action = body.action as "advance" | "mark_paid" | undefined;
+    const finalDeliveryFee = Number(body.finalDeliveryFee);
 
     if (!orderId) {
       return NextResponse.json(
@@ -427,7 +438,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee")
       .eq("id", orderId)
       .single();
 
@@ -489,6 +500,24 @@ export async function POST(request: Request) {
     }
 
     const paymentStatus = order.payment_status as PaymentStatus;
+    const shouldSetFinalDeliveryFee =
+      order.order_type === "delivery" && nextStatus === "out_for_delivery";
+
+    if (shouldSetFinalDeliveryFee) {
+      if (!Number.isFinite(finalDeliveryFee) || finalDeliveryFee < 0) {
+        return NextResponse.json(
+          { error: "Enter a valid final delivery fee before dispatch." },
+          { status: 400 }
+        );
+      }
+
+      if (finalDeliveryFee > 999) {
+        return NextResponse.json(
+          { error: "Final delivery fee must be below \u20B11,000." },
+          { status: 400 }
+        );
+      }
+    }
 
     if (
       paymentStatus !== "paid" &&
@@ -500,9 +529,22 @@ export async function POST(request: Request) {
       );
     }
 
+    const updatePayload: {
+      status: OrderStatus;
+      delivery_fee?: number;
+      total_amount?: number;
+    } = { status: nextStatus };
+
+    if (shouldSetFinalDeliveryFee) {
+      const previousDeliveryFee = getNumberValue(order.delivery_fee);
+      updatePayload.delivery_fee = Math.round(finalDeliveryFee);
+      updatePayload.total_amount =
+        getNumberValue(order.total_amount) - previousDeliveryFee + updatePayload.delivery_fee;
+    }
+
     const { error: updateError } = await supabase
       .from("orders")
-      .update({ status: nextStatus })
+      .update(updatePayload)
       .eq("id", orderId)
       .eq("status", expectedStatus ?? order.status);
 

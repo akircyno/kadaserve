@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   serializeCustomerReward,
-  validateDeliveryReward,
+  validateCheckoutReward,
 } from "@/lib/reward-service";
 
 function rewardSetupError(message: string) {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       typeof body.rewardCode === "string" ? body.rewardCode : null;
     const orderType = body.orderType === "delivery" ? "delivery" : "pickup";
 
-    const validation = await validateDeliveryReward({
+    const validation = await validateCheckoutReward({
       supabase,
       customerId: user.id,
       rewardId,
@@ -49,8 +49,10 @@ export async function POST(request: Request) {
       reward: serializeCustomerReward(validation.voucher),
       rewardCode: validation.voucher.code,
       discountAmount: validation.discountAmount,
-      deliveryFee: 0,
-      message: "Free Delivery reward applied.",
+      rewardType: validation.rewardItem.type,
+      deliveryFee:
+        validation.rewardItem.type === "delivery_fee" ? 0 : undefined,
+      message: `${validation.rewardItem.name} applied.`,
     });
   } catch (error) {
     return NextResponse.json(

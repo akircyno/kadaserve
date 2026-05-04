@@ -7,7 +7,7 @@ import {
 } from "@/lib/store-status";
 import {
   FREE_DELIVERY_FEE,
-  validateDeliveryReward,
+  validateCheckoutReward,
 } from "@/lib/reward-service";
 
 type CheckoutItem = {
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
     let appliedRewardId: string | null = null;
 
     if (rewardId || rewardCode) {
-      const rewardValidation = await validateDeliveryReward({
+      const rewardValidation = await validateCheckoutReward({
         supabase,
         customerId: user.id,
         rewardId,
@@ -208,8 +208,15 @@ export async function POST(request: Request) {
 
       appliedRewardId = rewardValidation.voucher.id;
       appliedRewardCode = rewardValidation.voucher.code;
-      rewardDiscountAmount = Math.min(baseDeliveryFee, rewardValidation.discountAmount);
-      deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscountAmount);
+      if (rewardValidation.rewardItem.type === "delivery_fee") {
+        rewardDiscountAmount = Math.min(
+          baseDeliveryFee,
+          rewardValidation.discountAmount
+        );
+        deliveryFee = Math.max(0, baseDeliveryFee - rewardDiscountAmount);
+      } else {
+        rewardDiscountAmount = Math.min(subtotal, rewardValidation.discountAmount);
+      }
     }
 
     const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);

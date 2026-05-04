@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   InventoryView,
+  type InventoryItem,
   getInventoryStatus,
 } from "@/features/admin/components/admin-inventory-view";
 import {
@@ -28,7 +29,7 @@ import {
   TimeSeriesView,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
-import { inventoryItems } from "@/features/admin/data/inventory-items";
+import { inventoryItems as initialInventoryItems } from "@/features/admin/data/inventory-items";
 import type {
   StoreOverrideStatus,
   StoreStatusPayload,
@@ -38,6 +39,7 @@ import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const hourLabels = ["5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM", "12AM"];
+const inventoryStorageKey = "kadaserve-admin-inventory";
 
 function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
@@ -101,19 +103,18 @@ function formatHourLabel(dateValue: string) {
     .toUpperCase();
 }
 
-function isSameManilaDate(value: string, date = new Date()) {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-
-  return formatter.format(new Date(value)) === formatter.format(date);
-}
-
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
+}
+
+function formatFeedbackDateTime(value: string) {
+  return new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 type AdminSearchSuggestion = {
@@ -141,7 +142,7 @@ type AdminRewardPoolItem = {
   id: string;
   name: string;
   description: string;
-  type: "delivery_fee";
+  type: "delivery_fee" | "voucher_discount" | "addon_reward";
   pointsCost: number;
   value: number;
   isActive: boolean;
@@ -180,15 +181,6 @@ function RewardsManagementView({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-sans text-3xl font-bold text-[#0D2E18]">
-          Rewards Management
-        </h1>
-        <p className="mt-1 font-sans text-sm text-[#684B35]">
-          Monitor redeemed vouchers, used rewards, and the active reward pool.
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
           <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
@@ -218,7 +210,7 @@ function RewardsManagementView({
 
       <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
         <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-          Active Reward Items
+          Customer Reward Items
         </h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rewardPool.map((item) => (
@@ -230,10 +222,10 @@ function RewardsManagementView({
                 {item.name.replace(" Voucher", "")}
               </p>
               <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
-                Reward type: Free Delivery
+                Reward type: {normalizeSuggestion(item.type)}
               </p>
               <p className="mt-2 font-sans text-sm text-[#684B35]">
-                {item.pointsCost} pts - {peso(item.value)} delivery fee waived
+                {item.pointsCost} pts - {peso(item.value)} value
               </p>
               <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#DCCFB8] pt-3 font-sans text-sm">
                 <div>
@@ -330,18 +322,13 @@ function FeedbackManagementView({
       average: value.total / value.count,
     }))
     .sort((first, second) => second.count - first.count);
+  const sortedFeedbackRows = [...feedbackRows].sort(
+    (first, second) =>
+      new Date(second.created_at).getTime() - new Date(first.created_at).getTime()
+  );
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-sans text-3xl font-bold text-[#0D2E18]">
-          Customer Feedback
-        </h1>
-        <p className="mt-1 font-sans text-sm text-[#684B35]">
-          Aggregate customer responses from completed orders.
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
           <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
@@ -389,21 +376,42 @@ function FeedbackManagementView({
         </section>
 
         <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-            Latest Responses
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
+              All Responses
+            </h2>
+            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+              {sortedFeedbackRows.length} shown
+            </span>
+          </div>
           <div className="mt-4 space-y-3">
-            {feedbackRows.slice(0, 8).map((row) => (
+            {sortedFeedbackRows.map((row) => (
               <article
                 key={row.id}
                 className="rounded-[14px] border border-[#EFE3CF] bg-[#FFF8EF] p-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-sans text-sm font-bold text-[#0D2E18]">
-                    {row.menu_items?.name || "Menu item"}
-                  </p>
+                  <div>
+                    <p className="font-sans text-sm font-bold text-[#0D2E18]">
+                      {row.menu_items?.name || "Menu item"}
+                    </p>
+                    <p className="mt-1 font-sans text-xs font-semibold text-[#8C7A64]">
+                      {row.profiles?.full_name ||
+                        row.profiles?.email ||
+                        "Customer"}{" "}
+                      - {formatFeedbackDateTime(row.created_at)}
+                    </p>
+                  </div>
                   <span className="rounded-full bg-[#E7F4EA] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
                     {Number(row.overall_rating).toFixed(1)} / 5
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 font-sans text-xs font-bold text-[#684B35]">
+                  <span className="rounded-full bg-white px-2.5 py-1">
+                    Taste {Number(row.taste_rating).toFixed(1)}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1">
+                    Strength {Number(row.strength_rating).toFixed(1)}
                   </span>
                 </div>
                 {row.comment ? (
@@ -413,6 +421,11 @@ function FeedbackManagementView({
                 ) : null}
               </article>
             ))}
+            {sortedFeedbackRows.length === 0 ? (
+              <div className="rounded-[14px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+                No customer feedback yet
+              </div>
+            ) : null}
           </div>
         </section>
       </div>
@@ -426,6 +439,8 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
+  const [inventoryItems, setInventoryItems] = useState(initialInventoryItems);
+  const [hasLoadedStoredInventory, setHasLoadedStoredInventory] = useState(false);
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
   const [adminRewards, setAdminRewards] = useState<AdminRewardsPayload | null>(
     null
@@ -463,14 +478,6 @@ export function AdminDashboard() {
     () => paidOrders.reduce((sum, order) => sum + order.total_amount, 0),
     [paidOrders]
   );
-  const totalSalesToday = useMemo(
-    () =>
-      paidOrders
-        .filter((order) => isSameManilaDate(order.ordered_at))
-        .reduce((sum, order) => sum + order.total_amount, 0),
-    [paidOrders]
-  );
-
   const averageOrderValue = paidOrders.length
     ? grossIncomeSales / paidOrders.length
     : 0;
@@ -484,6 +491,16 @@ export function AdminDashboard() {
             })}`
           : ""
       }`;
+  const activeHeaderTitle =
+    activeTab === "dashboard"
+      ? "Dashboard Overview"
+      : activeTab === "customer-pref"
+      ? "Customer Preference"
+      : activeTab === "menu"
+      ? "Menu Management"
+      : activeTab === "inventory"
+      ? "Inventory"
+      : adminTabs.find((tab) => tab.key === activeTab)?.label ?? "Admin";
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -492,6 +509,33 @@ export function AdminDashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [search]);
+
+  useEffect(() => {
+    try {
+      const storedInventory = window.localStorage.getItem(inventoryStorageKey);
+
+      if (storedInventory) {
+        const parsedInventory = JSON.parse(storedInventory) as InventoryItem[];
+
+        if (Array.isArray(parsedInventory)) {
+          setInventoryItems(parsedInventory);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(inventoryStorageKey);
+    } finally {
+      setHasLoadedStoredInventory(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStoredInventory) return;
+
+    window.localStorage.setItem(
+      inventoryStorageKey,
+      JSON.stringify(inventoryItems)
+    );
+  }, [hasLoadedStoredInventory, inventoryItems]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -572,7 +616,7 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch]);
+  }, [activeTab, debouncedSearch, inventoryItems]);
 
   const itemRanking = useMemo(() => {
     const ranking = new Map<
@@ -627,6 +671,30 @@ export function AdminDashboard() {
         .includes(keyword)
     );
   }, [activeTab, debouncedSearch, itemRanking]);
+  const scopedFeedbackRows = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+
+    if (activeTab !== "satisfaction" || !keyword) {
+      return feedbackRows;
+    }
+
+    return feedbackRows.filter((row) =>
+      [
+        row.menu_items?.name,
+        row.menu_items?.category,
+        row.profiles?.full_name,
+        row.profiles?.email,
+        row.comment,
+        row.overall_rating?.toString(),
+        row.taste_rating?.toString(),
+        row.strength_rating?.toString(),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [activeTab, debouncedSearch, feedbackRows]);
   const scopedCustomerPreferenceOrders = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -725,8 +793,9 @@ export function AdminDashboard() {
     1,
     ...scopedItemRanking.map((item) => item.orders)
   );
-  const averageRating = itemRanking.length
-    ? itemRanking.reduce((sum, item) => sum + item.rating, 0) / itemRanking.length
+  const averageRating = feedbackRows.length
+    ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
+      feedbackRows.length
     : 0;
   const searchSuggestions = useMemo<AdminSearchSuggestion[]>(() => {
     const suggestions: AdminSearchSuggestion[] = [];
@@ -883,12 +952,13 @@ export function AdminDashboard() {
         return firstNumeric - secondNumeric;
       })
       .slice(0, 8);
-  }, [activeTab, itemRanking, menuItems, orders, search]);
+  }, [activeTab, inventoryItems, itemRanking, menuItems, orders, search]);
   const inventorySummary = {
     total: inventoryItems.length,
-    normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Good Stock").length,
+    normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Normal").length,
     low: inventoryItems.filter((item) => getInventoryStatus(item) === "Low Stock").length,
     critical: inventoryItems.filter((item) => getInventoryStatus(item) === "Critical").length,
+    overstocked: inventoryItems.filter((item) => getInventoryStatus(item) === "Overstocked").length,
   };
 
   const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
@@ -1189,7 +1259,7 @@ export function AdminDashboard() {
 
         <section className="min-w-0">
           <header className="border-b border-[#DCCFB8] bg-white/88">
-            <div className="grid gap-4 px-7 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
+            <div className="grid gap-3 px-5 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -1204,8 +1274,8 @@ export function AdminDashboard() {
                     Admin Dashboard
                   </p>
                   <div className="mt-1 flex items-center gap-2">
-                    <h1 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
-                      Dashboard Overview
+                    <h1 className="font-sans text-2xl font-bold leading-none text-[#0D2E18]">
+                      {activeHeaderTitle}
                     </h1>
                     <button
                       type="button"
@@ -1223,24 +1293,7 @@ export function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2.5 shadow-[0_8px_18px_rgba(13,46,24,0.06)]">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0D2E18] font-sans text-sm font-black text-[#FFF0DA]">
-                  AD
-                </div>
-                <div className="min-w-[120px] font-sans">
-                  <p className="text-sm font-bold text-[#0D2E18]">Admin</p>
-                  <p className="text-[11px] text-[#8C7A64]">Owner Control</p>
-                </div>
-                <span className="h-9 w-px bg-[#DCCFB8]" />
-                <div className="font-sans">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                    Total Sales Today
-                  </p>
-                  <p className="text-xl font-black tabular-nums text-[#0D2E18]">
-                    {peso(totalSalesToday)}
-                  </p>
-                </div>
-              </div>
+              <div className="hidden xl:block" />
 
               <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
                 <div className="relative w-full max-w-[260px]">
@@ -1338,7 +1391,7 @@ export function AdminDashboard() {
             ) : null}
           </header>
 
-          <div className="px-7 py-6">
+          <div className="px-5 py-4 xl:px-6">
             {error ? (
               <div className="mb-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
                 {error}
@@ -1385,7 +1438,7 @@ export function AdminDashboard() {
             ) : null}
 
             {activeTab === "satisfaction" ? (
-              <SatisfactionView itemRanking={scopedItemRanking} />
+              <SatisfactionView feedbackRows={scopedFeedbackRows} />
             ) : null}
 
             {activeTab === "customer-pref" ? (
@@ -1415,6 +1468,7 @@ export function AdminDashboard() {
               <InventoryView
                 inventoryItems={scopedInventoryItems}
                 inventorySummary={inventorySummary}
+                setInventoryItems={setInventoryItems}
               />
             ) : null}
           </div>
