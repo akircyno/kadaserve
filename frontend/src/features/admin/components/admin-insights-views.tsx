@@ -134,6 +134,7 @@ export function ItemRankingView({
 }) {
   const topItems = itemRanking.slice(0, 3);
   const rankedItems = itemRanking.slice(0, 10);
+  const lowPerformingItems = [...itemRanking].slice(-5).reverse();
 
   return (
     <div className="space-y-4">
@@ -207,6 +208,34 @@ export function ItemRankingView({
           {rankedItems.length === 0 ? <EmptyState label="No ranked items yet" /> : null}
         </div>
       </div>
+
+      {lowPerformingItems.length > 0 ? (
+        <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-sans text-lg font-bold text-[#0D2E18]">
+              Low Performing Items
+            </h2>
+            <p className="font-sans text-sm uppercase text-[#684B35]">Lowest sales</p>
+          </div>
+          <div className="mt-3 space-y-3">
+            {lowPerformingItems.map((item, index) => (
+              <div
+                key={`low-${item.item}`}
+                className="grid grid-cols-[34px_1fr_72px_120px] items-center gap-4 border-b border-[#E8D9BE] py-3 font-sans text-[15px] last:border-b-0"
+              >
+                <span className="font-bold text-[#A77B5D]">-{index + 1}</span>
+                <span className="truncate font-semibold text-[#0D2E18]">
+                  {item.item}
+                </span>
+                <span className="font-semibold tabular-nums text-[#684B35]">
+                  {item.orders}
+                </span>
+                <ProgressBar max={maxItemOrders} value={item.orders} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

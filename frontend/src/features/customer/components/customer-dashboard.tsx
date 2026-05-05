@@ -121,6 +121,25 @@ type CustomerRewardsPayload = {
   activeVouchers: ServerRewardVoucher[];
 };
 
+type TopRecommendation = {
+  rank: number;
+  label: "Best for You" | "Popular Picks";
+  basis: "preference" | "popularity";
+  reason: string;
+  item_id: string;
+  item_name: string;
+  price: number;
+  image_url: string | null;
+  preference_score: number | null;
+  item: CustomerMenuItem;
+};
+
+type TopRecommendationsPayload = {
+  source?: "customer_preferences" | "analytics_items";
+  recommendations?: TopRecommendation[];
+  error?: string;
+};
+
 
 const sections: Array<{
   id: Section;
@@ -434,6 +453,27 @@ function getMenuImage(item: CustomerMenuItem) {
   }
 
   return imageUrl;
+}
+
+function getRecommendationDisplayMeta(index: number, hasPersonalizedData: boolean) {
+  if (hasPersonalizedData && index === 0) {
+    return {
+      label: "Recommended for You",
+      tag: "PREFERENCE",
+    };
+  }
+
+  if ((hasPersonalizedData && index === 1) || (!hasPersonalizedData && index === 0)) {
+    return {
+      label: "Top Seller",
+      tag: "POPULARITY",
+    };
+  }
+
+  return {
+    label: "You Might Also Like",
+    tag: "POPULARITY",
+  };
 }
 
 function isPastryMenuItem(item: Pick<CustomerMenuItem, "category">) {
@@ -759,6 +799,10 @@ export function CustomerDashboard({
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
   const [serverRewards, setServerRewards] =
     useState<CustomerRewardsPayload | null>(null);
+  const [topRecommendations, setTopRecommendations] = useState<TopRecommendation[]>([]);
+  const [recommendationSource, setRecommendationSource] = useState<
+    "customer_preferences" | "analytics_items" | null
+  >(null);
   const [isServerRewardsLoading, setIsServerRewardsLoading] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
   const [rewardCelebration, setRewardCelebration] = useState("");
@@ -1244,6 +1288,29 @@ export function CustomerDashboard({
     .filter((recommendation): recommendation is NonNullable<typeof recommendation> =>
       Boolean(recommendation)
     );
+  const persistedRecommendedItems = topRecommendations.map((recommendation) => {
+    const item =
+      uniqueMenuItems.find((menuItem) => menuItem.id === recommendation.item_id) ??
+      recommendation.item;
+
+    return {
+      item,
+      label: recommendation.label,
+      reason: recommendation.reason,
+      basis: recommendation.basis,
+      score: recommendation.preference_score ?? 0,
+    };
+  });
+  const visibleRecommendedItems =
+    persistedRecommendedItems.length > 0 ? persistedRecommendedItems : recommendedItems;
+  const isColdStartRecommendation =
+    recommendationSource === "analytics_items" ||
+    (!recommendationSource && recommendationProfile.isNewCustomer);
+  const hasPersonalizedRecommendations = !isColdStartRecommendation;
+  const displayRecommendedItems = visibleRecommendedItems.map((recommendation, index) => ({
+    ...recommendation,
+    displayMeta: getRecommendationDisplayMeta(index, hasPersonalizedRecommendations),
+  }));
   const monthlyFavorite = useMemo(
     () => getMonthlyFavorite(customerOrders),
     [customerOrders]
@@ -1335,6 +1402,49 @@ export function CustomerDashboard({
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setTopRecommendations([]);
+      setRecommendationSource(null);
+      return;
+    }
+
+    let isActive = true;
+
+    async function loadTopRecommendations() {
+      try {
+        const response = await fetch("/api/customer/recommendations", {
+          method: "GET",
+        });
+        const result = (await response.json()) as TopRecommendationsPayload;
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!response.ok) {
+          setTopRecommendations([]);
+          setRecommendationSource(null);
+          return;
+        }
+
+        setTopRecommendations(result.recommendations ?? []);
+        setRecommendationSource(result.source ?? null);
+      } catch {
+        if (isActive) {
+          setTopRecommendations([]);
+          setRecommendationSource(null);
+        }
+      }
+    }
+
+    void loadTopRecommendations();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isAuthenticated]);
 
   const filteredMenu = useMemo(() => {
     const matchingItems = uniqueMenuItems.filter((item) => {
@@ -1606,7 +1716,21 @@ export function CustomerDashboard({
     window.history.pushState(null, "", `${window.location.pathname}?${params}`);
     setActiveSection("orders");
     setTrackingActionMessage("");
+    setSelectedCurrentOrderId(orderId);
     setTrackingOrderId(orderId);
+  }
+
+  function handleCurrentOrderChange(orderId: string) {
+    setSelectedCurrentOrderId(orderId);
+
+    if (trackingOrderId) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", "orders");
+      params.set("orderId", orderId);
+      window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+      setTrackingActionMessage("");
+      setTrackingOrderId(orderId);
+    }
   }
 
   function closeTrackingModal() {
@@ -2233,7 +2357,7 @@ export function CustomerDashboard({
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                        {recommendationProfile.isNewCustomer
+                        {isColdStartRecommendation
                           ? "Popular Picks"
                           : "Recommended for You"}
                       </p>
@@ -2242,7 +2366,7 @@ export function CustomerDashboard({
                       </h2>
                     </div>
                     <div className="rounded-full bg-[#FFF0D8]/10 px-4 py-2 font-sans text-xs font-bold text-[#FFF0D8]">
-                      {recommendationProfile.isNewCustomer
+                      {isColdStartRecommendation
                         ? "Start ordering to personalize this"
                         : `Monthly favorite: ${monthlyFavorite}`}
                     </div>
@@ -2270,7 +2394,7 @@ export function CustomerDashboard({
                     ref={recommendationScrollerRef}
                     className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    {recommendedItems.map(({ item, label, reason }) => {
+                    {displayRecommendedItems.map(({ item, displayMeta }) => {
                       const menuImage = getMenuImage(item);
 
                       return (
@@ -2309,14 +2433,14 @@ export function CustomerDashboard({
                           <div className="flex min-w-0 flex-1 flex-col p-4 pr-12">
                             <div>
                               <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
-                                {label}
+                                {displayMeta.label}
                               </p>
+                              <span className="mt-1 inline-flex w-fit rounded-full border border-[#DCCFB8] px-2 py-0.5 font-sans text-[10px] font-black tracking-[0.12em] text-[#684B35]">
+                                {displayMeta.tag}
+                              </span>
                               <h3 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
                                 {item.name}
                               </h3>
-                              <p className="mt-2 line-clamp-2 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-[11px] font-bold leading-snug text-[#684B35]">
-                                {reason}
-                              </p>
                             </div>
 
                             <div className="mt-auto flex items-center gap-2 pt-4">
@@ -2448,21 +2572,25 @@ export function CustomerDashboard({
                   </p>
                 </div>
 
-                {currentOrders.length > 1 ? (
+                {currentOrders.length > 0 ? (
                   <label className="block">
                     <span className="sr-only">Choose current order to track</span>
                     <span className="mb-2 block font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                      Current Orders
+                      Current Orders ({currentOrders.length})
                     </span>
                     <div className="relative">
                       <select
                         value={activeOrder?.id ?? ""}
-                        onChange={(event) => setSelectedCurrentOrderId(event.target.value)}
+                        onChange={(event) => handleCurrentOrderChange(event.target.value)}
                         className="min-h-12 w-full appearance-none rounded-full border border-[#DCCFB8] bg-white px-4 pr-12 font-sans text-sm font-semibold text-[#123E26] shadow-[0_6px_16px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/15"
                       >
                         {currentOrders.map((order) => (
                           <option key={order.id} value={order.id}>
-                            {formatOrderCode(order.id)} - {formatStatus(order.status)}
+                            {formatOrderCode(order.id)} - {formatStatus(order.status)} - {formatOrderItemSummary(
+                              order.order_items
+                                .map((item) => item.menu_items?.name)
+                                .filter(Boolean) as string[]
+                            )}
                           </option>
                         ))}
                       </select>
@@ -4159,6 +4287,28 @@ export function CustomerDashboard({
                   {formatOrderType(trackingOrder.order_type)} order placed{" "}
                   {formatDateTime(trackingOrder.ordered_at)}
                 </p>
+                {currentOrders.length > 1 ? (
+                  <label className="mt-3 block max-w-sm">
+                    <span className="sr-only">Switch tracked order</span>
+                    <div className="relative">
+                      <select
+                        value={trackingOrder.id}
+                        onChange={(event) => handleCurrentOrderChange(event.target.value)}
+                        className="min-h-11 w-full appearance-none rounded-full border border-[#DCCFB8] bg-white px-4 pr-10 font-sans text-sm font-bold text-[#0D2E18] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/15"
+                      >
+                        {currentOrders.map((order) => (
+                          <option key={order.id} value={order.id}>
+                            {formatOrderCode(order.id)} - {formatStatus(order.status)}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={17}
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#684B35]"
+                      />
+                    </div>
+                  </label>
+                ) : null}
               </div>
 
               <button

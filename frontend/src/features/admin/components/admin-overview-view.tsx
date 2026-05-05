@@ -199,30 +199,38 @@ export function DashboardView({
   averageRating,
   averageOrderValue,
   grossIncomeSales,
+  hourlyDateLabel,
   hourlyCounts,
   itemRanking,
   maxHourlyOrders,
   maxItemOrders,
   maxWeekdayOrders,
   nonCancelledOrders,
+  weeklyTrendCounts,
+  weeklyTrendLabel,
+  totalOrders,
   search,
   weekdayCounts,
 }: {
   averageRating: number;
   averageOrderValue: number;
   grossIncomeSales: number;
+  hourlyDateLabel: string;
   hourlyCounts: Array<{ label: string; orders: number }>;
   itemRanking: Array<{ item: string; orders: number; revenue: number; rating: number }>;
   maxHourlyOrders: number;
   maxItemOrders: number;
   maxWeekdayOrders: number;
   nonCancelledOrders: StaffOrder[];
+  weeklyTrendCounts: Array<{ label: string; orders: number }>;
+  weeklyTrendLabel: string;
+  totalOrders: number;
   search?: string;
   weekdayCounts: Array<{ day: string; orders: number }>;
 }) {
   const keyword = search?.trim().toLowerCase() ?? "";
   const metricCards = [
-    { label: "Total Orders", value: nonCancelledOrders.length.toString() },
+    { label: "Total Orders", value: totalOrders.toString() },
     { label: "Gross Sales", value: peso(grossIncomeSales) },
     { label: "Avg Order Value", value: peso(averageOrderValue) },
     { label: "Avg Rating", value: averageRating ? averageRating.toFixed(1) : "N/A" },
@@ -253,13 +261,18 @@ export function DashboardView({
     !keyword ||
     matchesSearch("Hourly Order Volume", keyword) ||
     hourlyCounts.some((item) => matchesSearch(item.label, keyword));
+  const showWeekly =
+    !keyword ||
+    matchesSearch("Weekly Trend", keyword) ||
+    weeklyTrendCounts.some((item) => matchesSearch(item.label, keyword));
   const hasDashboardResults =
     visibleMetricCards.length > 0 ||
     showOrdersWeek ||
     showPeakHours ||
     showTopItems ||
     showSatisfaction ||
-    showHourly;
+    showHourly ||
+    showWeekly;
 
   return (
     <div className="space-y-4">
@@ -353,7 +366,7 @@ export function DashboardView({
 
       {showHourly ? (
         <div id="admin-hourly-order-volume" className="scroll-mt-28">
-        <Panel title="Hourly Order Volume">
+        <Panel title="Hourly Order Volume" rightLabel={hourlyDateLabel}>
         <div className="mt-5 flex items-end gap-3 overflow-x-auto pb-2">
           {hourlyCounts.map((item) => (
             <div key={item.label} className="flex min-w-[62px] flex-col items-center gap-2">
@@ -368,6 +381,35 @@ export function DashboardView({
             </div>
           ))}
         </div>
+        </Panel>
+        </div>
+      ) : null}
+
+      {showWeekly ? (
+        <div id="admin-weekly-trend" className="scroll-mt-28">
+        <Panel title="Weekly Trend" rightLabel={weeklyTrendLabel}>
+        {weeklyTrendCounts.length > 0 ? (
+          <div className="mt-5 flex items-end gap-3 overflow-x-auto pb-2">
+            {weeklyTrendCounts.map((item) => (
+              <div key={item.label} className="flex min-w-[84px] flex-col items-center gap-2">
+                <p className="font-sans text-[15px] tabular-nums text-[#0D2E18]">{item.orders}</p>
+                <div
+                  className="w-12 rounded-full bg-[#684B35]"
+                  style={{
+                    height: `${Math.max(10, (item.orders / Math.max(1, ...weeklyTrendCounts.map((entry) => entry.orders))) * 44)}px`,
+                  }}
+                />
+                <p className="text-center font-sans text-[12px] leading-tight text-[#0D2E18]">
+                  {item.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState label="No weekly analytics yet" />
+          </div>
+        )}
         </Panel>
         </div>
       ) : null}

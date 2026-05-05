@@ -1,44 +1,46 @@
 "use client";
 
-import type { StaffOrder } from "@/types/orders";
+export type PeakHourWindow = {
+  id: string;
+  day_of_week: number;
+  hour_start: number;
+  hour_end: number;
+  avg_order_count: number;
+  intensity: string;
+  detected_at: string;
+};
 
-const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
+const weekDays = [
+  { label: "MON", value: 1 },
+  { label: "TUES", value: 2 },
+  { label: "WED", value: 3 },
+  { label: "THURS", value: 4 },
+  { label: "FRI", value: 5 },
+  { label: "SAT", value: 6 },
+  { label: "SUN", value: 0 },
+];
+const peakHourNumbers = Array.from({ length: 24 }, (_, hour) => hour);
 
-function normalizeWeekday(value: string) {
-  const day = new Date(value)
-    .toLocaleDateString("en-US", { weekday: "short" })
-    .toUpperCase();
+function formatHourNumber(hour: number) {
+  const normalizedHour = ((hour % 24) + 24) % 24;
+  const displayHour = normalizedHour % 12 || 12;
+  const suffix = normalizedHour < 12 ? "A" : "P";
 
-  if (day === "TUE") return "TUES";
-  if (day === "THU") return "THURS";
-
-  return day;
+  return `${displayHour}${suffix}`;
 }
 
-function parseHourLabel(label: string) {
-  const hourNumber = Number(label.replace(/\D/g, ""));
-  const isPm = label.includes("P") && hourNumber !== 12;
-  const isMidnight = label.includes("A") && hourNumber === 12;
-
-  if (isMidnight) return 0;
-  return isPm ? hourNumber + 12 : hourNumber;
+function getDayLabel(dayOfWeek: number) {
+  return weekDays.find((day) => day.value === dayOfWeek)?.label ?? "DAY";
 }
 
-function countOrdersForSlot(orders: StaffOrder[], day: string, hourLabel: string) {
-  const hour = parseHourLabel(hourLabel);
-
-  return orders.filter((order) => {
-    const orderedAt = new Date(order.ordered_at);
-
-    return normalizeWeekday(order.ordered_at) === day && orderedAt.getHours() === hour;
-  }).length;
+function formatOrderCount(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function getHeatmapColor(count: number, max: number) {
-  if (count === 0) return "#F7FBF5";
+function getHeatmapColor(avgOrderCount: number, max: number) {
+  if (avgOrderCount === 0) return "#F7FBF5";
 
-  const ratio = count / max;
+  const ratio = avgOrderCount / max;
 
   if (ratio >= 0.8) return "#684B35";
   if (ratio >= 0.6) return "#8C5F3C";
@@ -46,29 +48,6 @@ function getHeatmapColor(count: number, max: number) {
   if (ratio >= 0.2) return "#D0AC91";
 
   return "#FFF0DA";
-}
-
-function getDetectedPeakWindows(orders: StaffOrder[]) {
-  return weekDays
-    .map((day) => {
-      const slots = peakHourLabels.map((hour) => ({
-        hour,
-        orders: countOrdersForSlot(orders, day, hour),
-      }));
-      const peakSlot = slots.reduce(
-        (best, current) => (current.orders > best.orders ? current : best),
-        slots[0] ?? { hour: "N/A", orders: 0 }
-      );
-
-      return {
-        day,
-        orders: peakSlot.orders,
-        window: peakSlot.hour === "N/A" ? "No data" : `${peakSlot.hour} peak`,
-      };
-    })
-    .filter((window) => window.orders > 0)
-    .sort((first, second) => second.orders - first.orders)
-    .slice(0, 5);
 }
 
 function Panel({
@@ -104,42 +83,60 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Heatmap({ orders }: { orders: StaffOrder[] }) {
+function Heatmap({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
+  const rowsBySlot = new Map(
+    peakHourWindows.map((row) => [
+      `${Number(row.day_of_week)}:${Number(row.hour_start)}`,
+      row,
+    ])
+  );
   const maxOrders = Math.max(
     1,
-    ...weekDays.flatMap((day) =>
-      peakHourLabels.map((hour) => countOrdersForSlot(orders, day, hour))
-    )
+    ...peakHourWindows.map((row) => Number(row.avg_order_count ?? 0))
   );
 
   return (
-    <div className="mt-4 space-y-3">
-      {weekDays.map((day, dayIndex) => (
-        <div key={day} className="grid grid-cols-[48px_1fr] items-center gap-3">
-          <span className="font-sans text-sm">{day}</span>
-          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${peakHourLabels.length}, minmax(0, 1fr))` }}>
-            {peakHourLabels.map((hour) => {
-              const count = countOrdersForSlot(orders, day, hour);
+    <div className="mt-4 overflow-x-auto pb-2">
+      <div className="min-w-[1680px] space-y-3">
+        {weekDays.map((day) => (
+          <div key={day.label} className="grid grid-cols-[48px_1fr] items-center gap-3">
+            <span className="font-sans text-sm">{day.label}</span>
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}
+            >
+              {peakHourNumbers.map((hour) => {
+                const row = rowsBySlot.get(`${day.value}:${hour}`);
+                const avgOrderCount = Number(row?.avg_order_count ?? 0);
+                const label = `${day.label} ${formatHourNumber(hour)}: ${formatOrderCount(
+                  avgOrderCount
+                )} avg orders`;
 
-              return (
-                <div
-                  key={`${day}-${hour}-${dayIndex}`}
-                  aria-label={`${day} ${hour}: ${count} orders`}
-                  className="h-6 rounded-[6px]"
-                  style={{ backgroundColor: getHeatmapColor(count, maxOrders) }}
-                  title={`${day} ${hour}: ${count} orders`}
-                />
-              );
-            })}
+                return (
+                  <div
+                    key={`${day.label}-${hour}`}
+                    aria-label={label}
+                    className="h-6 rounded-[6px]"
+                    style={{
+                      backgroundColor: getHeatmapColor(avgOrderCount, maxOrders),
+                    }}
+                    title={label}
+                  />
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
-      <div className="ml-[60px] grid gap-3" style={{ gridTemplateColumns: `repeat(${peakHourLabels.length}, minmax(0, 1fr))` }}>
-        {peakHourLabels.map((hour) => (
-          <span key={hour} className="text-center font-sans text-sm text-[#8C7A64]">
-            {hour}
-          </span>
         ))}
+        <div
+          className="ml-[60px] grid gap-2"
+          style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}
+        >
+          {peakHourNumbers.map((hour) => (
+            <span key={hour} className="text-center font-sans text-xs text-[#8C7A64]">
+              {formatHourNumber(hour)}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -154,9 +151,11 @@ function EmptyState({ label }: { label: string }) {
 }
 
 export function TimeSeriesView({
+  dateLabel,
   hourlyCounts,
   maxHourlyOrders,
 }: {
+  dateLabel: string;
   hourlyCounts: Array<{ label: string; orders: number }>;
   maxHourlyOrders: number;
 }) {
@@ -175,10 +174,10 @@ export function TimeSeriesView({
       <div className="rounded-[18px] border border-[#DCCFB8] bg-white px-5 py-4 shadow-[0_10px_24px_rgba(13,46,24,0.06)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-            5:00 PM - 12:00 AM
+            12:00 AM - 11:00 PM
           </p>
           <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
-            {total} total orders
+            {dateLabel} - {total} total orders
           </span>
         </div>
       </div>
@@ -233,7 +232,7 @@ export function TimeSeriesView({
               <span>Trend</span>
             </div>
             <div>
-              {hourlyCounts.slice(0, 8).map((item, index, list) => {
+              {hourlyCounts.map((item, index, list) => {
                 const previous = list[index - 1]?.orders ?? item.orders;
                 return (
                   <div
@@ -258,26 +257,47 @@ export function TimeSeriesView({
   );
 }
 
-export function PeakHoursView({ orders }: { orders: StaffOrder[] }) {
-  const detectedPeakWindows = getDetectedPeakWindows(orders);
+export function PeakHoursView({
+  peakHourWindows,
+}: {
+  peakHourWindows: PeakHourWindow[];
+}) {
+  const detectedPeakWindows = [...peakHourWindows]
+    .sort(
+      (first, second) =>
+        Number(second.avg_order_count ?? 0) - Number(first.avg_order_count ?? 0) ||
+        Number(first.day_of_week ?? 0) - Number(second.day_of_week ?? 0) ||
+        Number(first.hour_start ?? 0) - Number(second.hour_start ?? 0)
+    )
+    .slice(0, 5);
 
   return (
     <div className="space-y-5">
       <Panel title="Hourly Order Volume">
-        <Heatmap orders={orders} />
+        <Heatmap peakHourWindows={peakHourWindows} />
       </Panel>
       <Panel title="Detected Peak Windows">
         <div className="grid gap-5 p-4 md:grid-cols-5">
           {detectedPeakWindows.map((peak) => (
-            <div key={peak.day} className="rounded-[14px] bg-[#F7FBF5] p-4 font-sans text-sm">
-              <p className="font-bold">{peak.day === "TUES" ? "Tuesday" : peak.day}</p>
-              <p className="mt-2 font-bold text-[#0D2E18]">{peak.window}</p>
-              <p className="mt-2 text-[#684B35]">{peak.orders} orders</p>
+            <div
+              key={`${peak.day_of_week}-${peak.hour_start}`}
+              className="rounded-[14px] bg-[#F7FBF5] p-4 font-sans text-sm"
+            >
+              <p className="font-bold">{getDayLabel(Number(peak.day_of_week))}</p>
+              <p className="mt-2 font-bold text-[#0D2E18]">
+                {formatHourNumber(Number(peak.hour_start))} peak
+              </p>
+              <p className="mt-2 text-[#684B35]">
+                {formatOrderCount(Number(peak.avg_order_count ?? 0))} avg orders
+              </p>
+              <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-[#8C7A64]">
+                {peak.intensity}
+              </p>
             </div>
           ))}
           {detectedPeakWindows.length === 0 ? (
             <div className="md:col-span-5">
-              <EmptyState label="Waiting for order data" />
+              <EmptyState label="Waiting for peak-hour data" />
             </div>
           ) : null}
         </div>

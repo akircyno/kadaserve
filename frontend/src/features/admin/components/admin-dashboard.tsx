@@ -27,6 +27,7 @@ import { OrdersView } from "@/features/admin/components/admin-orders-view";
 import {
   PeakHoursView,
   TimeSeriesView,
+  type PeakHourWindow,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
 import { inventoryItems as initialInventoryItems } from "@/features/admin/data/inventory-items";
@@ -38,7 +39,7 @@ import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const hourLabels = ["5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM", "12AM"];
+const hourNumbers = Array.from({ length: 24 }, (_, hour) => hour);
 
 function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
@@ -82,24 +83,56 @@ function normalizeWeekday(value: string) {
   return day;
 }
 
-function parseHourLabel(label: string) {
-  const hourNumber = Number(label.replace(/\D/g, ""));
-  const isPm = label.includes("P") && hourNumber !== 12;
-  const isMidnight = label.includes("A") && hourNumber === 12;
+function formatHourNumber(hour: number) {
+  const normalizedHour = ((hour % 24) + 24) % 24;
+  const displayHour = normalizedHour % 12 || 12;
+  const suffix = normalizedHour < 12 ? "AM" : "PM";
 
-  if (isMidnight) return 0;
-  return isPm ? hourNumber + 12 : hourNumber;
+  return `${displayHour}${suffix}`;
 }
 
-function formatHourLabel(dateValue: string) {
-  return new Date(dateValue)
-    .toLocaleTimeString("en-PH", {
-      hour: "numeric",
-      hour12: true,
-    })
-    .replace(":00", "")
-    .replace(" ", "")
-    .toUpperCase();
+function formatAnalyticsDateLabel(value: string | null) {
+  if (!value) {
+    return "Latest analytics day";
+  }
+
+  return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-PH", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Manila",
+  });
+}
+
+function formatWeeklyRangeLabel(weekStartDate: string, weekEndDate: string) {
+  const start = new Date(`${weekStartDate}T00:00:00+08:00`).toLocaleDateString(
+    "en-PH",
+    {
+      month: "short",
+      day: "numeric",
+      timeZone: "Asia/Manila",
+    }
+  );
+  const end = new Date(`${weekEndDate}T00:00:00+08:00`).toLocaleDateString(
+    "en-PH",
+    {
+      month: "short",
+      day: "numeric",
+      timeZone: "Asia/Manila",
+    }
+  );
+
+  return `${start} - ${end}`;
+}
+
+function getManilaHour(value: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0);
 }
 
 function peso(value: number) {
@@ -161,6 +194,51 @@ type AdminRewardsPayload = {
   };
 };
 
+type AdminAnalyticsDailyRow = {
+  id: string;
+  order_date: string;
+  day_of_week: string;
+  order_count: number;
+  total_revenue: number;
+  avg_order_value: number;
+  avg_rating: number;
+};
+
+type AdminAnalyticsHourlyRow = {
+  id: string;
+  order_date: string;
+  day_of_week: string;
+  hour_of_day: number;
+  hour_label: string;
+  order_count: number;
+  total_revenue: number;
+  avg_order_value: number;
+  avg_rating: number;
+  updated_at: string;
+};
+
+type AdminAnalyticsWeeklyRow = {
+  id: string;
+  week_start_date: string;
+  week_end_date: string;
+  order_count: number;
+  total_revenue: number;
+  avg_order_value: number;
+  updated_at: string;
+};
+
+type AdminAnalyticsItemRow = {
+  id: string;
+  item_id: string;
+  item_name: string;
+  order_count: number;
+  quantity_sold: number;
+  total_revenue: number;
+  avg_rating: number;
+  sales_rank: number;
+  updated_at: string;
+};
+
 type AdminInventoryPayload = {
   inventoryItems?: InventoryItem[];
   item?: InventoryItem;
@@ -169,6 +247,20 @@ type AdminInventoryPayload = {
 
 function normalizeSuggestion(value: string) {
   return value.trim().replaceAll("_", " ");
+}
+
+function normalizeAnalyticsWeekday(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized.startsWith("mon")) return "MON";
+  if (normalized.startsWith("tue")) return "TUES";
+  if (normalized.startsWith("wed")) return "WED";
+  if (normalized.startsWith("thu")) return "THURS";
+  if (normalized.startsWith("fri")) return "FRI";
+  if (normalized.startsWith("sat")) return "SAT";
+  if (normalized.startsWith("sun")) return "SUN";
+
+  return value.slice(0, 4).toUpperCase();
 }
 
 function RewardsManagementView({
@@ -446,6 +538,15 @@ export function AdminDashboard() {
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
   const [inventoryItems, setInventoryItems] =
     useState<InventoryItem[]>(initialInventoryItems);
+  const [analyticsDaily, setAnalyticsDaily] = useState<AdminAnalyticsDailyRow[]>([]);
+  const [analyticsHourly, setAnalyticsHourly] = useState<AdminAnalyticsHourlyRow[]>(
+    []
+  );
+  const [analyticsWeekly, setAnalyticsWeekly] = useState<AdminAnalyticsWeeklyRow[]>(
+    []
+  );
+  const [analyticsItems, setAnalyticsItems] = useState<AdminAnalyticsItemRow[]>([]);
+  const [peakHourWindows, setPeakHourWindows] = useState<PeakHourWindow[]>([]);
   const [isInventorySaving, setIsInventorySaving] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState("");
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
@@ -488,6 +589,38 @@ export function AdminDashboard() {
   const averageOrderValue = paidOrders.length
     ? grossIncomeSales / paidOrders.length
     : 0;
+  const analyticsDailySummary = useMemo(() => {
+    if (analyticsDaily.length === 0) {
+      return null;
+    }
+
+    const totalOrders = analyticsDaily.reduce(
+      (sum, row) => sum + Number(row.order_count ?? 0),
+      0
+    );
+    const totalRevenue = analyticsDaily.reduce(
+      (sum, row) => sum + Number(row.total_revenue ?? 0),
+      0
+    );
+    const weightedRating = analyticsDaily.reduce(
+      (sum, row) => sum + Number(row.avg_rating ?? 0) * Number(row.order_count ?? 0),
+      0
+    );
+    const weekdayCounts = weekDays.map((day) => ({
+      day,
+      orders: analyticsDaily
+        .filter((row) => normalizeAnalyticsWeekday(row.day_of_week) === day)
+        .reduce((sum, row) => sum + Number(row.order_count ?? 0), 0),
+    }));
+
+    return {
+      totalOrders,
+      totalRevenue,
+      averageOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
+      averageRating: totalOrders ? weightedRating / totalOrders : 0,
+      weekdayCounts,
+    };
+  }, [analyticsDaily]);
   const syncMeta = isLoading
     ? "Syncing..."
     : `Auto-sync 15s${
@@ -629,6 +762,24 @@ export function AdminDashboard() {
       (first, second) => second.orders - first.orders
     );
   }, [nonCancelledOrders]);
+  const analyticsItemRanking = useMemo(
+    () =>
+      [...analyticsItems]
+        .sort(
+          (first, second) =>
+            Number(first.sales_rank ?? 0) - Number(second.sales_rank ?? 0) ||
+            Number(second.total_revenue ?? 0) - Number(first.total_revenue ?? 0)
+        )
+        .map((row) => ({
+          item: row.item_name,
+          orders: Number(row.quantity_sold ?? 0),
+          revenue: Number(row.total_revenue ?? 0),
+          rating: Number(row.avg_rating ?? 0),
+        })),
+    [analyticsItems]
+  );
+  const displayItemRanking =
+    analyticsItemRanking.length > 0 ? analyticsItemRanking : itemRanking;
   const scopedItemRanking = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -636,10 +787,10 @@ export function AdminDashboard() {
       !keyword ||
       !["item-ranking", "satisfaction", "dashboard"].includes(activeTab)
     ) {
-      return itemRanking;
+      return displayItemRanking;
     }
 
-    return itemRanking.filter((item) =>
+    return displayItemRanking.filter((item) =>
       [
         item.item,
         item.orders.toString(),
@@ -650,7 +801,7 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, itemRanking]);
+  }, [activeTab, debouncedSearch, displayItemRanking]);
   const scopedFeedbackRows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -714,19 +865,66 @@ export function AdminDashboard() {
     }));
   }, [nonCancelledOrders]);
 
+  const analyticsHourlyCounts = useMemo(() => {
+    if (analyticsHourly.length === 0) {
+      return null;
+    }
+
+    const rowsByHour = new Map(
+      analyticsHourly.map((row) => [Number(row.hour_of_day), row])
+    );
+
+    return hourNumbers.map((hour) => {
+      const row = rowsByHour.get(hour);
+
+      return {
+        label: row?.hour_label ?? formatHourNumber(hour),
+        orders: Number(row?.order_count ?? 0),
+      };
+    });
+  }, [analyticsHourly]);
+  const analyticsHourlyDateLabel = formatAnalyticsDateLabel(
+    analyticsHourly[0]?.order_date ?? null
+  );
+  const weeklyTrendCounts = useMemo(() => {
+    if (analyticsWeekly.length === 0) {
+      return [];
+    }
+
+    return [...analyticsWeekly]
+      .sort(
+        (left, right) =>
+          new Date(`${left.week_start_date}T00:00:00+08:00`).getTime() -
+          new Date(`${right.week_start_date}T00:00:00+08:00`).getTime()
+      )
+      .slice(-8)
+      .map((row) => ({
+        label: formatWeeklyRangeLabel(row.week_start_date, row.week_end_date),
+        orders: Number(row.order_count ?? 0),
+      }));
+  }, [analyticsWeekly]);
+  const weeklyTrendLabel = analyticsWeekly[0]
+    ? formatWeeklyRangeLabel(
+        analyticsWeekly[0].week_start_date,
+        analyticsWeekly[0].week_end_date
+      )
+    : "Weekly Trend";
   const hourlyCounts = useMemo(() => {
-    return hourLabels.map((label) => {
-      const hour = parseHourLabel(label.replace("AM", "A").replace("PM", "P"));
+    if (analyticsHourlyCounts) {
+      return analyticsHourlyCounts;
+    }
+
+    return hourNumbers.map((hour) => {
       const ordersInHour = nonCancelledOrders.filter(
-        (order) => new Date(order.ordered_at).getHours() === hour
+        (order) => getManilaHour(order.ordered_at) === hour
       ).length;
 
       return {
-        label,
+        label: formatHourNumber(hour),
         orders: ordersInHour,
       };
     });
-  }, [nonCancelledOrders]);
+  }, [analyticsHourlyCounts, nonCancelledOrders]);
   const scopedHourlyCounts = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -741,26 +939,25 @@ export function AdminDashboard() {
         .includes(keyword)
     );
   }, [activeTab, debouncedSearch, hourlyCounts]);
-  const scopedPeakHourOrders = useMemo(() => {
+  const scopedPeakHourWindows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
     if (activeTab !== "peak-hours" || !keyword) {
-      return orders;
+      return peakHourWindows;
     }
 
-    return orders.filter((order) =>
+    return peakHourWindows.filter((window) =>
       [
-        normalizeWeekday(order.ordered_at),
-        formatHourLabel(order.ordered_at),
-        getOrderDisplayName(order),
-        order.status,
-        order.order_type,
+        String(window.day_of_week),
+        formatHourNumber(Number(window.hour_start)),
+        `${window.avg_order_count} avg orders`,
+        window.intensity,
       ]
         .join(" ")
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, orders]);
+  }, [activeTab, debouncedSearch, peakHourWindows]);
 
   const maxHourlyOrders = Math.max(1, ...hourlyCounts.map((item) => item.orders));
   const maxScopedHourlyOrders = Math.max(
@@ -768,7 +965,7 @@ export function AdminDashboard() {
     ...scopedHourlyCounts.map((item) => item.orders)
   );
   const maxWeekdayOrders = Math.max(1, ...weekdayCounts.map((item) => item.orders));
-  const maxItemOrders = Math.max(1, ...itemRanking.map((item) => item.orders));
+  const maxItemOrders = Math.max(1, ...displayItemRanking.map((item) => item.orders));
   const maxScopedItemOrders = Math.max(
     1,
     ...scopedItemRanking.map((item) => item.orders)
@@ -777,6 +974,13 @@ export function AdminDashboard() {
     ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
       feedbackRows.length
     : 0;
+  const dashboardMetrics = analyticsDailySummary ?? {
+    totalOrders: nonCancelledOrders.length,
+    totalRevenue: grossIncomeSales,
+    averageOrderValue,
+    averageRating,
+    weekdayCounts,
+  };
   const searchSuggestions = useMemo<AdminSearchSuggestion[]>(() => {
     const suggestions: AdminSearchSuggestion[] = [];
     const seen = new Set<string>();
@@ -799,6 +1003,7 @@ export function AdminDashboard() {
         ["Average Rating", "admin-average-rating"],
         ["Orders - Week", "admin-orders-week"],
         ["Peak Hours", "admin-peak-hours"],
+        ["Weekly Trend", "admin-weekly-trend"],
         ["Top Items", "admin-top-items"],
         ["Satisfaction", "admin-satisfaction"],
         ["Hourly Order Volume", "admin-hourly-order-volume"],
@@ -810,7 +1015,7 @@ export function AdminDashboard() {
           targetId,
         })
       );
-      itemRanking.slice(0, 8).forEach((item) =>
+      displayItemRanking.slice(0, 8).forEach((item) =>
         addSuggestion({
           category: "Top Items",
           label: item.item,
@@ -895,11 +1100,11 @@ export function AdminDashboard() {
         });
       });
     } else if (activeTab === "item-ranking" || activeTab === "satisfaction") {
-      itemRanking.slice(0, 12).forEach((item) =>
+      displayItemRanking.slice(0, 12).forEach((item) =>
         addSuggestion({ category: "Items", label: item.item, query: item.item })
       );
     } else if (activeTab === "peak-hours" || activeTab === "time-series") {
-      ["Peak Hours", "Hourly Order Volume", "5PM", "6PM", "7PM", "8PM"].forEach(
+      ["Peak Hours", "Hourly Order Volume", "12AM", "6AM", "12PM", "6PM"].forEach(
         (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
       );
     } else if (activeTab === "customer-pref") {
@@ -932,7 +1137,7 @@ export function AdminDashboard() {
         return firstNumeric - secondNumeric;
       })
       .slice(0, 8);
-  }, [activeTab, inventoryItems, itemRanking, menuItems, orders, search]);
+  }, [activeTab, displayItemRanking, inventoryItems, menuItems, orders, search]);
   const inventorySummary = {
     total: inventoryItems.length,
     normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Normal").length,
@@ -1037,12 +1242,22 @@ export function AdminDashboard() {
         inventoryResponse,
         feedbackResponse,
         rewardsResponse,
+        analyticsResponse,
+        analyticsHourlyResponse,
+        analyticsWeeklyResponse,
+        analyticsItemsResponse,
+        peakHourWindowsResponse,
       ] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
         fetch("/api/admin/inventory", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
         fetch("/api/admin/rewards", { method: "GET" }),
+        fetch("/api/admin/analytics/daily", { method: "GET" }),
+        fetch("/api/admin/analytics/hourly", { method: "GET" }),
+        fetch("/api/admin/analytics/weekly", { method: "GET" }),
+        fetch("/api/admin/analytics/items", { method: "GET" }),
+        fetch("/api/admin/analytics/peak-hours", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
@@ -1050,6 +1265,27 @@ export function AdminDashboard() {
       const inventoryResult = (await inventoryResponse.json()) as AdminInventoryPayload;
       const feedbackResult = await feedbackResponse.json();
       const rewardsResult = await rewardsResponse.json();
+      const analyticsResult = (await analyticsResponse.json()) as {
+        analyticsDaily?: AdminAnalyticsDailyRow[];
+        error?: string;
+      };
+      const analyticsHourlyResult = (await analyticsHourlyResponse.json()) as {
+        analyticsDate?: string;
+        analyticsHourly?: AdminAnalyticsHourlyRow[];
+        error?: string;
+      };
+      const analyticsWeeklyResult = (await analyticsWeeklyResponse.json()) as {
+        analyticsWeekly?: AdminAnalyticsWeeklyRow[];
+        error?: string;
+      };
+      const analyticsItemsResult = (await analyticsItemsResponse.json()) as {
+        analyticsItems?: AdminAnalyticsItemRow[];
+        error?: string;
+      };
+      const peakHourWindowsResult = (await peakHourWindowsResponse.json()) as {
+        peakHourWindows?: PeakHourWindow[];
+        error?: string;
+      };
 
       if (!ordersResponse.ok) {
         setError(ordersResult.error || "Failed to load admin orders.");
@@ -1078,6 +1314,31 @@ export function AdminDashboard() {
       if (rewardsResponse.ok) {
         setAdminRewards(rewardsResult);
       }
+      if (analyticsResponse.ok) {
+        setAnalyticsDaily(analyticsResult.analyticsDaily ?? []);
+      } else {
+        setAnalyticsDaily([]);
+      }
+      if (analyticsHourlyResponse.ok) {
+        setAnalyticsHourly(analyticsHourlyResult.analyticsHourly ?? []);
+      } else {
+        setAnalyticsHourly([]);
+      }
+      if (analyticsWeeklyResponse.ok) {
+        setAnalyticsWeekly(analyticsWeeklyResult.analyticsWeekly ?? []);
+      } else {
+        setAnalyticsWeekly([]);
+      }
+      if (analyticsItemsResponse.ok) {
+        setAnalyticsItems(analyticsItemsResult.analyticsItems ?? []);
+      } else {
+        setAnalyticsItems([]);
+      }
+      if (peakHourWindowsResponse.ok) {
+        setPeakHourWindows(peakHourWindowsResult.peakHourWindows ?? []);
+      } else {
+        setPeakHourWindows([]);
+      }
       setLastSyncedAt(new Date());
     } catch {
       setError("Something went wrong while loading admin data.");
@@ -1100,6 +1361,75 @@ export function AdminDashboard() {
       router.refresh();
     } finally {
       setIsLoggingOut(false);
+    }
+  }
+
+  async function handleRefreshAnalytics() {
+    setError("");
+
+    try {
+      const [
+        dailyResponse,
+        hourlyResponse,
+        weeklyResponse,
+        itemsResponse,
+        customerPreferencesResponse,
+      ] = await Promise.all([
+        fetch("/api/admin/analytics/daily", {
+          method: "POST",
+        }),
+        fetch("/api/admin/analytics/hourly", {
+          method: "POST",
+        }),
+        fetch("/api/admin/analytics/weekly", {
+          method: "POST",
+        }),
+        fetch("/api/admin/analytics/items", {
+          method: "POST",
+        }),
+        fetch("/api/admin/analytics/customer-preferences", {
+          method: "POST",
+        }),
+      ]);
+      const dailyResult = (await dailyResponse.json()) as { error?: string };
+      const hourlyResult = (await hourlyResponse.json()) as { error?: string };
+      const weeklyResult = (await weeklyResponse.json()) as { error?: string };
+      const itemsResult = (await itemsResponse.json()) as { error?: string };
+      const customerPreferencesResult = (await customerPreferencesResponse.json()) as {
+        error?: string;
+      };
+
+      if (
+        !dailyResponse.ok ||
+        !hourlyResponse.ok ||
+        !weeklyResponse.ok ||
+        !itemsResponse.ok ||
+        !customerPreferencesResponse.ok
+      ) {
+        setError(
+          dailyResult.error ||
+            hourlyResult.error ||
+            weeklyResult.error ||
+            itemsResult.error ||
+            customerPreferencesResult.error ||
+            "Failed to refresh analytics."
+        );
+        return;
+      }
+
+      const peakHoursResponse = await fetch("/api/admin/analytics/peak-hours", {
+        method: "POST",
+      });
+      const peakHoursResult = (await peakHoursResponse.json()) as { error?: string };
+
+      if (!peakHoursResponse.ok) {
+        setError(peakHoursResult.error || "Failed to refresh peak-hour windows.");
+        return;
+      }
+
+      await loadAdminData({ showLoading: true });
+    } catch {
+      setError("Something went wrong while refreshing analytics.");
     }
   }
 
@@ -1402,15 +1732,13 @@ export function AdminDashboard() {
                     </h1>
                     <button
                       type="button"
-                      onClick={() => {
-                        loadAdminData({ showLoading: true });
-                        void loadStoreStatus();
-                      }}
+                      onClick={() => void handleRefreshAnalytics()}
                       disabled={isLoading}
-                      aria-label="Sync admin dashboard"
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
+                      aria-label="Refresh analytics"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
                     >
                       <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+                      <span className="hidden sm:inline">Refresh Analytics</span>
                     </button>
                   </div>
                 </div>
@@ -1523,17 +1851,21 @@ export function AdminDashboard() {
 
             {activeTab === "dashboard" ? (
               <DashboardView
-                averageOrderValue={averageOrderValue}
+                averageOrderValue={dashboardMetrics.averageOrderValue}
+                hourlyDateLabel={analyticsHourlyDateLabel}
                 hourlyCounts={hourlyCounts}
-                itemRanking={itemRanking}
+                itemRanking={displayItemRanking}
                 maxHourlyOrders={maxHourlyOrders}
                 maxItemOrders={maxItemOrders}
                 maxWeekdayOrders={maxWeekdayOrders}
                 nonCancelledOrders={nonCancelledOrders}
-                grossIncomeSales={grossIncomeSales}
-                averageRating={averageRating}
+                weeklyTrendCounts={weeklyTrendCounts}
+                weeklyTrendLabel={weeklyTrendLabel}
+                grossIncomeSales={dashboardMetrics.totalRevenue}
+                averageRating={dashboardMetrics.averageRating}
+                totalOrders={dashboardMetrics.totalOrders}
                 search={debouncedSearch}
-                weekdayCounts={weekdayCounts}
+                weekdayCounts={dashboardMetrics.weekdayCounts}
               />
             ) : null}
 
@@ -1546,12 +1878,15 @@ export function AdminDashboard() {
 
             {activeTab === "time-series" ? (
               <TimeSeriesView
+                dateLabel={analyticsHourlyDateLabel}
                 hourlyCounts={scopedHourlyCounts}
                 maxHourlyOrders={maxScopedHourlyOrders}
               />
             ) : null}
 
-            {activeTab === "peak-hours" ? <PeakHoursView orders={scopedPeakHourOrders} /> : null}
+            {activeTab === "peak-hours" ? (
+              <PeakHoursView peakHourWindows={scopedPeakHourWindows} />
+            ) : null}
 
             {activeTab === "item-ranking" ? (
               <ItemRankingView
