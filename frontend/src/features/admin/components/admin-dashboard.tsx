@@ -35,6 +35,15 @@ import type {
   StoreOverrideStatus,
   StoreStatusPayload,
 } from "@/lib/store-status";
+import {
+  getAdminOrderTotals,
+  getAdminOrdersMetricLabel,
+  getAdminReportOrders,
+} from "@/lib/admin-order-totals";
+import {
+  getAnalyticsOrderCount,
+  sortAnalyticsItemsByGlobalRanking,
+} from "@/lib/analytics-ranking";
 import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
@@ -194,16 +203,6 @@ type AdminRewardsPayload = {
   };
 };
 
-type AdminAnalyticsDailyRow = {
-  id: string;
-  order_date: string;
-  day_of_week: string;
-  order_count: number;
-  total_revenue: number;
-  avg_order_value: number;
-  avg_rating: number;
-};
-
 type AdminAnalyticsHourlyRow = {
   id: string;
   order_date: string;
@@ -261,6 +260,15 @@ function normalizeAnalyticsWeekday(value: string) {
   if (normalized.startsWith("sun")) return "SUN";
 
   return value.slice(0, 4).toUpperCase();
+}
+
+function getOrderWeekdayLabel(value: string) {
+  return normalizeAnalyticsWeekday(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Manila",
+      weekday: "long",
+    }).format(new Date(value))
+  );
 }
 
 function RewardsManagementView({
@@ -538,7 +546,6 @@ export function AdminDashboard() {
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
   const [inventoryItems, setInventoryItems] =
     useState<InventoryItem[]>(initialInventoryItems);
-  const [analyticsDaily, setAnalyticsDaily] = useState<AdminAnalyticsDailyRow[]>([]);
   const [analyticsHourly, setAnalyticsHourly] = useState<AdminAnalyticsHourlyRow[]>(
     []
   );
@@ -573,54 +580,25 @@ export function AdminDashboard() {
     [orders]
   );
 
-  const paidOrders = useMemo(
-    () =>
-      orders.filter(
-        (order) =>
-          order.payment_status === "paid" && order.status !== "cancelled"
-      ),
+  const dashboardTimeFilter = "month" as const;
+  const dashboardOrders = useMemo(
+    () => getAdminReportOrders(orders, { timeFilter: dashboardTimeFilter }),
     [orders]
   );
-
-  const grossIncomeSales = useMemo(
-    () => paidOrders.reduce((sum, order) => sum + order.total_amount, 0),
-    [paidOrders]
+  const dashboardOrderTotals = useMemo(
+    () => getAdminOrderTotals(dashboardOrders),
+    [dashboardOrders]
   );
-  const averageOrderValue = paidOrders.length
-    ? grossIncomeSales / paidOrders.length
-    : 0;
-  const analyticsDailySummary = useMemo(() => {
-    if (analyticsDaily.length === 0) {
-      return null;
-    }
-
-    const totalOrders = analyticsDaily.reduce(
-      (sum, row) => sum + Number(row.order_count ?? 0),
-      0
-    );
-    const totalRevenue = analyticsDaily.reduce(
-      (sum, row) => sum + Number(row.total_revenue ?? 0),
-      0
-    );
-    const weightedRating = analyticsDaily.reduce(
-      (sum, row) => sum + Number(row.avg_rating ?? 0) * Number(row.order_count ?? 0),
-      0
-    );
-    const weekdayCounts = weekDays.map((day) => ({
-      day,
-      orders: analyticsDaily
-        .filter((row) => normalizeAnalyticsWeekday(row.day_of_week) === day)
-        .reduce((sum, row) => sum + Number(row.order_count ?? 0), 0),
-    }));
-
-    return {
-      totalOrders,
-      totalRevenue,
-      averageOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
-      averageRating: totalOrders ? weightedRating / totalOrders : 0,
-      weekdayCounts,
-    };
-  }, [analyticsDaily]);
+  const dashboardWeekdayCounts = useMemo(
+    () =>
+      weekDays.map((day) => ({
+        day,
+        orders: dashboardOrders.filter(
+          (order) => getOrderWeekdayLabel(order.ordered_at) === day
+        ).length,
+      })),
+    [dashboardOrders]
+  );
   const syncMeta = isLoading
     ? "Syncing..."
     : `Auto-sync 15s${
@@ -764,17 +742,10 @@ export function AdminDashboard() {
   }, [nonCancelledOrders]);
   const analyticsItemRanking = useMemo(
     () =>
-      [...analyticsItems]
-        .sort(
-          (first, second) =>
-            Number(second.quantity_sold ?? 0) - Number(first.quantity_sold ?? 0) ||
-            Number(second.order_count ?? 0) - Number(first.order_count ?? 0) ||
-            Number(second.total_revenue ?? 0) - Number(first.total_revenue ?? 0) ||
-            Number(first.sales_rank ?? 0) - Number(second.sales_rank ?? 0)
-        )
+      sortAnalyticsItemsByGlobalRanking(analyticsItems)
         .map((row) => ({
           item: row.item_name,
-          orders: Number(row.quantity_sold ?? 0),
+          orders: getAnalyticsOrderCount(row),
           revenue: Number(row.total_revenue ?? 0),
           rating: Number(row.avg_rating ?? 0),
         })),
@@ -782,19 +753,6 @@ export function AdminDashboard() {
   );
   const displayItemRanking =
     analyticsItemRanking.length > 0 ? analyticsItemRanking : itemRanking;
-  useEffect(() => {
-    const adminTopItem = displayItemRanking[0];
-
-    if (!adminTopItem) {
-      return;
-    }
-
-    console.log("[KadaServe Analytics] Source table/query used", {
-      source: analyticsItemRanking.length > 0 ? "analytics_items" : "orders/order_items fallback",
-      sort: "quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
-    });
-    console.log("[KadaServe Analytics] Admin top item result", adminTopItem);
-  }, [analyticsItemRanking.length, displayItemRanking]);
   const scopedItemRanking = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -989,13 +947,14 @@ export function AdminDashboard() {
     ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
       feedbackRows.length
     : 0;
-  const dashboardMetrics = analyticsDailySummary ?? {
-    totalOrders: nonCancelledOrders.length,
-    totalRevenue: grossIncomeSales,
-    averageOrderValue,
+  const dashboardMetrics = {
+    totalOrders: dashboardOrderTotals.totalOrders,
+    totalRevenue: dashboardOrderTotals.totalRevenue,
+    averageOrderValue: dashboardOrderTotals.averageOrderValue,
     averageRating,
-    weekdayCounts,
+    weekdayCounts: dashboardWeekdayCounts,
   };
+  const dashboardTotalOrdersLabel = getAdminOrdersMetricLabel(dashboardTimeFilter);
   const searchSuggestions = useMemo<AdminSearchSuggestion[]>(() => {
     const suggestions: AdminSearchSuggestion[] = [];
     const seen = new Set<string>();
@@ -1012,7 +971,7 @@ export function AdminDashboard() {
 
     if (activeTab === "dashboard") {
       [
-        ["Total Orders", "admin-total-orders"],
+        [dashboardTotalOrdersLabel, "admin-total-orders"],
         ["Gross Sales", "admin-gross-sales"],
         ["Avg Order Value", "admin-avg-order-value"],
         ["Average Rating", "admin-average-rating"],
@@ -1152,7 +1111,15 @@ export function AdminDashboard() {
         return firstNumeric - secondNumeric;
       })
       .slice(0, 8);
-  }, [activeTab, displayItemRanking, inventoryItems, menuItems, orders, search]);
+  }, [
+    activeTab,
+    dashboardTotalOrdersLabel,
+    displayItemRanking,
+    inventoryItems,
+    menuItems,
+    orders,
+    search,
+  ]);
   const inventorySummary = {
     total: inventoryItems.length,
     normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Normal").length,
@@ -1257,7 +1224,6 @@ export function AdminDashboard() {
         inventoryResponse,
         feedbackResponse,
         rewardsResponse,
-        analyticsResponse,
         analyticsHourlyResponse,
         analyticsWeeklyResponse,
         analyticsItemsResponse,
@@ -1268,7 +1234,6 @@ export function AdminDashboard() {
         fetch("/api/admin/inventory", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
         fetch("/api/admin/rewards", { method: "GET" }),
-        fetch("/api/admin/analytics/daily", { method: "GET" }),
         fetch("/api/admin/analytics/hourly", { method: "GET" }),
         fetch("/api/admin/analytics/weekly", { method: "GET" }),
         fetch("/api/admin/analytics/items", { method: "GET" }),
@@ -1280,10 +1245,6 @@ export function AdminDashboard() {
       const inventoryResult = (await inventoryResponse.json()) as AdminInventoryPayload;
       const feedbackResult = await feedbackResponse.json();
       const rewardsResult = await rewardsResponse.json();
-      const analyticsResult = (await analyticsResponse.json()) as {
-        analyticsDaily?: AdminAnalyticsDailyRow[];
-        error?: string;
-      };
       const analyticsHourlyResult = (await analyticsHourlyResponse.json()) as {
         analyticsDate?: string;
         analyticsHourly?: AdminAnalyticsHourlyRow[];
@@ -1328,11 +1289,6 @@ export function AdminDashboard() {
       }
       if (rewardsResponse.ok) {
         setAdminRewards(rewardsResult);
-      }
-      if (analyticsResponse.ok) {
-        setAnalyticsDaily(analyticsResult.analyticsDaily ?? []);
-      } else {
-        setAnalyticsDaily([]);
       }
       if (analyticsHourlyResponse.ok) {
         setAnalyticsHourly(analyticsHourlyResult.analyticsHourly ?? []);
@@ -1879,6 +1835,7 @@ export function AdminDashboard() {
                 grossIncomeSales={dashboardMetrics.totalRevenue}
                 averageRating={dashboardMetrics.averageRating}
                 totalOrders={dashboardMetrics.totalOrders}
+                totalOrdersLabel={dashboardTotalOrdersLabel}
                 search={debouncedSearch}
                 weekdayCounts={dashboardMetrics.weekdayCounts}
               />
@@ -1917,6 +1874,7 @@ export function AdminDashboard() {
             {activeTab === "customer-pref" ? (
               <CustomerPreferenceView
                 feedbackRows={feedbackRows}
+                globalAnalyticsItems={analyticsItems}
                 menuItems={menuItems}
                 orders={scopedCustomerPreferenceOrders}
               />

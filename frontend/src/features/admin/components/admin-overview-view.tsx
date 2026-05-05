@@ -209,6 +209,7 @@ export function DashboardView({
   weeklyTrendCounts,
   weeklyTrendLabel,
   totalOrders,
+  totalOrdersLabel = "Total Orders",
   search,
   weekdayCounts,
 }: {
@@ -225,15 +226,16 @@ export function DashboardView({
   weeklyTrendCounts: Array<{ label: string; orders: number }>;
   weeklyTrendLabel: string;
   totalOrders: number;
+  totalOrdersLabel?: string;
   search?: string;
   weekdayCounts: Array<{ day: string; orders: number }>;
 }) {
   const keyword = search?.trim().toLowerCase() ?? "";
   const metricCards = [
-    { label: "Total Orders", value: totalOrders.toString() },
-    { label: "Gross Sales", value: peso(grossIncomeSales) },
-    { label: "Avg Order Value", value: peso(averageOrderValue) },
-    { label: "Avg Rating", value: averageRating ? averageRating.toFixed(1) : "N/A" },
+    { id: "admin-total-orders", label: totalOrdersLabel, value: totalOrders.toString() },
+    { id: "admin-gross-sales", label: "Gross Sales", value: peso(grossIncomeSales) },
+    { id: "admin-avg-order-value", label: "Avg Order Value", value: peso(averageOrderValue) },
+    { id: "admin-average-rating", label: "Avg Rating", value: averageRating ? averageRating.toFixed(1) : "N/A" },
   ];
   const visibleMetricCards = keyword
     ? metricCards.filter(
@@ -281,7 +283,7 @@ export function DashboardView({
           {visibleMetricCards.map((metric) => (
             <div
               key={metric.label}
-              id={`admin-${metric.label.toLowerCase().replaceAll(" ", "-")}`}
+              id={metric.id}
               className="scroll-mt-28"
             >
               <MetricCard

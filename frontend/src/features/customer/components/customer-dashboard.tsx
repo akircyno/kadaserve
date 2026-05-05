@@ -125,8 +125,8 @@ type CustomerRewardsPayload = {
 
 type TopRecommendation = {
   rank: number;
-  label: "Best for You" | "Popular Picks";
-  basis: "preference" | "popularity";
+  label: "Best for You" | "Top Seller" | "Popular Now";
+  basis: "preference" | "top_seller" | "popularity";
   reason: string;
   item_id: string;
   item_name: string;
@@ -139,25 +139,6 @@ type TopRecommendation = {
 type TopRecommendationsPayload = {
   source?: "customer_preferences" | "analytics_items";
   recommendations?: TopRecommendation[];
-  debug?: {
-    sourceTable?: string;
-    sourceQuery?: string;
-    adminTopItemResult?: {
-      item_id: string | null;
-      item_name: string | null;
-      total_orders: number;
-      order_count: number;
-      quantity_sold: number;
-      total_revenue: number;
-      sales_rank: number;
-    } | null;
-    customerTopSellerResult?: {
-      item_id: string;
-      item_name: string;
-      rank: number;
-      basis: "preference" | "popularity";
-    } | null;
-  };
   error?: string;
 };
 
@@ -484,15 +465,15 @@ function getMenuImage(item: CustomerMenuItem) {
   return imageUrl;
 }
 
-function getRecommendationDisplayMeta(index: number, hasPersonalizedData: boolean) {
-  if (hasPersonalizedData && index === 0) {
+function getRecommendationDisplayMeta(recommendation: MenuRecommendationCard) {
+  if (recommendation.basis === "preference") {
     return {
       label: "Recommended for You",
       tag: "PREFERENCE",
     };
   }
 
-  if ((hasPersonalizedData && index === 1) || (!hasPersonalizedData && index === 0)) {
+  if (recommendation.basis === "top_seller") {
     return {
       label: "Top Seller",
       tag: "POPULARITY",
@@ -631,10 +612,6 @@ function getTrackingSteps(orderType: CustomerOrder["order_type"]) {
     orderType === "delivery" ? "Out for Delivery" : "Pickup",
     orderType === "delivery" ? "Delivered" : "Completed",
   ];
-}
-
-function getOrderItemImage() {
-  return null;
 }
 
 function getMonthlyFavorite(orders: CustomerOrder[]) {
@@ -1219,12 +1196,30 @@ export function CustomerDashboard({
     : 0;
   const trackingOrderItems =
     trackingOrder?.order_items
-      .map((item) => ({
-        id: item.id,
-        quantity: item.quantity,
-        name: item.menu_items?.name ?? "Menu item",
-        imageUrl: getOrderItemImage(),
-      }))
+      .map((item) => {
+        const menuItem = item.menu_items;
+
+        return {
+          id: item.id,
+          quantity: item.quantity,
+          name: menuItem?.name ?? "Menu item",
+          imageUrl: menuItem
+            ? getMenuImage({
+                id: menuItem.id ?? item.id,
+                name: menuItem.name,
+                description: menuItem.description ?? null,
+                category: menuItem.category ?? "",
+                base_price: Number(menuItem.base_price ?? item.unit_price ?? 0),
+                image_url: menuItem.image_url ?? null,
+                is_available: menuItem.is_available ?? true,
+                has_sugar_level: menuItem.has_sugar_level,
+                has_ice_level: menuItem.has_ice_level,
+                has_size_option: menuItem.has_size_option,
+                has_temp_option: menuItem.has_temp_option,
+              })
+            : null,
+        };
+      })
       .slice(0, 4) ?? [];
   const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
   const hasOrderAttention = currentOrders.some((order) =>
@@ -1359,12 +1354,11 @@ export function CustomerDashboard({
   const isColdStartRecommendation =
     recommendationSource === "analytics_items" ||
     (!recommendationSource && recommendationProfile.isNewCustomer);
-  const hasPersonalizedRecommendations = !isColdStartRecommendation;
   const displayRecommendedItems = dedupeRecommendationItems(
     visibleRecommendedItems
-  ).map((recommendation, index) => ({
+  ).map((recommendation) => ({
     ...recommendation,
-    displayMeta: getRecommendationDisplayMeta(index, hasPersonalizedRecommendations),
+    displayMeta: getRecommendationDisplayMeta(recommendation),
   }));
   const monthlyFavorite = useMemo(
     () => getMonthlyFavorite(customerOrders),
@@ -1459,22 +1453,6 @@ export function CustomerDashboard({
   }, []);
 
   useEffect(() => {
-    const customerTopSeller =
-      topRecommendations.find((recommendation) => recommendation.basis === "popularity") ??
-      null;
-
-    if (!customerTopSeller) {
-      return;
-    }
-
-    console.log("[KadaServe Recommendations] Customer top seller result", {
-      item_id: customerTopSeller.item_id,
-      item_name: customerTopSeller.item_name,
-      source: recommendationSource ?? "initial server data",
-    });
-  }, [recommendationSource, topRecommendations]);
-
-  useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
@@ -1502,24 +1480,6 @@ export function CustomerDashboard({
           setRecommendationSource(null);
           return;
         }
-
-        const customerTopSeller =
-          result.recommendations?.find(
-            (recommendation) => recommendation.basis === "popularity"
-          ) ?? null;
-
-        console.log(
-          "[KadaServe Recommendations] Source table/query used",
-          result.debug?.sourceQuery ?? "analytics_items"
-        );
-        console.log(
-          "[KadaServe Recommendations] Admin top item result",
-          result.debug?.adminTopItemResult ?? null
-        );
-        console.log(
-          "[KadaServe Recommendations] Customer top seller result",
-          result.debug?.customerTopSellerResult ?? customerTopSeller
-        );
 
         setTopRecommendations(result.recommendations ?? []);
         setRecommendationSource(result.source ?? null);
@@ -2451,7 +2411,7 @@ export function CustomerDashboard({
                     <div>
                       <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
                         {isColdStartRecommendation
-                          ? "Popular Picks"
+                          ? "Top Sellers"
                           : "Recommended for You"}
                       </p>
                       <h2 className="mt-1 font-display text-3xl font-semibold leading-tight sm:text-4xl">
@@ -4419,7 +4379,7 @@ export function CustomerDashboard({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                      Live Status
+                      Order Status
                     </p>
                     <p className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
                       {formatStatus(trackingOrder.status)}

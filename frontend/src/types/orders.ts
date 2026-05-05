@@ -67,6 +67,14 @@ export type CustomerOrderItem = {
     id?: string;
     name: string;
     category?: string;
+    description?: string | null;
+    base_price?: number;
+    image_url?: string | null;
+    is_available?: boolean;
+    has_sugar_level?: boolean;
+    has_ice_level?: boolean;
+    has_size_option?: boolean;
+    has_temp_option?: boolean;
   } | null;
 };
 

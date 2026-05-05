@@ -804,24 +804,15 @@ export function StaffDashboard() {
 
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <header className="border-b border-[#DCCFB8] bg-[#FFF0DA]">
+      <section className="border-b border-[#DCCFB8] bg-[#FFF0DA]">
         <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 lg:flex-nowrap lg:px-5">
-          <div className="flex min-w-[230px] items-end gap-3">
-            <div>
-              <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
-                Order Queue
-              </p>
-              <h1 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
-                Active Orders
-              </h1>
-            </div>
-
+          <div className="flex min-w-[44px] items-center">
             <button
               type="button"
               onClick={() => loadOrders({ showLoading: true })}
               disabled={isLoading}
               title="Force refresh order queue"
-              className="mb-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
             >
               <RefreshCw
                 size={15}
@@ -908,7 +899,7 @@ export function StaffDashboard() {
             </div>
           </div>
         </div>
-      </header>
+      </section>
 
       <section className="px-4 py-4 lg:px-5">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

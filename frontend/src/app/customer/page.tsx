@@ -5,6 +5,10 @@ import type {
   RecommendationFeedback,
   RecommendationOrder,
 } from "@/lib/recommendations";
+import {
+  getAnalyticsItemId,
+  sortAnalyticsItemsByGlobalRanking,
+} from "@/lib/analytics-ranking";
 import type { CustomerMenuItem } from "@/types/menu";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
@@ -35,8 +39,8 @@ type AnalyticsItemRow = {
 
 type InitialTopRecommendation = {
   rank: number;
-  label: "Best for You" | "Popular Picks";
-  basis: "preference" | "popularity";
+  label: "Best for You" | "Top Seller" | "Popular Now";
+  basis: "preference" | "top_seller" | "popularity";
   reason: string;
   item_id: string;
   item_name: string;
@@ -51,42 +55,6 @@ function getNumberValue(value: unknown) {
   return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
-function getAnalyticsItemId(row: AnalyticsItemRow) {
-  return row.menu_item_id ?? row.item_id ?? null;
-}
-
-function getOrderFrequency(row: AnalyticsItemRow) {
-  return Math.max(getNumberValue(row.quantity_sold), getNumberValue(row.order_count));
-}
-
-function sortAnalyticsItemsByAdminRanking(rows: AnalyticsItemRow[]) {
-  return [...rows].sort((left, right) => {
-    const orderDifference = getOrderFrequency(right) - getOrderFrequency(left);
-
-    if (orderDifference !== 0) {
-      return orderDifference;
-    }
-
-    const revenueDifference =
-      getNumberValue(right.total_revenue) - getNumberValue(left.total_revenue);
-
-    if (revenueDifference !== 0) {
-      return revenueDifference;
-    }
-
-    const rankDifference =
-      getNumberValue(left.sales_rank) - getNumberValue(right.sales_rank);
-
-    if (rankDifference !== 0) {
-      return rankDifference;
-    }
-
-    return (getAnalyticsItemId(left) ?? "").localeCompare(
-      getAnalyticsItemId(right) ?? ""
-    );
-  });
-}
-
 function makeInitialRecommendation({
   item,
   rank,
@@ -95,17 +63,24 @@ function makeInitialRecommendation({
 }: {
   item: CustomerMenuItem;
   rank: number;
-  basis: "preference" | "popularity";
+  basis: "preference" | "top_seller" | "popularity";
   score: number | null;
 }): InitialTopRecommendation {
   return {
     rank,
-    label: basis === "preference" ? "Best for You" : "Popular Picks",
+    label:
+      basis === "preference"
+        ? "Best for You"
+        : basis === "top_seller"
+        ? "Top Seller"
+        : "Popular Now",
     basis,
     reason:
       basis === "preference"
         ? "Recommended from your preference score."
-        : "Popular pick based on item analytics.",
+        : basis === "top_seller"
+        ? "Global most ordered item from Admin Item Ranking."
+        : "Global popular item from Admin Item Ranking.",
     item_id: item.id,
     item_name: item.name,
     price: Number(item.base_price ?? 0),
@@ -267,7 +242,15 @@ export default async function CustomerPage({ searchParams }: PageProps) {
             menu_items (
               id,
               name,
-              category
+              description,
+              category,
+              base_price,
+              image_url,
+              is_available,
+              has_sugar_level,
+              has_ice_level,
+              has_size_option,
+              has_temp_option
             )
           )
         `
@@ -382,21 +365,22 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       "item_id, menu_item_id, item_name, order_count, quantity_sold, total_revenue, sales_rank"
     )
     .returns<AnalyticsItemRow[]>();
-  const sortedAnalyticsRows = sortAnalyticsItemsByAdminRanking(analyticsRows ?? []);
-  const adminTopItemRow = sortedAnalyticsRows[0] ?? null;
+  const sortedAnalyticsRows = sortAnalyticsItemsByGlobalRanking(analyticsRows ?? []);
   const analyticsItemIds = sortedAnalyticsRows
     .map(getAnalyticsItemId)
     .filter((id): id is string => Boolean(id));
   const popularityIds =
     analyticsItemIds.length > 0
-      ? analyticsItemIds.filter((id) => !selectedInitialIds.has(id))
-      : menuItems
-          .filter((item) => !selectedInitialIds.has(item.id))
-          .map((item) => item.id);
+      ? analyticsItemIds
+      : menuItems.map((item) => item.id);
 
-  for (const itemId of popularityIds) {
+  for (const [index, itemId] of popularityIds.entries()) {
     if (initialTopRecommendations.length >= 3) {
       break;
+    }
+
+    if (selectedInitialIds.has(itemId)) {
+      continue;
     }
 
     const item = menuById.get(itemId);
@@ -408,29 +392,13 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     initialTopRecommendations.push(
       makeInitialRecommendation({
         item,
-        rank: initialTopRecommendations.length + 1,
-        basis: "popularity",
+        rank: index + 1,
+        basis: index === 0 ? "top_seller" : "popularity",
         score: null,
       })
     );
+    selectedInitialIds.add(item.id);
   }
-
-  const initialCustomerTopSeller =
-    initialTopRecommendations.find((item) => item.basis === "popularity") ?? null;
-
-  console.log("[KadaServe Recommendations] Source table/query used", {
-    source: sortedAnalyticsRows.length > 0 ? "analytics_items" : "menu_items fallback",
-    sort: "quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
-  });
-  console.log("[KadaServe Recommendations] Admin top item result", {
-    item_id: adminTopItemRow ? getAnalyticsItemId(adminTopItemRow) : null,
-    item_name: adminTopItemRow?.item_name ?? null,
-    total_orders: adminTopItemRow ? getOrderFrequency(adminTopItemRow) : 0,
-  });
-  console.log("[KadaServe Recommendations] Customer top seller result", {
-    item_id: initialCustomerTopSeller?.item_id ?? null,
-    item_name: initialCustomerTopSeller?.item_name ?? null,
-  });
 
   return (
     <CustomerDashboard

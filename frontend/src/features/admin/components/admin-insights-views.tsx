@@ -3,9 +3,16 @@
 import {
   getRecommendationsForCustomer,
   type RecommendationFeedback,
+  type RecommendationGlobalRankItem,
   type RecommendationMenuItem,
   type RecommendationOrder,
 } from "@/lib/recommendations";
+import {
+  getAnalyticsItemId,
+  getAnalyticsOrderCount,
+  sortAnalyticsItemsByGlobalRanking,
+  type AnalyticsRankingRow,
+} from "@/lib/analytics-ranking";
 import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
@@ -378,10 +385,12 @@ export function SatisfactionView({
 
 export function CustomerPreferenceView({
   feedbackRows,
+  globalAnalyticsItems,
   menuItems,
   orders,
 }: {
   feedbackRows: AdminPreferenceFeedbackRow[];
+  globalAnalyticsItems: AnalyticsRankingRow[];
   menuItems: AdminMenuItem[];
   orders: StaffOrder[];
 }) {
@@ -426,6 +435,13 @@ export function CustomerPreferenceView({
       overallRating: row.overall_rating,
     })
   );
+  const globalRanking: RecommendationGlobalRankItem[] =
+    sortAnalyticsItemsByGlobalRanking(globalAnalyticsItems).map((row, index) => ({
+      id: getAnalyticsItemId(row),
+      name: row.item_name ?? "",
+      orderCount: getAnalyticsOrderCount(row),
+      rank: index + 1,
+    }));
   const customers = Array.from(
     recommendationOrders.reduce((map, order) => {
       if (!map.has(order.customerId)) {
@@ -444,6 +460,7 @@ export function CustomerPreferenceView({
       menuItems: recommendationMenuItems,
       orders: recommendationOrders,
       feedback: recommendationFeedback,
+      globalRanking,
     })
   );
   const profiles = customers.sort(

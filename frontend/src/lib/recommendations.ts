@@ -1,15 +1,13 @@
 export type RecommendationBasis =
   | "preference"
-  | "frequency"
-  | "popularity"
-  | "rating";
+  | "top_seller"
+  | "popularity";
 
 export type RecommendationLabel =
-  | "Best for you"
-  | "Your Favorite"
+  | "Best for You"
+  | "Top Seller"
   | "Popular Now"
-  | "Most popular"
-  | "Highest rated";
+  | "You Might Also Like";
 
 export type RecommendationMenuItem = {
   id: string;
@@ -41,6 +39,13 @@ export type RecommendationFeedback = {
   tasteRating?: number | null;
   strengthRating?: number | null;
   overallRating?: number | null;
+};
+
+export type RecommendationGlobalRankItem = {
+  id?: string | null;
+  name: string;
+  orderCount: number;
+  rank?: number;
 };
 
 export type RecommendationResult = {
@@ -96,17 +101,22 @@ function average(values: number[]) {
     : null;
 }
 
-function dedupeRecommendations(recommendations: RecommendationResult[]) {
-  const seen = new Set<string>();
+function appendUniqueRecommendation(
+  recommendations: RecommendationResult[],
+  recommendation: RecommendationResult | null
+) {
+  if (!recommendation) {
+    return;
+  }
 
-  return recommendations.filter((recommendation) => {
-    const key = itemKey(recommendation.item);
+  const key = itemKey(recommendation.item);
+  const hasDuplicate = recommendations.some(
+    (existing) => itemKey(existing.item) === key
+  );
 
-    if (seen.has(key)) return false;
-
-    seen.add(key);
-    return true;
-  });
+  if (!hasDuplicate) {
+    recommendations.push(recommendation);
+  }
 }
 
 function getAvailableMenu(items: RecommendationMenuItem[]) {
@@ -116,7 +126,8 @@ function getAvailableMenu(items: RecommendationMenuItem[]) {
 function getGlobalStats(
   menuItems: RecommendationMenuItem[],
   orders: RecommendationOrder[],
-  feedback: RecommendationFeedback[]
+  feedback: RecommendationFeedback[],
+  globalRanking: RecommendationGlobalRankItem[] = []
 ) {
   const availableItems = getAvailableMenu(menuItems);
   const menuByKey = new Map(
@@ -163,6 +174,44 @@ function getGlobalStats(
 
     return secondCount - firstCount || first.name.localeCompare(second.name);
   });
+  const globalRankedItems = globalRanking
+    .map((rankedItem) => {
+      const menuItem = rankedItem.id
+        ? menuByKey.get(rankedItem.id)
+        : menuByKey.get(normalizeText(rankedItem.name));
+
+      return menuItem
+        ? {
+            item: menuItem,
+            orderCount: Number(rankedItem.orderCount ?? 0),
+            rank: Number(rankedItem.rank ?? 0),
+          }
+        : null;
+    })
+    .filter(
+      (rankedItem): rankedItem is {
+        item: RecommendationMenuItem;
+        orderCount: number;
+        rank: number;
+      } => Boolean(rankedItem)
+    );
+  const rankedSeen = new Set<string>();
+  const canonicalMostPopular = [
+    ...globalRankedItems
+      .filter((rankedItem) => {
+        const key = itemKey(rankedItem.item);
+
+        if (rankedSeen.has(key)) {
+          return false;
+        }
+
+        rankedSeen.add(key);
+        popularity.set(key, rankedItem.orderCount);
+        return true;
+      })
+      .map((rankedItem) => rankedItem.item),
+    ...mostPopular.filter((item) => !rankedSeen.has(itemKey(item))),
+  ];
   const highestRated = [...availableItems].sort((first, second) => {
     const firstRating = average(ratingMap.get(itemKey(first)) ?? []) ?? 0;
     const secondRating = average(ratingMap.get(itemKey(second)) ?? []) ?? 0;
@@ -173,7 +222,7 @@ function getGlobalStats(
   return {
     availableItems,
     menuByKey,
-    mostPopular,
+    mostPopular: canonicalMostPopular,
     highestRated,
     popularity,
     ratingMap,
@@ -202,14 +251,16 @@ export function getRecommendationsForCustomer({
   menuItems,
   orders,
   feedback,
+  globalRanking = [],
 }: {
   customerId: string;
   customerName: string;
   menuItems: RecommendationMenuItem[];
   orders: RecommendationOrder[];
   feedback: RecommendationFeedback[];
+  globalRanking?: RecommendationGlobalRankItem[];
 }): CustomerRecommendationProfile {
-  const globalStats = getGlobalStats(menuItems, orders, feedback);
+  const globalStats = getGlobalStats(menuItems, orders, feedback, globalRanking);
   const customerOrders = orders
     .filter(
       (order) =>
@@ -278,39 +329,22 @@ export function getRecommendationsForCustomer({
   });
 
   if (customerOrders.length === 0) {
-    const mostPopular =
-      globalStats.mostPopular.find(
-        (item) => (globalStats.popularity.get(itemKey(item)) ?? 0) > 0
-      ) ?? globalStats.availableItems[0];
-    const highestRated =
-      globalStats.highestRated.find(
-        (item) => (average(globalStats.ratingMap.get(itemKey(item)) ?? []) ?? 0) > 0
-      ) ??
-      globalStats.availableItems.find(
-        (item) => itemKey(item) !== itemKey(mostPopular)
+    const recommendations: RecommendationResult[] = [];
+
+    globalStats.mostPopular.slice(0, 3).forEach((item, index) => {
+      appendUniqueRecommendation(
+        recommendations,
+        makeRecommendation(
+          item,
+          index === 0 ? "Top Seller" : "Popular Now",
+          index === 0 ? "top_seller" : "popularity",
+          index === 0
+            ? "Global most ordered item from Admin Item Ranking."
+            : "Global popular item from Admin Item Ranking.",
+          globalStats.popularity.get(itemKey(item)) ?? 0
+        )
       );
-    const recommendations = dedupeRecommendations(
-      [
-        mostPopular
-          ? makeRecommendation(
-              mostPopular,
-              "Popular Now",
-              "popularity",
-              "Global top-selling item for discovery.",
-              globalStats.popularity.get(itemKey(mostPopular)) ?? 0
-            )
-          : null,
-        highestRated
-          ? makeRecommendation(
-              highestRated,
-              "Best for you",
-              "rating",
-              "Top-N starter result based on available ratings.",
-              average(globalStats.ratingMap.get(itemKey(highestRated)) ?? []) ?? 0
-            )
-          : null,
-      ].filter(Boolean) as RecommendationResult[]
-    ).slice(0, 2);
+    });
 
     return {
       customerId,
@@ -350,56 +384,39 @@ export function getRecommendationsForCustomer({
   )[0];
   const lastOrderedItem =
     customerOrders[0]?.items[0]?.name ?? "No completed orders yet";
-  const triedKeys = new Set(scoredItems.map((stat) => itemKey(stat.item)));
-  const discover =
-    globalStats.mostPopular.find((item) => !triedKeys.has(itemKey(item))) ??
-    globalStats.highestRated.find((item) => !triedKeys.has(itemKey(item))) ??
-    globalStats.availableItems.find((item) => !triedKeys.has(itemKey(item)));
-  const fallbackItems = [
-    ...globalStats.mostPopular,
-    ...globalStats.highestRated,
-    ...globalStats.availableItems,
-  ];
-  const recommendations = dedupeRecommendations([
+  const recommendations: RecommendationResult[] = [];
+
+  appendUniqueRecommendation(
+    recommendations,
     scoredItems[0]
       ? makeRecommendation(
           scoredItems[0].item,
-          "Best for you",
+          "Best for You",
           "preference",
           "Top-N result based on frequency, recency, and feedback rating.",
           scoredItems[0].score
         )
-      : null,
-    favorite
-      ? makeRecommendation(
-          favorite.item,
-          "Your Favorite",
-          "frequency",
-          `Most frequently ordered item: ${favorite.frequency} ordered.`,
-          favorite.frequency
-        )
-      : null,
-    discover
-      ? makeRecommendation(
-          discover,
-          "Popular Now",
-          (globalStats.popularity.get(itemKey(discover)) ?? 0) > 0
-            ? "popularity"
-            : "rating",
-          "Global top-selling or high-rated item for discovery.",
-          globalStats.popularity.get(itemKey(discover)) ?? 0
-        )
-      : null,
-    ...fallbackItems.map((item) =>
+      : null
+  );
+
+  globalStats.mostPopular.forEach((item, index) => {
+    if (recommendations.length >= 3) {
+      return;
+    }
+
+    appendUniqueRecommendation(
+      recommendations,
       makeRecommendation(
         item,
-        "Popular Now",
-        "popularity",
-        "Global top-selling or high-rated item for discovery.",
+        index === 0 ? "Top Seller" : "Popular Now",
+        index === 0 ? "top_seller" : "popularity",
+        index === 0
+          ? "Global most ordered item from Admin Item Ranking."
+          : "Global popular item from Admin Item Ranking.",
         globalStats.popularity.get(itemKey(item)) ?? 0
       )
-    ),
-  ].filter(Boolean) as RecommendationResult[]).slice(0, 3);
+    );
+  });
 
   return {
     customerId,

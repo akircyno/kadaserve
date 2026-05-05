@@ -3,9 +3,15 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import {
+  getAdminOrderTotals,
+  getAdminReportOrders,
+  getAdminReportRangeLabel,
+  type AdminTimeFilter,
+} from "@/lib/admin-order-totals";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
-type TimeFilter = "today" | "week" | "month" | "year";
+type TimeFilter = AdminTimeFilter;
 
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
@@ -100,45 +106,6 @@ function getEncodedByName(order: StaffOrder) {
   );
 }
 
-function getManilaDateOnly(value: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(value);
-  const year = Number(parts.find((part) => part.type === "year")?.value);
-  const month = Number(parts.find((part) => part.type === "month")?.value);
-  const day = Number(parts.find((part) => part.type === "day")?.value);
-
-  return new Date(year, month - 1, day);
-}
-
-function isWithinTimeFilter(value: string, timeFilter: TimeFilter) {
-  const today = getManilaDateOnly(new Date());
-  const orderDate = getManilaDateOnly(new Date(value));
-
-  if (timeFilter === "today") {
-    return orderDate.getTime() === today.getTime();
-  }
-
-  if (timeFilter === "week") {
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-
-    return orderDate >= startOfWeek && orderDate <= today;
-  }
-
-  if (timeFilter === "month") {
-    return (
-      orderDate.getFullYear() === today.getFullYear() &&
-      orderDate.getMonth() === today.getMonth()
-    );
-  }
-
-  return orderDate.getFullYear() === today.getFullYear();
-}
-
 function getTimeFilterLabel(timeFilter: TimeFilter) {
   switch (timeFilter) {
     case "today":
@@ -150,41 +117,6 @@ function getTimeFilterLabel(timeFilter: TimeFilter) {
     case "year":
       return "This Year";
   }
-}
-
-function getReportRangeLabel(timeFilter: TimeFilter) {
-  const today = getManilaDateOnly(new Date());
-
-  if (timeFilter === "today") {
-    return today.toLocaleDateString("en-PH", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  if (timeFilter === "week") {
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-
-    return `${startOfWeek.toLocaleDateString("en-PH", {
-      month: "long",
-      day: "numeric",
-    })} - ${today.toLocaleDateString("en-PH", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    })}`;
-  }
-
-  if (timeFilter === "month") {
-    return today.toLocaleDateString("en-PH", {
-      month: "long",
-      year: "numeric",
-    });
-  }
-
-  return today.getFullYear().toString();
 }
 
 function csvCell(value: string | number | null | undefined) {
@@ -296,7 +228,7 @@ function buildPdfReportHtml(orders: StaffOrder[], timeFilter: TimeFilter) {
       <body>
         <div class="brand">KadaServe</div>
         <section class="summary">
-          <h1>Sales Report: ${escapeHtml(getReportRangeLabel(timeFilter))}</h1>
+          <h1>Sales Report: ${escapeHtml(getAdminReportRangeLabel(timeFilter))}</h1>
           <p>Total Orders: ${orders.length} | Revenue: ${escapeHtml(peso(revenue))} | Filter: ${escapeHtml(getTimeFilterLabel(timeFilter))}</p>
         </section>
         <table>
@@ -427,28 +359,21 @@ export function OrdersView({
   const [isExportingReport, setIsExportingReport] = useState(false);
 
   const visibleOrders = useMemo(() => {
-    return filteredOrders.filter((order) => {
-      const matchesTime = isWithinTimeFilter(order.ordered_at, timeFilter);
-      const matchesStatus =
-        statusFilter === "all" || order.status === statusFilter;
-      const matchesType =
-        typeFilter === "all" || order.order_type === typeFilter;
-      const matchesPayment =
-        paymentFilter === "all" ||
-        order.payment_status === paymentFilter ||
-        order.payment_method === paymentFilter;
-
-      return matchesTime && matchesStatus && matchesType && matchesPayment;
+    return getAdminReportOrders(filteredOrders, {
+      paymentFilter,
+      statusFilter,
+      timeFilter,
+      typeFilter,
     });
   }, [filteredOrders, paymentFilter, statusFilter, timeFilter, typeFilter]);
 
-  const visibleRevenue = useMemo(
-    () => visibleOrders.reduce((sum, order) => sum + order.total_amount, 0),
+  const visibleTotals = useMemo(
+    () => getAdminOrderTotals(visibleOrders),
     [visibleOrders]
   );
 
   const statusOptions: Array<{ value: "all" | OrderStatus; label: string }> = [
-    { value: "all", label: "All" },
+    { value: "all", label: "All Active" },
     { value: "pending", label: "Pending" },
     { value: "preparing", label: "Preparing" },
     { value: "ready", label: "Ready" },
@@ -562,19 +487,19 @@ export function OrdersView({
               Reporting Hub
             </p>
             <p className="mt-1 font-sans text-sm text-[#0D2E18]">
-              {getReportRangeLabel(timeFilter)}
+              {getAdminReportRangeLabel(timeFilter)}
               <span className="px-2 text-[#B89C73]">/</span>
-              {visibleOrders.length} orders
+              {visibleTotals.totalOrders} orders
               <span className="px-2 text-[#B89C73]">/</span>
-              {peso(visibleRevenue)}
+              {peso(visibleTotals.totalRevenue)}
             </p>
             <p className="hidden">
-              {getReportRangeLabel(timeFilter)} · {visibleOrders.length} orders ·{" "}
-              {peso(visibleRevenue)}
+              {getAdminReportRangeLabel(timeFilter)} · {visibleTotals.totalOrders} orders ·{" "}
+              {peso(visibleTotals.totalRevenue)}
             </p>
           </div>
           <span className="rounded-full bg-[#E7F4EA] px-4 py-2 font-sans text-sm font-bold text-[#0D2E18]">
-            {visibleOrders.length} shown
+            {visibleTotals.totalOrders} shown
           </span>
         </div>
 

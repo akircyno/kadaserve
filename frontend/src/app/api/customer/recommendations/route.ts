@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getAnalyticsItemId,
+  sortAnalyticsItemsByGlobalRanking,
+} from "@/lib/analytics-ranking";
 
 type CustomerPreferenceRow = {
   menu_item_id: string | null;
@@ -31,7 +35,8 @@ type MenuItemRow = {
   has_temp_option: boolean | null;
 };
 
-type RecommendationBasis = "preference" | "popularity";
+type RecommendationBasis = "preference" | "top_seller" | "popularity";
+type RecommendationCard = ReturnType<typeof normalizeMenuItem>;
 
 const MENU_ITEM_COLUMNS =
   "id, name, description, category, base_price, image_url, is_available, has_sugar_level, has_ice_level, has_size_option, has_temp_option";
@@ -49,12 +54,19 @@ function normalizeMenuItem(
 ) {
   return {
     rank,
-    label: basis === "preference" ? "Best for You" : "Popular Picks",
+    label:
+      basis === "preference"
+        ? "Best for You"
+        : basis === "top_seller"
+        ? "Top Seller"
+        : "Popular Now",
     basis,
     reason:
       basis === "preference"
         ? "Recommended from your preference score."
-        : "Popular pick based on item analytics.",
+        : basis === "top_seller"
+        ? "Global most ordered item from Admin Item Ranking."
+        : "Global popular item from Admin Item Ranking.",
     item_id: item.id,
     item_name: item.name,
     price: Number(item.base_price ?? 0),
@@ -99,56 +111,16 @@ function sortMenuByRequestedIds(menuItems: MenuItemRow[], requestedIds: string[]
   );
 }
 
-function getAnalyticsItemId(row: AnalyticsItemRow) {
-  return row.menu_item_id ?? row.item_id ?? null;
-}
-
-function getOrderFrequency(row: AnalyticsItemRow) {
-  return Math.max(getNumberValue(row.quantity_sold), getNumberValue(row.order_count));
-}
-
-function sortAnalyticsItemsByFrequency(rows: AnalyticsItemRow[]) {
-  return [...rows].sort((left, right) => {
-    const orderDifference = getOrderFrequency(right) - getOrderFrequency(left);
-
-    if (orderDifference !== 0) {
-      return orderDifference;
-    }
-
-    const revenueDifference =
-      getNumberValue(right.total_revenue) - getNumberValue(left.total_revenue);
-
-    if (revenueDifference !== 0) {
-      return revenueDifference;
-    }
-
-    const rankDifference =
-      getNumberValue(left.sales_rank) - getNumberValue(right.sales_rank);
-
-    if (rankDifference !== 0) {
-      return rankDifference;
-    }
-
-    return (getAnalyticsItemId(left) ?? "").localeCompare(
-      getAnalyticsItemId(right) ?? ""
-    );
-  });
-}
-
-function getAnalyticsDebugRow(row: AnalyticsItemRow | null) {
-  if (!row) {
-    return null;
+function appendUniqueRecommendation(
+  recommendations: RecommendationCard[],
+  recommendation: RecommendationCard | null
+) {
+  if (
+    recommendation &&
+    !recommendations.some((item) => item.item_id === recommendation.item_id)
+  ) {
+    recommendations.push(recommendation);
   }
-
-  return {
-    item_id: getAnalyticsItemId(row),
-    item_name: row.item_name ?? null,
-    total_orders: getOrderFrequency(row),
-    order_count: getNumberValue(row.order_count),
-    quantity_sold: getNumberValue(row.quantity_sold),
-    total_revenue: getNumberValue(row.total_revenue),
-    sales_rank: getNumberValue(row.sales_rank),
-  };
 }
 
 export async function GET() {
@@ -172,8 +144,7 @@ export async function GET() {
       .limit(12)
       .returns<CustomerPreferenceRow[]>();
 
-    let recommendations: ReturnType<typeof normalizeMenuItem>[] = [];
-    const selectedItemIds = new Set<string>();
+    const recommendations: RecommendationCard[] = [];
 
     if (!preferenceError && preferenceRows && preferenceRows.length > 0) {
       const preferenceByItemId = new Map(
@@ -199,7 +170,7 @@ export async function GET() {
           );
         }
 
-        const personalizedRecommendations = sortMenuByRequestedIds(
+        const personalizedRecommendation = sortMenuByRequestedIds(
           preferredMenuItems ?? [],
           preferredItemIds
         )
@@ -211,13 +182,9 @@ export async function GET() {
               index + 1,
               "preference"
             )
-          );
+          )[0] ?? null;
 
-        personalizedRecommendations.forEach((recommendation) => {
-          selectedItemIds.add(recommendation.item_id);
-        });
-
-        recommendations = personalizedRecommendations;
+        appendUniqueRecommendation(recommendations, personalizedRecommendation);
       }
     }
 
@@ -235,20 +202,15 @@ export async function GET() {
       );
     }
 
-    const sortedAnalyticsRows = sortAnalyticsItemsByFrequency(analyticsRows ?? []);
-    const adminTopAnalyticsRow = sortedAnalyticsRows[0] ?? null;
+    const sortedAnalyticsRows = sortAnalyticsItemsByGlobalRanking(analyticsRows ?? []);
     const sortedPopularItemIds = uniqueIds(sortedAnalyticsRows.map(getAnalyticsItemId));
-    const popularItemIds =
-      sortedPopularItemIds.length > 0
-        ? sortedPopularItemIds.filter((id) => !selectedItemIds.has(id))
-        : [];
-    let fallbackMenuItems: MenuItemRow[] = [];
+    let rankedMenuItems: MenuItemRow[] = [];
 
-    if (popularItemIds.length > 0) {
+    if (sortedPopularItemIds.length > 0) {
       const { data: popularMenuItems, error: popularMenuError } = await adminSupabase
         .from("menu_items")
         .select(MENU_ITEM_COLUMNS)
-        .in("id", popularItemIds)
+        .in("id", sortedPopularItemIds)
         .returns<MenuItemRow[]>();
 
       if (popularMenuError) {
@@ -258,17 +220,14 @@ export async function GET() {
         );
       }
 
-      fallbackMenuItems = sortMenuByRequestedIds(
+      rankedMenuItems = sortMenuByRequestedIds(
         popularMenuItems ?? [],
-        popularItemIds
+        sortedPopularItemIds
       );
     }
 
-    if (sortedAnalyticsRows.length === 0 && fallbackMenuItems.length < 3) {
-      const existingIds = new Set([
-        ...fallbackMenuItems.map((item) => item.id),
-        ...selectedItemIds,
-      ]);
+    if (sortedAnalyticsRows.length === 0 && rankedMenuItems.length < 3) {
+      const existingIds = new Set(rankedMenuItems.map((item) => item.id));
       const { data: menuRows, error: menuError } = await supabase
         .from("menu_items")
         .select(MENU_ITEM_COLUMNS)
@@ -281,49 +240,29 @@ export async function GET() {
         return NextResponse.json({ error: menuError.message }, { status: 500 });
       }
 
-      fallbackMenuItems = [
-        ...fallbackMenuItems,
+      rankedMenuItems = [
+        ...rankedMenuItems,
         ...(menuRows ?? []).filter((item) => !existingIds.has(item.id)),
       ];
     }
 
-    const remainingSlots = Math.max(0, 3 - recommendations.length);
-    const fallbackRecommendations = fallbackMenuItems
-      .slice(0, remainingSlots)
-      .map((item, index) =>
+    rankedMenuItems.forEach((item, index) => {
+      if (recommendations.length >= 3) {
+        return;
+      }
+
+      const isTopSeller = index === 0;
+
+      appendUniqueRecommendation(
+        recommendations,
         normalizeMenuItem(
           item,
           null,
-          recommendations.length + index + 1,
-          "popularity"
+          index + 1,
+          isTopSeller ? "top_seller" : "popularity"
         )
       );
-
-    recommendations = [...recommendations, ...fallbackRecommendations];
-    const topSellerRecommendation =
-      recommendations.find((recommendation) => recommendation.basis === "popularity") ??
-      null;
-    const debug = {
-      sourceTable: sortedAnalyticsRows.length > 0 ? "analytics_items" : "menu_items fallback",
-      sourceQuery:
-        "analytics_items sorted by quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
-      adminTopItemResult: getAnalyticsDebugRow(adminTopAnalyticsRow),
-      customerTopSellerResult: topSellerRecommendation
-        ? {
-            item_id: topSellerRecommendation.item_id,
-            item_name: topSellerRecommendation.item_name,
-            rank: topSellerRecommendation.rank,
-            basis: topSellerRecommendation.basis,
-          }
-        : null,
-    };
-
-    console.log("[KadaServe Recommendations] Source table/query used", debug.sourceQuery);
-    console.log("[KadaServe Recommendations] Admin top item result", debug.adminTopItemResult);
-    console.log(
-      "[KadaServe Recommendations] Customer top seller result",
-      debug.customerTopSellerResult
-    );
+    });
 
     return NextResponse.json({
       source:
@@ -331,7 +270,6 @@ export async function GET() {
           ? "customer_preferences"
           : "analytics_items",
       recommendations,
-      debug,
     });
   } catch {
     return NextResponse.json(

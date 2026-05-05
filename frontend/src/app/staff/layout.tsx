@@ -38,6 +38,12 @@ export default function StaffLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const activeNavItem =
+    navItems.find(
+      (item) =>
+        pathname === item.href ||
+        (item.href !== "/staff" && pathname.startsWith(item.href))
+    ) ?? navItems[0];
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -155,7 +161,7 @@ export default function StaffLayout({
                   Staff Command Center
                 </p>
                 <h1 className="truncate font-sans text-[1.55rem] font-bold leading-tight text-[#0D2E18] sm:text-2xl">
-                  Order operations
+                  {activeNavItem.label}
                 </h1>
               </div>
             </div>

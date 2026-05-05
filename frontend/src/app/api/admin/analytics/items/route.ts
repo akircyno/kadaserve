@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import {
+  sortAnalyticsItemsByGlobalRanking,
+} from "@/lib/analytics-ranking";
 import { createClient } from "@/lib/supabase/server";
 
 type AnalyticsOrderRow = {
@@ -138,12 +141,12 @@ function buildItemAnalytics(
 
   return Array.from(buckets.values())
     .sort((left, right) => {
-      if (right.quantitySold !== left.quantitySold) {
-        return right.quantitySold - left.quantitySold;
-      }
-
       if (right.orderIds.size !== left.orderIds.size) {
         return right.orderIds.size - left.orderIds.size;
+      }
+
+      if (right.quantitySold !== left.quantitySold) {
+        return right.quantitySold - left.quantitySold;
       }
 
       if (right.totalRevenue !== left.totalRevenue) {
@@ -222,7 +225,8 @@ export async function GET() {
       .select(
         "id, item_id, item_name, order_count, quantity_sold, total_revenue, avg_rating, sales_rank, updated_at"
       )
-      .order("sales_rank", { ascending: true })
+      .order("order_count", { ascending: false })
+      .order("quantity_sold", { ascending: false })
       .order("total_revenue", { ascending: false });
 
     if (error) {
@@ -232,7 +236,9 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ analyticsItems: data ?? [] });
+    return NextResponse.json({
+      analyticsItems: sortAnalyticsItemsByGlobalRanking(data ?? []),
+    });
   } catch {
     return NextResponse.json(
       { error: "Something went wrong while loading item analytics." },
@@ -352,7 +358,9 @@ export async function POST() {
 
         return NextResponse.json({
           success: true,
-          analyticsItems: insertedRows ?? analyticsRows,
+          analyticsItems: sortAnalyticsItemsByGlobalRanking(
+            insertedRows ?? analyticsRows
+          ),
           migrationSql:
             "create unique index if not exists analytics_items_item_id_key on public.analytics_items (item_id);",
         });
@@ -366,7 +374,7 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      analyticsItems: savedRows ?? analyticsRows,
+      analyticsItems: sortAnalyticsItemsByGlobalRanking(savedRows ?? analyticsRows),
     });
   } catch {
     return NextResponse.json(

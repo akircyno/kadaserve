@@ -280,17 +280,8 @@ export function StaffOrderHistory() {
 
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <header className="border-b border-[#DCCFB8] bg-white px-5 py-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-              Staff Workspace
-            </p>
-            <h1 className="mt-1 font-sans text-4xl font-bold text-[#0D2E18]">
-              Order History
-            </h1>
-          </div>
-
+      <section className="border-b border-[#DCCFB8] bg-white px-5 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-4">
           <button
             type="button"
             onClick={handleDownloadCsv}
@@ -301,7 +292,7 @@ export function StaffOrderHistory() {
             {isExporting ? "Preparing..." : "Download CSV"}
           </button>
         </div>
-      </header>
+      </section>
 
       <section className="px-5 py-5">
         <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
