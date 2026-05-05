@@ -69,6 +69,8 @@ type CustomerDashboardProps = {
   menuItems: CustomerMenuItem[];
   orders: CustomerOrder[];
   feedbackItems: FeedbackItem[];
+  initialTopRecommendations?: TopRecommendation[];
+  initialRecommendationSource?: "customer_preferences" | "analytics_items";
   preferenceSignals?: Array<{
     menuItemId: string;
     tasteRating?: number;
@@ -137,7 +139,34 @@ type TopRecommendation = {
 type TopRecommendationsPayload = {
   source?: "customer_preferences" | "analytics_items";
   recommendations?: TopRecommendation[];
+  debug?: {
+    sourceTable?: string;
+    sourceQuery?: string;
+    adminTopItemResult?: {
+      item_id: string | null;
+      item_name: string | null;
+      total_orders: number;
+      order_count: number;
+      quantity_sold: number;
+      total_revenue: number;
+      sales_rank: number;
+    } | null;
+    customerTopSellerResult?: {
+      item_id: string;
+      item_name: string;
+      rank: number;
+      basis: "preference" | "popularity";
+    } | null;
+  };
   error?: string;
+};
+
+type MenuRecommendationCard = {
+  item: CustomerMenuItem;
+  label: string;
+  basis: string;
+  reason: string;
+  score: number;
 };
 
 
@@ -525,7 +554,7 @@ function dedupeMenuItems(items: CustomerMenuItem[]) {
   const uniqueItems = new Map<string, CustomerMenuItem>();
 
   items.forEach((item) => {
-    const key = getMenuDedupeKey(item);
+    const key = item.id.trim() || getMenuDedupeKey(item);
     const existingItem = uniqueItems.get(key);
 
     if (!existingItem || (!existingItem.is_available && item.is_available)) {
@@ -534,6 +563,23 @@ function dedupeMenuItems(items: CustomerMenuItem[]) {
   });
 
   return Array.from(uniqueItems.values());
+}
+
+function dedupeRecommendationItems<T extends MenuRecommendationCard>(
+  recommendations: T[]
+) {
+  const seenItemIds = new Set<string>();
+
+  return recommendations.filter((recommendation) => {
+    const itemId = recommendation.item.id.trim();
+
+    if (!itemId || seenItemIds.has(itemId)) {
+      return false;
+    }
+
+    seenItemIds.add(itemId);
+    return true;
+  });
 }
 
 function sortMenuByAvailability(items: CustomerMenuItem[]) {
@@ -741,6 +787,8 @@ export function CustomerDashboard({
   shouldShowEntrySplash = false,
   customerProfile,
   isAuthenticated = false,
+  initialTopRecommendations = [],
+  initialRecommendationSource = "analytics_items",
 }: CustomerDashboardProps) {
 
   const router = useRouter();
@@ -799,10 +847,11 @@ export function CustomerDashboard({
   const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
   const [serverRewards, setServerRewards] =
     useState<CustomerRewardsPayload | null>(null);
-  const [topRecommendations, setTopRecommendations] = useState<TopRecommendation[]>([]);
+  const [topRecommendations, setTopRecommendations] =
+    useState<TopRecommendation[]>(initialTopRecommendations);
   const [recommendationSource, setRecommendationSource] = useState<
     "customer_preferences" | "analytics_items" | null
-  >(null);
+  >(initialTopRecommendations.length > 0 ? initialRecommendationSource : null);
   const [isServerRewardsLoading, setIsServerRewardsLoading] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
   const [rewardCelebration, setRewardCelebration] = useState("");
@@ -1272,23 +1321,23 @@ export function CustomerDashboard({
     preferenceSignals,
     uniqueMenuItems,
   ]);
-  const recommendedItems = recommendationProfile.recommendations
-    .map((recommendation) => {
+  const recommendedItems = recommendationProfile.recommendations.reduce<
+    MenuRecommendationCard[]
+  >((items, recommendation) => {
       const item = uniqueMenuItems.find(
         (menuItem) => menuItem.id === recommendation.item.id
       );
 
-      return item
-        ? {
-            ...recommendation,
-            item,
-          }
-        : null;
-    })
-    .filter((recommendation): recommendation is NonNullable<typeof recommendation> =>
-      Boolean(recommendation)
-    );
-  const persistedRecommendedItems = topRecommendations.map((recommendation) => {
+      if (item) {
+        items.push({
+          ...recommendation,
+          item,
+        });
+      }
+
+      return items;
+    }, []);
+  const persistedRecommendedItems: MenuRecommendationCard[] = topRecommendations.map((recommendation) => {
     const item =
       uniqueMenuItems.find((menuItem) => menuItem.id === recommendation.item_id) ??
       recommendation.item;
@@ -1302,12 +1351,18 @@ export function CustomerDashboard({
     };
   });
   const visibleRecommendedItems =
-    persistedRecommendedItems.length > 0 ? persistedRecommendedItems : recommendedItems;
+    persistedRecommendedItems.length > 0
+      ? persistedRecommendedItems
+      : isAuthenticated
+      ? []
+      : recommendedItems;
   const isColdStartRecommendation =
     recommendationSource === "analytics_items" ||
     (!recommendationSource && recommendationProfile.isNewCustomer);
   const hasPersonalizedRecommendations = !isColdStartRecommendation;
-  const displayRecommendedItems = visibleRecommendedItems.map((recommendation, index) => ({
+  const displayRecommendedItems = dedupeRecommendationItems(
+    visibleRecommendedItems
+  ).map((recommendation, index) => ({
     ...recommendation,
     displayMeta: getRecommendationDisplayMeta(index, hasPersonalizedRecommendations),
   }));
@@ -1404,9 +1459,23 @@ export function CustomerDashboard({
   }, []);
 
   useEffect(() => {
+    const customerTopSeller =
+      topRecommendations.find((recommendation) => recommendation.basis === "popularity") ??
+      null;
+
+    if (!customerTopSeller) {
+      return;
+    }
+
+    console.log("[KadaServe Recommendations] Customer top seller result", {
+      item_id: customerTopSeller.item_id,
+      item_name: customerTopSeller.item_name,
+      source: recommendationSource ?? "initial server data",
+    });
+  }, [recommendationSource, topRecommendations]);
+
+  useEffect(() => {
     if (!isAuthenticated) {
-      setTopRecommendations([]);
-      setRecommendationSource(null);
       return;
     }
 
@@ -1416,6 +1485,7 @@ export function CustomerDashboard({
       try {
         const response = await fetch("/api/customer/recommendations", {
           method: "GET",
+          cache: "no-store",
         });
         const result = (await response.json()) as TopRecommendationsPayload;
 
@@ -1424,15 +1494,38 @@ export function CustomerDashboard({
         }
 
         if (!response.ok) {
+          console.warn(
+            "[KadaServe Recommendations] Failed to load server recommendations",
+            result.error
+          );
           setTopRecommendations([]);
           setRecommendationSource(null);
           return;
         }
 
+        const customerTopSeller =
+          result.recommendations?.find(
+            (recommendation) => recommendation.basis === "popularity"
+          ) ?? null;
+
+        console.log(
+          "[KadaServe Recommendations] Source table/query used",
+          result.debug?.sourceQuery ?? "analytics_items"
+        );
+        console.log(
+          "[KadaServe Recommendations] Admin top item result",
+          result.debug?.adminTopItemResult ?? null
+        );
+        console.log(
+          "[KadaServe Recommendations] Customer top seller result",
+          result.debug?.customerTopSellerResult ?? customerTopSeller
+        );
+
         setTopRecommendations(result.recommendations ?? []);
         setRecommendationSource(result.source ?? null);
       } catch {
         if (isActive) {
+          console.warn("[KadaServe Recommendations] Server recommendation request failed");
           setTopRecommendations([]);
           setRecommendationSource(null);
         }

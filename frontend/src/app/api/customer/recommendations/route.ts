@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 type CustomerPreferenceRow = {
@@ -9,8 +10,11 @@ type CustomerPreferenceRow = {
 type AnalyticsItemRow = {
   item_id?: string | null;
   menu_item_id?: string | null;
+  item_name?: string | null;
+  order_count?: number | null;
   total_revenue: number | null;
   quantity_sold: number | null;
+  sales_rank?: number | null;
 };
 
 type MenuItemRow = {
@@ -95,9 +99,62 @@ function sortMenuByRequestedIds(menuItems: MenuItemRow[], requestedIds: string[]
   );
 }
 
+function getAnalyticsItemId(row: AnalyticsItemRow) {
+  return row.menu_item_id ?? row.item_id ?? null;
+}
+
+function getOrderFrequency(row: AnalyticsItemRow) {
+  return Math.max(getNumberValue(row.quantity_sold), getNumberValue(row.order_count));
+}
+
+function sortAnalyticsItemsByFrequency(rows: AnalyticsItemRow[]) {
+  return [...rows].sort((left, right) => {
+    const orderDifference = getOrderFrequency(right) - getOrderFrequency(left);
+
+    if (orderDifference !== 0) {
+      return orderDifference;
+    }
+
+    const revenueDifference =
+      getNumberValue(right.total_revenue) - getNumberValue(left.total_revenue);
+
+    if (revenueDifference !== 0) {
+      return revenueDifference;
+    }
+
+    const rankDifference =
+      getNumberValue(left.sales_rank) - getNumberValue(right.sales_rank);
+
+    if (rankDifference !== 0) {
+      return rankDifference;
+    }
+
+    return (getAnalyticsItemId(left) ?? "").localeCompare(
+      getAnalyticsItemId(right) ?? ""
+    );
+  });
+}
+
+function getAnalyticsDebugRow(row: AnalyticsItemRow | null) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    item_id: getAnalyticsItemId(row),
+    item_name: row.item_name ?? null,
+    total_orders: getOrderFrequency(row),
+    order_count: getNumberValue(row.order_count),
+    quantity_sold: getNumberValue(row.quantity_sold),
+    total_revenue: getNumberValue(row.total_revenue),
+    sales_rank: getNumberValue(row.sales_rank),
+  };
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
+    const adminSupabase = createAdminClient();
     const {
       data: { user },
       error: userError,
@@ -146,7 +203,7 @@ export async function GET() {
           preferredMenuItems ?? [],
           preferredItemIds
         )
-          .slice(0, 3)
+          .slice(0, 1)
           .map((item, index) =>
             normalizeMenuItem(
               item,
@@ -160,35 +217,38 @@ export async function GET() {
           selectedItemIds.add(recommendation.item_id);
         });
 
-        if (personalizedRecommendations.length >= 3) {
-          return NextResponse.json({
-            source: "customer_preferences",
-            recommendations: personalizedRecommendations,
-          });
-        }
-
         recommendations = personalizedRecommendations;
       }
     }
 
-    const { data: analyticsRows } = await supabase
+    const { data: analyticsRows, error: analyticsError } = await adminSupabase
       .from("analytics_items")
-      .select("item_id, menu_item_id, total_revenue, quantity_sold")
-      .order("total_revenue", { ascending: false })
-      .order("quantity_sold", { ascending: false })
-      .limit(12)
+      .select(
+        "item_id, menu_item_id, item_name, order_count, quantity_sold, total_revenue, sales_rank"
+      )
       .returns<AnalyticsItemRow[]>();
-    const popularItemIds = uniqueIds(
-      (analyticsRows ?? []).map((row) => row.menu_item_id ?? row.item_id)
-    ).filter((id) => !selectedItemIds.has(id));
+
+    if (analyticsError) {
+      return NextResponse.json(
+        { error: analyticsError.message },
+        { status: 500 }
+      );
+    }
+
+    const sortedAnalyticsRows = sortAnalyticsItemsByFrequency(analyticsRows ?? []);
+    const adminTopAnalyticsRow = sortedAnalyticsRows[0] ?? null;
+    const sortedPopularItemIds = uniqueIds(sortedAnalyticsRows.map(getAnalyticsItemId));
+    const popularItemIds =
+      sortedPopularItemIds.length > 0
+        ? sortedPopularItemIds.filter((id) => !selectedItemIds.has(id))
+        : [];
     let fallbackMenuItems: MenuItemRow[] = [];
 
     if (popularItemIds.length > 0) {
-      const { data: popularMenuItems, error: popularMenuError } = await supabase
+      const { data: popularMenuItems, error: popularMenuError } = await adminSupabase
         .from("menu_items")
         .select(MENU_ITEM_COLUMNS)
         .in("id", popularItemIds)
-        .eq("is_available", true)
         .returns<MenuItemRow[]>();
 
       if (popularMenuError) {
@@ -204,7 +264,7 @@ export async function GET() {
       );
     }
 
-    if (fallbackMenuItems.length < 3) {
+    if (sortedAnalyticsRows.length === 0 && fallbackMenuItems.length < 3) {
       const existingIds = new Set([
         ...fallbackMenuItems.map((item) => item.id),
         ...selectedItemIds,
@@ -240,6 +300,30 @@ export async function GET() {
       );
 
     recommendations = [...recommendations, ...fallbackRecommendations];
+    const topSellerRecommendation =
+      recommendations.find((recommendation) => recommendation.basis === "popularity") ??
+      null;
+    const debug = {
+      sourceTable: sortedAnalyticsRows.length > 0 ? "analytics_items" : "menu_items fallback",
+      sourceQuery:
+        "analytics_items sorted by quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
+      adminTopItemResult: getAnalyticsDebugRow(adminTopAnalyticsRow),
+      customerTopSellerResult: topSellerRecommendation
+        ? {
+            item_id: topSellerRecommendation.item_id,
+            item_name: topSellerRecommendation.item_name,
+            rank: topSellerRecommendation.rank,
+            basis: topSellerRecommendation.basis,
+          }
+        : null,
+    };
+
+    console.log("[KadaServe Recommendations] Source table/query used", debug.sourceQuery);
+    console.log("[KadaServe Recommendations] Admin top item result", debug.adminTopItemResult);
+    console.log(
+      "[KadaServe Recommendations] Customer top seller result",
+      debug.customerTopSellerResult
+    );
 
     return NextResponse.json({
       source:
@@ -247,6 +331,7 @@ export async function GET() {
           ? "customer_preferences"
           : "analytics_items",
       recommendations,
+      debug,
     });
   } catch {
     return NextResponse.json(

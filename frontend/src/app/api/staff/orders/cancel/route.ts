@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+type CancelOrderRequest = {
+  orderId?: string;
+};
+
+const blockedStatuses = [
+  "ready",
+  "out_for_delivery",
+  "completed",
+  "delivered",
+  "cancelled",
+];
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -18,7 +30,7 @@ export async function POST(request: Request) {
       .from("profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       return NextResponse.json(
@@ -31,8 +43,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const orderId = body.orderId as string;
+    const body = (await request.json()) as CancelOrderRequest;
+    const orderId = body.orderId?.trim();
 
     if (!orderId) {
       return NextResponse.json(
@@ -45,7 +57,7 @@ export async function POST(request: Request) {
       .from("orders")
       .select("id, status")
       .eq("id", orderId)
-      .single();
+      .maybeSingle();
 
     if (orderError || !order) {
       return NextResponse.json(
@@ -54,17 +66,18 @@ export async function POST(request: Request) {
       );
     }
 
-    if (["ready", "out_for_delivery", "completed", "delivered", "cancelled"].includes(order.status)) {
+    if (blockedStatuses.includes(order.status)) {
       return NextResponse.json(
         { error: "This order can no longer be cancelled once it is ready." },
         { status: 400 }
       );
     }
 
-    const { error: updateError } = await supabase
+    const { count, error: updateError } = await supabase
       .from("orders")
-      .update({ status: "cancelled" })
-      .eq("id", orderId);
+      .update({ status: "cancelled" }, { count: "exact" })
+      .eq("id", orderId)
+      .not("status", "in", `(${blockedStatuses.join(",")})`);
 
     if (updateError) {
       return NextResponse.json(
@@ -73,7 +86,20 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    if (count === 0) {
+      return NextResponse.json(
+        { error: "This order can no longer be cancelled once it is ready." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      order: {
+        id: order.id,
+        status: "cancelled",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {

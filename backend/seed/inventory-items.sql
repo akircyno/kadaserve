@@ -1,5 +1,4 @@
 -- KadaServe inventory setup
--- Run this in the Supabase SQL editor before using the admin inventory screen.
 
 create table if not exists public.inventory_items (
   id uuid primary key default gen_random_uuid(),

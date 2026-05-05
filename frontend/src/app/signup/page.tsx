@@ -44,6 +44,8 @@ const passwordRequirements = [
 const nameRegex = /^[A-Za-z\s.-]+$/;
 const emailRegex =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+const consentErrorMessage =
+  "Please agree to the Terms and Conditions and Privacy Policy before continuing.";
 
 function toTitleCaseName(value: string) {
   return value
@@ -131,6 +133,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [hasAgreedToPolicies, setHasAgreedToPolicies] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -166,6 +169,7 @@ export default function SignupPage() {
     isEmailValid &&
     isPasswordValid &&
     passwordsMatch &&
+    hasAgreedToPolicies &&
     !isLoading;
 
   const fieldErrors = {
@@ -195,6 +199,11 @@ export default function SignupPage() {
     event.preventDefault();
     setError("");
     setSuccessMessage("");
+
+    if (!hasAgreedToPolicies) {
+      setError(consentErrorMessage);
+      return;
+    }
 
     if (!fullName.trim()) {
       setError("Full name is required.");
@@ -276,8 +285,19 @@ export default function SignupPage() {
     }
   }
 
+  function handleGoogleAuth() {
+    setError("");
+
+    if (!hasAgreedToPolicies) {
+      setError(consentErrorMessage);
+      return;
+    }
+
+    window.location.href = "/api/auth/google";
+  }
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-3 lg:flex lg:items-center lg:justify-center lg:px-8">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-3 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-3">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -645,6 +665,29 @@ export default function SignupPage() {
                 ))}
               </div>
 
+              <label className="flex items-start gap-2 rounded-lg border border-[#DCCFB8] bg-white/90 px-3 py-2 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                <input
+                  type="checkbox"
+                  checked={hasAgreedToPolicies}
+                  onChange={(event) => {
+                    setHasAgreedToPolicies(event.target.checked);
+                    setError("");
+                  }}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#0F441D]"
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" className="font-black text-[#0F441D] underline underline-offset-2">
+                    Terms and Conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="font-black text-[#0F441D] underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+
               {error ? (
                 <p className="rounded-xl bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
                   {error}
@@ -676,10 +719,9 @@ export default function SignupPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  window.location.href = "/api/auth/google";
-                }}
-                className="mt-3 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                onClick={handleGoogleAuth}
+                disabled={!hasAgreedToPolicies || isLoading}
+                className="mt-3 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <span className="text-lg">
                   <span className="text-[#4285F4]">G</span>

@@ -138,12 +138,16 @@ function buildItemAnalytics(
 
   return Array.from(buckets.values())
     .sort((left, right) => {
-      if (right.totalRevenue !== left.totalRevenue) {
-        return right.totalRevenue - left.totalRevenue;
-      }
-
       if (right.quantitySold !== left.quantitySold) {
         return right.quantitySold - left.quantitySold;
+      }
+
+      if (right.orderIds.size !== left.orderIds.size) {
+        return right.orderIds.size - left.orderIds.size;
+      }
+
+      if (right.totalRevenue !== left.totalRevenue) {
+        return right.totalRevenue - left.totalRevenue;
       }
 
       return left.itemName.localeCompare(right.itemName);

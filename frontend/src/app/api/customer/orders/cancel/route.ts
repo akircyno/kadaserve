@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+type CancelOrderRequest = {
+  orderId?: string;
+};
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -18,7 +22,7 @@ export async function POST(request: Request) {
       .from("profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       return NextResponse.json(
@@ -31,7 +35,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = (await request.json()) as { orderId?: string };
+    const body = (await request.json()) as CancelOrderRequest;
     const orderId = body.orderId?.trim();
 
     if (!orderId) {
@@ -46,7 +50,7 @@ export async function POST(request: Request) {
       .select("id, status, customer_id")
       .eq("id", orderId)
       .eq("customer_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (orderError || !order) {
       return NextResponse.json(
@@ -62,13 +66,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: cancelledOrder, error: updateError } = await supabase
+    const { count, error: updateError } = await supabase
       .from("orders")
-      .update({ status: "cancelled" })
+      .update({ status: "cancelled" }, { count: "exact" })
       .eq("id", orderId)
       .eq("customer_id", user.id)
-      .select("id, status")
-      .single();
+      .eq("status", "pending");
 
     if (updateError) {
       return NextResponse.json(
@@ -77,7 +80,19 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ order: cancelledOrder });
+    if (count === 0) {
+      return NextResponse.json(
+        { error: "This order can no longer be cancelled." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({
+      order: {
+        id: order.id,
+        status: "cancelled",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {

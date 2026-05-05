@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CustomerDashboard } from "@/features/customer/components/customer-dashboard";
 import type {
   RecommendationFeedback,
   RecommendationOrder,
 } from "@/lib/recommendations";
+import type { CustomerMenuItem } from "@/types/menu";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
 
@@ -15,6 +17,103 @@ type PageProps = {
 };
 
 const fallbackOrders: CustomerOrder[] = [];
+
+type CustomerPreferenceRow = {
+  menu_item_id: string | null;
+  preference_score: number | null;
+};
+
+type AnalyticsItemRow = {
+  item_id?: string | null;
+  menu_item_id?: string | null;
+  item_name?: string | null;
+  order_count?: number | null;
+  quantity_sold?: number | null;
+  total_revenue?: number | null;
+  sales_rank?: number | null;
+};
+
+type InitialTopRecommendation = {
+  rank: number;
+  label: "Best for You" | "Popular Picks";
+  basis: "preference" | "popularity";
+  reason: string;
+  item_id: string;
+  item_name: string;
+  price: number;
+  image_url: string | null;
+  preference_score: number | null;
+  item: CustomerMenuItem;
+};
+
+function getNumberValue(value: unknown) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function getAnalyticsItemId(row: AnalyticsItemRow) {
+  return row.menu_item_id ?? row.item_id ?? null;
+}
+
+function getOrderFrequency(row: AnalyticsItemRow) {
+  return Math.max(getNumberValue(row.quantity_sold), getNumberValue(row.order_count));
+}
+
+function sortAnalyticsItemsByAdminRanking(rows: AnalyticsItemRow[]) {
+  return [...rows].sort((left, right) => {
+    const orderDifference = getOrderFrequency(right) - getOrderFrequency(left);
+
+    if (orderDifference !== 0) {
+      return orderDifference;
+    }
+
+    const revenueDifference =
+      getNumberValue(right.total_revenue) - getNumberValue(left.total_revenue);
+
+    if (revenueDifference !== 0) {
+      return revenueDifference;
+    }
+
+    const rankDifference =
+      getNumberValue(left.sales_rank) - getNumberValue(right.sales_rank);
+
+    if (rankDifference !== 0) {
+      return rankDifference;
+    }
+
+    return (getAnalyticsItemId(left) ?? "").localeCompare(
+      getAnalyticsItemId(right) ?? ""
+    );
+  });
+}
+
+function makeInitialRecommendation({
+  item,
+  rank,
+  basis,
+  score,
+}: {
+  item: CustomerMenuItem;
+  rank: number;
+  basis: "preference" | "popularity";
+  score: number | null;
+}): InitialTopRecommendation {
+  return {
+    rank,
+    label: basis === "preference" ? "Best for You" : "Popular Picks",
+    basis,
+    reason:
+      basis === "preference"
+        ? "Recommended from your preference score."
+        : "Popular pick based on item analytics.",
+    item_id: item.id,
+    item_name: item.name,
+    price: Number(item.base_price ?? 0),
+    image_url: item.image_url,
+    preference_score: basis === "preference" ? score : null,
+    item,
+  };
+}
 
 export default async function CustomerPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
@@ -29,6 +128,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       : "home";
 
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
 
   const {
     data: { user },
@@ -41,9 +141,13 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     )
     .order("name", { ascending: true });
 
-  const menuItems = !menuError && menuData ? menuData : [];
+  const menuItems = (!menuError && menuData ? menuData : []) as CustomerMenuItem[];
+  const menuById = new Map(menuItems.map((item) => [item.id, item]));
   let globalRecommendationOrders: RecommendationOrder[] = [];
   let globalRecommendationFeedback: RecommendationFeedback[] = [];
+  const initialTopRecommendations: InitialTopRecommendation[] = [];
+  let initialRecommendationSource: "customer_preferences" | "analytics_items" =
+    "analytics_items";
 
   const { data: globalOrderData } = await supabase
     .from("orders")
@@ -244,6 +348,90 @@ export default async function CustomerPage({ searchParams }: PageProps) {
         : null;
   }
 
+  const selectedInitialIds = new Set<string>();
+
+  if (user) {
+    const { data: preferenceRows } = await supabase
+      .from("customer_preferences")
+      .select("menu_item_id, preference_score")
+      .eq("customer_id", user.id)
+      .order("preference_score", { ascending: false })
+      .limit(1)
+      .returns<CustomerPreferenceRow[]>();
+    const preferenceRow = preferenceRows?.[0];
+    const preferenceItem =
+      preferenceRow?.menu_item_id ? menuById.get(preferenceRow.menu_item_id) : null;
+
+    if (preferenceItem) {
+      initialTopRecommendations.push(
+        makeInitialRecommendation({
+          item: preferenceItem,
+          rank: 1,
+          basis: "preference",
+          score: getNumberValue(preferenceRow?.preference_score),
+        })
+      );
+      selectedInitialIds.add(preferenceItem.id);
+      initialRecommendationSource = "customer_preferences";
+    }
+  }
+
+  const { data: analyticsRows } = await adminSupabase
+    .from("analytics_items")
+    .select(
+      "item_id, menu_item_id, item_name, order_count, quantity_sold, total_revenue, sales_rank"
+    )
+    .returns<AnalyticsItemRow[]>();
+  const sortedAnalyticsRows = sortAnalyticsItemsByAdminRanking(analyticsRows ?? []);
+  const adminTopItemRow = sortedAnalyticsRows[0] ?? null;
+  const analyticsItemIds = sortedAnalyticsRows
+    .map(getAnalyticsItemId)
+    .filter((id): id is string => Boolean(id));
+  const popularityIds =
+    analyticsItemIds.length > 0
+      ? analyticsItemIds.filter((id) => !selectedInitialIds.has(id))
+      : menuItems
+          .filter((item) => !selectedInitialIds.has(item.id))
+          .map((item) => item.id);
+
+  for (const itemId of popularityIds) {
+    if (initialTopRecommendations.length >= 3) {
+      break;
+    }
+
+    const item = menuById.get(itemId);
+
+    if (!item) {
+      continue;
+    }
+
+    initialTopRecommendations.push(
+      makeInitialRecommendation({
+        item,
+        rank: initialTopRecommendations.length + 1,
+        basis: "popularity",
+        score: null,
+      })
+    );
+  }
+
+  const initialCustomerTopSeller =
+    initialTopRecommendations.find((item) => item.basis === "popularity") ?? null;
+
+  console.log("[KadaServe Recommendations] Source table/query used", {
+    source: sortedAnalyticsRows.length > 0 ? "analytics_items" : "menu_items fallback",
+    sort: "quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
+  });
+  console.log("[KadaServe Recommendations] Admin top item result", {
+    item_id: adminTopItemRow ? getAnalyticsItemId(adminTopItemRow) : null,
+    item_name: adminTopItemRow?.item_name ?? null,
+    total_orders: adminTopItemRow ? getOrderFrequency(adminTopItemRow) : 0,
+  });
+  console.log("[KadaServe Recommendations] Customer top seller result", {
+    item_id: initialCustomerTopSeller?.item_id ?? null,
+    item_name: initialCustomerTopSeller?.item_name ?? null,
+  });
+
   return (
     <CustomerDashboard
       menuItems={menuItems}
@@ -256,6 +444,8 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       shouldShowEntrySplash={shouldShowEntrySplash}
       customerProfile={customerProfile}
       isAuthenticated={Boolean(user)}
+      initialTopRecommendations={initialTopRecommendations}
+      initialRecommendationSource={initialRecommendationSource}
     />
   );
 }

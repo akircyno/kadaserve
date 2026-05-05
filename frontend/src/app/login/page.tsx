@@ -22,6 +22,8 @@ const inputClass =
 
 const emailPattern =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+const consentErrorMessage =
+  "Please agree to the Terms and Conditions and Privacy Policy before continuing.";
 
 function LoginForm() {
   const router = useRouter();
@@ -31,13 +33,15 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [hasAgreedToPolicies, setHasAgreedToPolicies] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const normalizedEmail = email.trim().toLowerCase();
   const isEmailValid = emailPattern.test(normalizedEmail);
   const isPasswordValid = password.length > 0;
-  const canSubmit = isEmailValid && isPasswordValid && !isLoading;
+  const canSubmit =
+    isEmailValid && isPasswordValid && hasAgreedToPolicies && !isLoading;
   const callbackUrl = searchParams.get("callbackUrl");
   const loginIntent = searchParams.get("intent");
   const safeCallbackUrl =
@@ -52,6 +56,11 @@ function LoginForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
+    if (!hasAgreedToPolicies) {
+      setError(consentErrorMessage);
+      return;
+    }
 
     if (!isEmailValid || !isPasswordValid || isLoading) {
       setError("Enter a valid email and password.");
@@ -98,8 +107,19 @@ function LoginForm() {
     }
   }
 
+  function handleGoogleAuth() {
+    setError("");
+
+    if (!hasAgreedToPolicies) {
+      setError(consentErrorMessage);
+      return;
+    }
+
+    window.location.href = "/api/auth/google";
+  }
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 py-4 lg:flex lg:items-center lg:justify-center lg:px-8">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-4 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-4">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -267,6 +287,29 @@ function LoginForm() {
                 </div>
               </div>
 
+              <label className="flex items-start gap-2 rounded-lg border border-[#DCCFB8] bg-white/90 px-3 py-2 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                <input
+                  type="checkbox"
+                  checked={hasAgreedToPolicies}
+                  onChange={(event) => {
+                    setHasAgreedToPolicies(event.target.checked);
+                    setError("");
+                  }}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#0F441D]"
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" className="font-black text-[#0F441D] underline underline-offset-2">
+                    Terms and Conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="font-black text-[#0F441D] underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+
               {error ? (
                 <p className="flex items-center gap-2 rounded-xl bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-medium text-[#9C543D]">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -293,10 +336,9 @@ function LoginForm() {
 
               <button
                 type="button"
-                onClick={() => {
-                  window.location.href = "/api/auth/google";
-                }}
-                className="mt-4 flex w-full items-center justify-center gap-3 rounded-xl border border-[#D6C6AC] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                onClick={handleGoogleAuth}
+                disabled={!hasAgreedToPolicies || isLoading}
+                className="mt-4 flex w-full items-center justify-center gap-3 rounded-xl border border-[#D6C6AC] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
               >
                 <span className="text-lg">
                   <span className="text-[#4285F4]">G</span>

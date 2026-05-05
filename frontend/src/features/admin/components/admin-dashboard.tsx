@@ -767,8 +767,10 @@ export function AdminDashboard() {
       [...analyticsItems]
         .sort(
           (first, second) =>
-            Number(first.sales_rank ?? 0) - Number(second.sales_rank ?? 0) ||
-            Number(second.total_revenue ?? 0) - Number(first.total_revenue ?? 0)
+            Number(second.quantity_sold ?? 0) - Number(first.quantity_sold ?? 0) ||
+            Number(second.order_count ?? 0) - Number(first.order_count ?? 0) ||
+            Number(second.total_revenue ?? 0) - Number(first.total_revenue ?? 0) ||
+            Number(first.sales_rank ?? 0) - Number(second.sales_rank ?? 0)
         )
         .map((row) => ({
           item: row.item_name,
@@ -780,6 +782,19 @@ export function AdminDashboard() {
   );
   const displayItemRanking =
     analyticsItemRanking.length > 0 ? analyticsItemRanking : itemRanking;
+  useEffect(() => {
+    const adminTopItem = displayItemRanking[0];
+
+    if (!adminTopItem) {
+      return;
+    }
+
+    console.log("[KadaServe Analytics] Source table/query used", {
+      source: analyticsItemRanking.length > 0 ? "analytics_items" : "orders/order_items fallback",
+      sort: "quantity_sold/order_count DESC, total_revenue DESC, sales_rank ASC",
+    });
+    console.log("[KadaServe Analytics] Admin top item result", adminTopItem);
+  }, [analyticsItemRanking.length, displayItemRanking]);
   const scopedItemRanking = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 

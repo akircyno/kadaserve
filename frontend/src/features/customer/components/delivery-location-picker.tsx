@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Crosshair, ExternalLink, MapPin } from "lucide-react";
 
 type LeafletLatLng = {
@@ -51,6 +51,10 @@ type DeliveryLocationPickerProps = {
     lng: number | null;
     address?: string;
   }) => void;
+};
+
+type ReverseGeocodeResponse = {
+  display_name?: string;
 };
 
 const leafletCssUrl = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
@@ -124,22 +128,22 @@ function buildMapUrl(lat: number, lng: number) {
 }
 
 async function reverseGeocode(lat: number, lng: number) {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
-    {
-      headers: {
-        "Accept-Language": "en",
-      },
-    }
-  );
+  const params = new URLSearchParams({
+    format: "json",
+    lat: String(lat),
+    lon: String(lng),
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+    headers: {
+      "Accept-Language": "en",
+    },
+  });
 
   if (!response.ok) {
     return null;
   }
 
-  const result = (await response.json()) as {
-    display_name?: string;
-  };
+  const result = (await response.json()) as ReverseGeocodeResponse;
 
   return result.display_name?.trim() || null;
 }
@@ -155,6 +159,8 @@ export function DeliveryLocationPicker({
   const onChangeRef = useRef(onChange);
   const initialLatRef = useRef(lat);
   const initialLngRef = useRef(lng);
+  const reverseLookupTimerRef = useRef<number | null>(null);
+  const reverseLookupIdRef = useRef(0);
   const [loadError, setLoadError] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [isFindingAddress, setIsFindingAddress] = useState(false);
@@ -163,6 +169,68 @@ export function DeliveryLocationPicker({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  function publishPinnedLocation(latValue: number, lngValue: number) {
+    onChangeRef.current({
+      lat: latValue,
+      lng: lngValue,
+    });
+  }
+
+  const updateAddressFromCoordinates = useCallback(
+    async (latValue: number, lngValue: number, lookupId: number) => {
+      setIsFindingAddress(true);
+      setLoadError("");
+
+      try {
+        const address = await reverseGeocode(latValue, lngValue);
+
+        if (reverseLookupIdRef.current !== lookupId) {
+          return;
+        }
+
+        if (!address) {
+          setLoadError("Pin moved, but no readable address was found.");
+          return;
+        }
+
+        onChangeRef.current({
+          lat: latValue,
+          lng: lngValue,
+          address,
+        });
+      } catch {
+        if (reverseLookupIdRef.current === lookupId) {
+          setLoadError("Pin moved, but address lookup was not available.");
+        }
+      } finally {
+        if (reverseLookupIdRef.current === lookupId) {
+          setIsFindingAddress(false);
+        }
+      }
+    },
+    []
+  );
+
+  const handlePinnedLocationChange = useCallback((latValue: number, lngValue: number) => {
+    const nextLat = Number(latValue.toFixed(6));
+    const nextLng = Number(lngValue.toFixed(6));
+
+    publishPinnedLocation(nextLat, nextLng);
+
+    if (reverseLookupTimerRef.current) {
+      window.clearTimeout(reverseLookupTimerRef.current);
+    }
+
+    const lookupId = reverseLookupIdRef.current + 1;
+    reverseLookupIdRef.current = lookupId;
+    setIsFindingAddress(true);
+    setLoadError("");
+
+    reverseLookupTimerRef.current = window.setTimeout(() => {
+      void updateAddressFromCoordinates(nextLat, nextLng, lookupId);
+    }, 350);
+  }, [updateAddressFromCoordinates]);
 
   useEffect(() => {
     let isMounted = true;
@@ -201,18 +269,12 @@ export function DeliveryLocationPicker({
 
         marker.on("dragend", () => {
           const markerPosition = marker.getLatLng();
-          onChangeRef.current({
-            lat: Number(markerPosition.lat.toFixed(6)),
-            lng: Number(markerPosition.lng.toFixed(6)),
-          });
+          handlePinnedLocationChange(markerPosition.lat, markerPosition.lng);
         });
 
         map.on("click", (event) => {
           marker.setLatLng([event.latlng.lat, event.latlng.lng]);
-          onChangeRef.current({
-            lat: Number(event.latlng.lat.toFixed(6)),
-            lng: Number(event.latlng.lng.toFixed(6)),
-          });
+          handlePinnedLocationChange(event.latlng.lat, event.latlng.lng);
         });
 
         mapRef.current = map;
@@ -230,11 +292,15 @@ export function DeliveryLocationPicker({
 
     return () => {
       isMounted = false;
+      if (reverseLookupTimerRef.current) {
+        window.clearTimeout(reverseLookupTimerRef.current);
+        reverseLookupTimerRef.current = null;
+      }
       mapRef.current?.remove();
       mapRef.current = null;
       markerRef.current = null;
     };
-  }, []);
+  }, [handlePinnedLocationChange]);
 
   useEffect(() => {
     if (!hasPin || !mapRef.current || !markerRef.current) {
@@ -257,10 +323,16 @@ export function DeliveryLocationPicker({
       async (position) => {
         const nextLat = Number(position.coords.latitude.toFixed(6));
         const nextLng = Number(position.coords.longitude.toFixed(6));
+        const lookupId = reverseLookupIdRef.current + 1;
+        reverseLookupIdRef.current = lookupId;
         setIsFindingAddress(true);
 
         try {
           const address = await reverseGeocode(nextLat, nextLng);
+
+          if (reverseLookupIdRef.current !== lookupId) {
+            return;
+          }
 
           onChange({
             lat: nextLat,
@@ -268,13 +340,18 @@ export function DeliveryLocationPicker({
             address: address ?? undefined,
           });
         } catch {
-          onChange({
-            lat: nextLat,
-            lng: nextLng,
-          });
-          setLoadError("Pin saved, but address lookup was not available.");
+          if (reverseLookupIdRef.current === lookupId) {
+            onChange({
+              lat: nextLat,
+              lng: nextLng,
+            });
+            setLoadError("Pin saved, but address lookup was not available.");
+          }
         } finally {
-          setIsFindingAddress(false);
+          if (reverseLookupIdRef.current === lookupId) {
+            setIsFindingAddress(false);
+          }
+
           setIsLocating(false);
         }
       },
@@ -298,7 +375,7 @@ export function DeliveryLocationPicker({
               Delivery Pin
             </p>
             <p className="font-sans text-xs font-semibold text-[#684B35]">
-              Tap the map or drag the pin.
+              {isFindingAddress ? "Updating address..." : "Tap the map or drag the pin."}
             </p>
           </div>
         </div>
