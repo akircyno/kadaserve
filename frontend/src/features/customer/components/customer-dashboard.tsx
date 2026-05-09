@@ -328,6 +328,8 @@ function isValidOptionalPhone(value: string) {
 
 function formatStatus(status: CustomerOrder["status"]) {
   switch (status) {
+    case "pending_payment":
+      return "Pending Payment";
     case "pending":
       return "Pending";
     case "preparing":

@@ -21,6 +21,18 @@ type CheckoutItem = {
   image_url: string | null;
 };
 
+type PayMongoCheckoutSession = {
+  id: string;
+  attributes?: {
+    checkout_url?: string;
+  };
+};
+
+type PayMongoCheckoutResponse = {
+  data?: PayMongoCheckoutSession;
+  errors?: Array<{ detail?: string; message?: string }>;
+};
+
 function isMissingStoreSettingsTable(error: { message?: string; code?: string } | null) {
   return (
     error?.code === "42P01" ||
@@ -49,6 +61,95 @@ function isValidLatLng(lat: number | null, lng: number | null) {
     lng >= -180 &&
     lng <= 180
   );
+}
+
+function toPayMongoAmount(value: number) {
+  return Math.max(0, Math.round(value * 100));
+}
+
+function getAbsoluteUrl(requestUrl: URL, path: string) {
+  return new URL(path, requestUrl.origin).toString();
+}
+
+function getPayMongoSecretKey() {
+  return process.env.PAYMONGO_SECRET_KEY?.trim() || "";
+}
+
+async function createPayMongoCheckoutSession({
+  requestUrl,
+  orderId,
+  customerEmail,
+  items,
+  totalAmount,
+}: {
+  requestUrl: URL;
+  orderId: string;
+  customerEmail: string | null;
+  items: CheckoutItem[];
+  totalAmount: number;
+}) {
+  const secretKey = getPayMongoSecretKey();
+
+  if (!secretKey) {
+    throw new Error("PayMongo secret key is not configured.");
+  }
+
+  const lineItems = items.map((item) => ({
+    currency: "PHP",
+    amount: toPayMongoAmount(item.base_price + item.addon_price),
+    name: item.name,
+    quantity: item.quantity,
+    description: item.special_instructions || undefined,
+  }));
+
+  const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          billing: customerEmail ? { email: customerEmail } : undefined,
+          description: `KadaServe order ${orderId.slice(0, 8).toUpperCase()}`,
+          line_items: lineItems,
+          metadata: {
+            order_id: orderId,
+          },
+          payment_method_types: ["gcash", "paymaya", "card"],
+          send_email_receipt: true,
+          show_description: true,
+          show_line_items: true,
+          success_url: getAbsoluteUrl(
+            requestUrl,
+            `/customer?tab=orders&orderId=${orderId}&payment=processing`
+          ),
+          cancel_url: getAbsoluteUrl(
+            requestUrl,
+            `/customer/cart?payment=cancelled&orderId=${orderId}`
+          ),
+        },
+      },
+    }),
+  });
+
+  const result = (await response.json()) as PayMongoCheckoutResponse;
+
+  if (!response.ok || !result.data?.attributes?.checkout_url) {
+    const errorMessage =
+      result.errors?.[0]?.detail ||
+      result.errors?.[0]?.message ||
+      "PayMongo checkout could not be created.";
+
+    throw new Error(errorMessage);
+  }
+
+  return {
+    checkoutSessionId: result.data.id,
+    checkoutUrl: result.data.attributes.checkout_url,
+    totalAmount,
+  };
 }
 
 export async function POST(request: Request) {
@@ -96,10 +197,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    const requestUrl = new URL(request.url);
 
     const items = body.items as CheckoutItem[];
     const orderType = body.orderType as "pickup" | "delivery";
-    const paymentMethod = body.paymentMethod as "cash" | "gcash";
+    const paymentMethod = body.paymentMethod as "cash" | "online";
     const deliveryAddress =
       typeof body.deliveryAddress === "string" ? body.deliveryAddress.trim() : "";
     const deliveryPhone =
@@ -124,16 +226,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!paymentMethod || !["cash", "gcash"].includes(paymentMethod)) {
+    if (!paymentMethod || !["cash", "online"].includes(paymentMethod)) {
       return NextResponse.json(
         { error: "Please select a payment method." },
-        { status: 400 }
-      );
-    }
-
-    if (orderType === "delivery" && paymentMethod !== "cash") {
-      return NextResponse.json(
-        { error: "Delivery orders can only use cash payment." },
         { status: 400 }
       );
     }
@@ -166,7 +261,7 @@ export async function POST(request: Request) {
       .insert({
         customer_id: user.id,
         order_type: orderType,
-        status: "pending",
+        status: paymentMethod === "online" ? "pending_payment" : "pending",
         payment_method: paymentMethod,
         payment_status: "unpaid",
         total_amount: totalAmount,
@@ -208,10 +303,58 @@ export async function POST(request: Request) {
       .insert(orderItemsPayload);
 
     if (orderItemsError) {
+      await supabase.from("orders").delete().eq("id", order.id);
+
       return NextResponse.json(
         { error: orderItemsError.message },
         { status: 500 }
       );
+    }
+
+    if (paymentMethod === "online") {
+      try {
+        const payMongoCheckout = await createPayMongoCheckoutSession({
+          requestUrl,
+          orderId: order.id,
+          customerEmail: profile?.email || user.email || null,
+          items,
+          totalAmount,
+        });
+
+        const { error: paymentUpdateError } = await supabase
+          .from("orders")
+          .update({
+            paymongo_checkout_session_id:
+              payMongoCheckout.checkoutSessionId,
+          })
+          .eq("id", order.id);
+
+        if (paymentUpdateError) {
+          throw new Error(paymentUpdateError.message);
+        }
+
+        return NextResponse.json({
+          success: true,
+          orderId: order.id,
+          orderType,
+          deliveryFee,
+          checkoutUrl: payMongoCheckout.checkoutUrl,
+          paymentStatus: "pending_payment",
+        });
+      } catch (payMongoError) {
+        await supabase.from("order_items").delete().eq("order_id", order.id);
+        await supabase.from("orders").delete().eq("id", order.id);
+
+        return NextResponse.json(
+          {
+            error:
+              payMongoError instanceof Error
+                ? payMongoError.message
+                : "PayMongo checkout could not be created.",
+          },
+          { status: 502 }
+        );
+      }
     }
 
     return NextResponse.json({

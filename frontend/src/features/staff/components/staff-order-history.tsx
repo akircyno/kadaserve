@@ -134,6 +134,7 @@ function formatDateTime(value: string) {
 }
 
 function getPaymentMethodLabel(order: StaffOrder) {
+  if (order.payment_method === "online") return "Online";
   if (order.payment_method === "gcash") return "GCash";
   if (order.payment_method === "cash") return "Cash";
   return "Payment pending";

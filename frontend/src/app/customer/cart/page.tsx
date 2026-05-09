@@ -26,6 +26,9 @@ type CustomerAddress = {
   is_default: boolean;
 };
 
+const isPayMongoCheckoutEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT === "true";
+
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
 }
@@ -69,7 +72,7 @@ export default function CartPage() {
   const deliveryAddressRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [orderType, setOrderType] = useState<"pickup" | "delivery">("pickup");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "gcash">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "online">("cash");
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [isAddressPickerOpen, setIsAddressPickerOpen] = useState(false);
@@ -130,12 +133,6 @@ export default function CartPage() {
   useEffect(() => {
     loadSavedAddresses();
   }, []);
-
-  useEffect(() => {
-    if (orderType === "delivery") {
-      setPaymentMethod("cash");
-    }
-  }, [orderType]);
 
   useEffect(() => {
     let isMounted = true;
@@ -333,6 +330,12 @@ export default function CartPage() {
       return;
     }
 
+    if (paymentMethod === "online" && !isPayMongoCheckoutEnabled) {
+      setError("Online payment is coming soon. Please choose cash for now.");
+      setPaymentMethod("cash");
+      return;
+    }
+
     setIsCheckingOut(true);
 
     try {
@@ -360,6 +363,15 @@ export default function CartPage() {
       }
 
       const orderId = result.orderId as string;
+      const checkoutUrl =
+        typeof result.checkoutUrl === "string" ? result.checkoutUrl : "";
+
+      if (checkoutUrl) {
+        setSuccessMessage("Redirecting to PayMongo checkout...");
+        clearCart();
+        window.location.assign(checkoutUrl);
+        return;
+      }
 
       setSuccessMessage(
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
@@ -681,24 +693,58 @@ export default function CartPage() {
                       Payment Method
                     </p>
                     <div className="mt-2 flex gap-2">
-                      {(orderType === "pickup"
-                        ? (["cash", "gcash"] as const)
-                        : (["cash"] as const)
-                      ).map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setPaymentMethod(method)}
-                          className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
-                            paymentMethod === method
-                              ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                              : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
-                          }`}
-                        >
-                          {method.toUpperCase()}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("cash")}
+                        className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
+                          paymentMethod === "cash"
+                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                            : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                        }`}
+                      >
+                        {orderType === "delivery"
+                          ? "Cash on Delivery"
+                          : "Pay at Cafe"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isPayMongoCheckoutEnabled) {
+                            setPaymentMethod("online");
+                            return;
+                          }
+
+                          setPaymentMethod("cash");
+                          setError(
+                            "Online payment is coming soon. Please choose cash for now."
+                          );
+                        }}
+                        disabled={!isPayMongoCheckoutEnabled}
+                        title={
+                          isPayMongoCheckoutEnabled
+                            ? "Pay with GCash, Maya, or card"
+                            : "Online payment is coming soon"
+                        }
+                        className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
+                          paymentMethod === "online"
+                            ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                            : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                        } disabled:cursor-not-allowed disabled:opacity-55`}
+                      >
+                        Online Payment
+                      </button>
                     </div>
+                    {paymentMethod === "online" ? (
+                      <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                        You will pay through PayMongo using GCash, Maya, or card.
+                        Your order stays pending until payment is confirmed.
+                      </p>
+                    ) : !isPayMongoCheckoutEnabled ? (
+                      <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                        Online payment is ready in code and will be enabled after
+                        the PayMongo account is approved.
+                      </p>
+                    ) : null}
                   </div>
 
                   {storeStatus ? (
@@ -745,11 +791,15 @@ export default function CartPage() {
                       />
                     ) : null}
                     {isCheckingOut
-                      ? "Processing..."
+                      ? paymentMethod === "online"
+                        ? "Creating Payment..."
+                        : "Processing..."
                       : isStoreStatusLoading
                       ? "Checking store..."
                       : isCheckoutBlocked
                       ? "Ordering Closed"
+                      : paymentMethod === "online"
+                      ? "Pay Online"
                       : "Place Order"}
                   </button>
                 </section>

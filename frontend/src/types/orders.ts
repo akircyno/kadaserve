@@ -1,4 +1,5 @@
 export type OrderStatus =
+  | "pending_payment"
   | "pending"
   | "preparing"
   | "ready"
@@ -10,7 +11,7 @@ export type OrderStatus =
 
 export type OrderType = "pickup" | "delivery";
 
-export type PaymentMethod = "cash" | "gcash";
+export type PaymentMethod = "cash" | "gcash" | "online";
 
 export type PaymentStatus = "unpaid" | "paid";
 

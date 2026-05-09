@@ -48,6 +48,7 @@ const boardColumns: Array<{
   key: BoardOrderStatus;
   label: string;
 }> = [
+    { key: "pending_payment", label: "Awaiting Payment" },
     { key: "pending", label: "Pending" },
     { key: "preparing", label: "Preparing" },
     { key: "ready", label: "Ready" },
@@ -185,6 +186,8 @@ function requiresFinalDeliveryFee(order: StaffOrder) {
 
 function formatStatus(status: OrderStatus) {
   switch (status) {
+    case "pending_payment":
+      return "Pending Payment";
     case "pending":
       return "Pending";
     case "preparing":
@@ -248,6 +251,10 @@ function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
     return "border border-[#DCCFB8] bg-[#FFF8EF]/70 text-[#8A755D]";
   }
 
+  if (paymentMethod === "online") {
+    return "border border-[#0F441D]/25 bg-[#E6F2E8] text-[#0D2E18]";
+  }
+
   return paymentMethod === "cash"
     ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
     : "border border-[#684B35]/20 bg-[#FFF8EF]/70 text-[#684B35]";
@@ -256,6 +263,10 @@ function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
 function getPaymentLabel(paymentMethod: StaffOrder["payment_method"]) {
   if (!paymentMethod) {
     return "Payment pending";
+  }
+
+  if (paymentMethod === "online") {
+    return "Online";
   }
 
   return paymentMethod === "cash" ? "Cash" : "GCash";
@@ -269,6 +280,8 @@ function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
 
 function getStatusBadgeStyle(status: OrderStatus) {
   switch (status) {
+    case "pending_payment":
+      return "bg-[#FFF0DA] text-[#684B35]";
     case "pending":
       return "bg-[#E6F2E8] text-[#0D2E18]";
     case "preparing":
@@ -455,6 +468,9 @@ export function StaffDashboard() {
     }
 
     return {
+      pending_payment: sortOldestFirst(
+        filteredOrders.filter((order) => order.status === "pending_payment")
+      ),
       pending: sortOldestFirst(
         filteredOrders.filter((order) => order.status === "pending")
       ),
@@ -1055,7 +1071,7 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5 xl:items-start">
           {boardColumns.map((column, index) => {
             const columnOrders = groupedOrders[column.key] ?? [];
             const isLastColumn = index === boardColumns.length - 1;

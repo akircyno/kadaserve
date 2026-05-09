@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { createClient } from "@/lib/supabase/server";
 
 type OrderStatus =
+  | "pending_payment"
   | "pending"
   | "preparing"
   | "ready"

@@ -3,7 +3,13 @@ import type { OrderStatus, StaffOrder } from "@/types/orders";
 export type AdminTimeFilter = "today" | "week" | "month" | "year";
 export type AdminStatusFilter = "all" | OrderStatus;
 export type AdminTypeFilter = "all" | StaffOrder["order_type"];
-export type AdminPaymentFilter = "all" | "paid" | "unpaid" | "cash" | "gcash";
+export type AdminPaymentFilter =
+  | "all"
+  | "paid"
+  | "unpaid"
+  | "cash"
+  | "gcash"
+  | "online";
 
 export function getManilaDateOnly(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {

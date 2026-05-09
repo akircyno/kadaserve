@@ -38,6 +38,8 @@ function formatDate(value: string) {
 
 function formatStatus(status: OrderStatus) {
   switch (status) {
+    case "pending_payment":
+      return "Pending payment";
     case "out_for_delivery":
       return "Out for delivery";
     default:
@@ -46,6 +48,7 @@ function formatStatus(status: OrderStatus) {
 }
 
 function formatPaymentMethod(paymentMethod: StaffOrder["payment_method"]) {
+  if (paymentMethod === "online") return "Online";
   if (paymentMethod === "gcash") return "GCash";
   if (paymentMethod === "cash") return "Cash";
   return "No method";
