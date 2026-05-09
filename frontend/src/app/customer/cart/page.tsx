@@ -5,17 +5,26 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Bike,
   CreditCard,
+  MapPin,
   Pencil,
   Phone,
   Plus,
+  ReceiptText,
   ShoppingCart,
+  Store,
   Trash2,
+  WalletCards,
   X,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { DeliveryLocationPicker } from "@/features/customer/components/delivery-location-picker";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
+import {
+  getDistanceBasedDeliveryFee,
+  hasDeliveryCoordinates,
+} from "@/lib/delivery-fee";
 import type { StoreStatusPayload } from "@/lib/store-status";
 
 type CustomerAddress = {
@@ -166,10 +175,24 @@ export default function CartPage() {
     [items, selectedItemIds]
   );
   const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
-  const baseDeliveryFee = 0;
-  const estimatedDeliveryFeeLabel =
-    orderType === "delivery" ? "~P40-P75" : peso(0);
-  const deliveryFee = baseDeliveryFee;
+  const deliveryFeeQuote =
+    orderType === "delivery" && hasDeliveryCoordinates(deliveryLat, deliveryLng)
+      ? getDistanceBasedDeliveryFee(deliveryLat as number, deliveryLng as number)
+      : null;
+  const deliveryFeeLabel =
+    orderType === "delivery"
+      ? deliveryFeeQuote?.isDeliverable && deliveryFeeQuote.fee !== null
+        ? `${peso(deliveryFeeQuote.fee)} (${
+            deliveryFeeQuote.distanceKm?.toFixed(1) ?? "0.0"
+          } km)`
+        : deliveryFeeQuote && !deliveryFeeQuote.isDeliverable
+        ? `Outside ${deliveryFeeQuote.maxDeliveryDistanceKm} km range`
+        : "Pin address to calculate"
+      : peso(0);
+  const deliveryFee =
+    orderType === "delivery" && deliveryFeeQuote?.isDeliverable
+      ? deliveryFeeQuote.fee ?? 0
+      : 0;
   const grandTotal = Math.max(0, subtotal + deliveryFee);
   const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedSavedAddress =
@@ -322,6 +345,18 @@ export default function CartPage() {
       return;
     }
 
+    if (orderType === "delivery" && !hasDeliveryCoordinates(deliveryLat, deliveryLng)) {
+      setError("Pin your delivery location on the map to calculate the delivery fee.");
+      return;
+    }
+
+    if (orderType === "delivery" && deliveryFeeQuote && !deliveryFeeQuote.isDeliverable) {
+      setError(
+        `Delivery is available within ${deliveryFeeQuote.maxDeliveryDistanceKm} km of the cafe.`
+      );
+      return;
+    }
+
     if (isCheckoutBlocked) {
       setError(
         storeStatus?.checkoutBlockedMessage ||
@@ -426,12 +461,61 @@ export default function CartPage() {
 
         <section className="space-y-5">
           <div className="space-y-4 border-b border-[#D8C8A7] pb-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                Order Method
-              </p>
-              <div className="rounded-full border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-2">
-                <p className="font-sans text-sm font-bold text-[#0D2E18]">Pickup</p>
+            <div className="space-y-3">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                  Checkout
+                </p>
+                <h1 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Choose how you want to receive your order
+                </h1>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(["pickup", "delivery"] as const).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => {
+                      setOrderType(method);
+                      setError("");
+                    }}
+                    className={`flex min-h-20 items-center gap-3 rounded-[18px] border px-4 py-3 text-left font-sans transition ${
+                      orderType === method
+                        ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.14)]"
+                        : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35] hover:bg-white"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+                        orderType === method
+                          ? "bg-white/12 text-[#FFF0DA]"
+                          : "bg-white text-[#0D2E18]"
+                      }`}
+                    >
+                      {method === "pickup" ? (
+                        <Store className="h-5 w-5" />
+                      ) : (
+                        <Bike className="h-5 w-5" />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-black text-current">
+                        {method === "pickup" ? "Pickup" : "Delivery"}
+                      </span>
+                      <span
+                        className={`mt-0.5 block text-xs font-semibold ${
+                          orderType === method
+                            ? "text-[#FFF0DA]/78"
+                            : "text-[#8A755D]"
+                        }`}
+                      >
+                        {method === "pickup"
+                          ? "Claim your order at the cafe counter."
+                          : "Pin your location and pay on delivery."}
+                      </span>
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -602,26 +686,32 @@ export default function CartPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 inline-flex items-center rounded-full border border-[#D8C8A7] bg-white/70 p-1">
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(item, -1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
-                          aria-label={`Decrease ${item.name}`}
-                        >
-                          -
-                        </button>
-                        <span className="min-w-10 text-center font-sans text-sm font-black text-[#0D2E18]">
-                          {item.quantity}
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="inline-flex items-center rounded-full border border-[#D8C8A7] bg-white/70 p-1">
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(item, -1)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                            aria-label={`Decrease ${item.name}`}
+                          >
+                            -
+                          </button>
+                          <span className="min-w-10 text-center font-sans text-sm font-black text-[#0D2E18]">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(item, 1)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                            aria-label={`Increase ${item.name}`}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <span className="rounded-full bg-[#FFF8EF] px-4 py-2 font-sans text-base font-black text-[#765531]">
+                          {peso(getItemTotal(item))}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(item, 1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
-                          aria-label={`Increase ${item.name}`}
-                        >
-                          +
-                        </button>
                       </div>
 
                       {!isPastry ? (
@@ -638,9 +728,6 @@ export default function CartPage() {
                         </label>
                       ) : null}
 
-                      <div className="mt-3 text-right font-sans text-xl font-black text-[#765531]">
-                        {peso(getItemTotal(item))}
-                      </div>
                           </>
                         );
                       })()}
@@ -650,33 +737,41 @@ export default function CartPage() {
               </div>
 
               <aside className="h-fit space-y-4">
-                <section className="border-t border-[#D8C8A7] pt-5">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-[#0D2E18]" />
-                    <h2 className="font-sans text-lg font-black">Payment Details</h2>
+                <section className="rounded-[24px] border border-[#D8C8A7] bg-[#FFF8EF] p-5 shadow-[0_14px_30px_rgba(13,46,24,0.08)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA]">
+                        <ReceiptText className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                          Summary
+                        </p>
+                        <h2 className="font-sans text-lg font-black text-[#0D2E18]">
+                          Payment Details
+                        </h2>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+                      {cupCount} item{cupCount === 1 ? "" : "s"}
+                    </span>
                   </div>
 
-                  <div className="mt-4 space-y-3 font-sans text-sm">
-                    <div className="flex justify-between gap-4">
+                  <div className="mt-5 space-y-3 font-sans text-sm">
+                    <div className="flex justify-between gap-4 rounded-[14px] bg-white/70 px-4 py-3">
                       <span className="text-[#684B35]">Amount</span>
-                      <span className="font-bold">{peso(subtotal)}</span>
+                      <span className="font-black text-[#0D2E18]">{peso(subtotal)}</span>
                     </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[#684B35]">
-                        Estimated Delivery Fee
+                    <div className="flex items-center justify-between gap-4 rounded-[14px] bg-white/70 px-4 py-3">
+                      <span className="inline-flex items-center gap-2 text-[#684B35]">
+                        <MapPin className="h-4 w-4" />
+                        Delivery Fee
                       </span>
-                      <span className="font-bold">
-                        {estimatedDeliveryFeeLabel}
+                      <span className="text-right font-black text-[#0D2E18]">
+                        {deliveryFeeLabel}
                       </span>
                     </div>
-                    <p className="-mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                      fee is depends on the distance. The staff will confirm the final
-                      delivery fee to your email.
-                    </p>
-                    <p className="font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                      This order includes {cupCount} item{cupCount === 1 ? "" : "s"}.
-                    </p>
-                    <div className="border-t border-[#EFE2C9] pt-3">
+                    <div className="border-t border-[#D8C8A7] pt-4">
                       <div className="flex items-center justify-between gap-4">
                         <span className="font-sans text-sm font-bold text-[#684B35]">
                           Grand Total
@@ -692,19 +787,27 @@ export default function CartPage() {
                     <p className="font-sans text-sm font-bold text-[#684B35]">
                       Payment Method
                     </p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 grid gap-2">
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("cash")}
-                        className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
+                        className={`flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
                           paymentMethod === "cash"
                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                            : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                            : "border-[#D8C8A7] bg-white text-[#684B35] hover:border-[#0D2E18]/40"
                         }`}
                       >
-                        {orderType === "delivery"
-                          ? "Cash on Delivery"
-                          : "Pay at Cafe"}
+                        <CreditCard className="h-5 w-5 shrink-0" />
+                        <span>
+                          <span className="block text-sm font-black">
+                            {orderType === "delivery"
+                              ? "Cash on Delivery"
+                              : "Pay at Cafe"}
+                          </span>
+                          <span className="mt-0.5 block text-xs font-semibold opacity-75">
+                            Settle payment when the order is received.
+                          </span>
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -725,13 +828,21 @@ export default function CartPage() {
                             ? "Pay with GCash, Maya, or card"
                             : "Online payment is coming soon"
                         }
-                        className={`rounded-full border px-4 py-2 font-sans text-sm font-bold ${
+                        className={`flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
                           paymentMethod === "online"
                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                            : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+                            : "border-[#D8C8A7] bg-white text-[#684B35] hover:border-[#0D2E18]/40"
                         } disabled:cursor-not-allowed disabled:opacity-55`}
                       >
-                        Online Payment
+                        <WalletCards className="h-5 w-5 shrink-0" />
+                        <span>
+                          <span className="block text-sm font-black">
+                            Online Payment
+                          </span>
+                          <span className="mt-0.5 block text-xs font-semibold opacity-75">
+                            GCash, Maya, or card through PayMongo.
+                          </span>
+                        </span>
                       </button>
                     </div>
                     {paymentMethod === "online" ? (

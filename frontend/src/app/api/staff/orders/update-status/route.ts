@@ -533,7 +533,8 @@ export async function POST(request: Request) {
     const paymentStatus = order.payment_status as PaymentStatus;
     const shouldSetFinalDeliveryFee =
       order.order_type === "delivery" &&
-      nextStatus === "out_for_delivery";
+      nextStatus === "out_for_delivery" &&
+      getNumberValue(order.delivery_fee) <= 0;
 
     if (shouldSetFinalDeliveryFee) {
       if (!Number.isFinite(finalDeliveryFee) || finalDeliveryFee <= 0) {

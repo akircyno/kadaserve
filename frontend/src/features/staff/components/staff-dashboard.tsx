@@ -179,7 +179,8 @@ function getOrderSubtotal(order: StaffOrder) {
 function requiresFinalDeliveryFee(order: StaffOrder) {
   return (
     order.order_type === "delivery" &&
-    order.status === "ready"
+    order.status === "ready" &&
+    Number(order.delivery_fee ?? 0) <= 0
   );
 }
 
@@ -260,19 +261,37 @@ function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
     : "border border-[#684B35]/20 bg-[#FFF8EF]/70 text-[#684B35]";
 }
 
-function getPaymentLabel(paymentMethod: StaffOrder["payment_method"]) {
-  if (!paymentMethod) {
+function getPaymentLabel(order: StaffOrder) {
+  if (!order.payment_method) {
     return "Payment pending";
   }
 
-  if (paymentMethod === "online") {
+  if (order.payment_method === "online") {
     return "Online";
   }
 
-  return paymentMethod === "cash" ? "Cash" : "GCash";
+  if (order.payment_method === "cash") {
+    return order.order_type === "delivery" ? "Cash on Delivery" : "Pay at Cafe";
+  }
+
+  return "GCash";
 }
 
-function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
+function getPaymentStatusLabel(order: StaffOrder) {
+  if (order.status === "pending_payment") {
+    return "Awaiting Payment";
+  }
+
+  return order.payment_status === "paid" ? "Paid" : "Unpaid";
+}
+
+function getPaymentStatusStyle(order: StaffOrder) {
+  if (order.status === "pending_payment") {
+    return "border border-[#B76522]/30 bg-[#FFF0DA] text-[#684B35]";
+  }
+
+  const paymentStatus = order.payment_status;
+
   return paymentStatus === "paid"
     ? "border border-[#0F441D]/20 bg-[#FFF8EF]/70 text-[#0F441D]"
     : "border border-[#684B35]/30 bg-[#FFF0DA] text-[#684B35]";
@@ -1203,15 +1222,15 @@ export function StaffDashboard() {
                               order.payment_method
                             )}`}
                           >
-                            {getPaymentLabel(order.payment_method)}
+                            {getPaymentLabel(order)}
                           </span>
 
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
-                              order.payment_status
+                              order
                             )}`}
                           >
-                            {order.payment_status === "paid" ? "Paid" : "Unpaid"}
+                            {getPaymentStatusLabel(order)}
                           </span>
                         </div>
 
@@ -1229,6 +1248,29 @@ export function StaffDashboard() {
                             </p>
                           </div>
                         </div>
+
+                        {order.order_type === "delivery" ? (
+                          <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2 font-sans text-xs">
+                            <div>
+                              <p className="text-[#8C7A64]">Items</p>
+                              <p className="mt-0.5 font-bold text-[#0D2E18]">
+                                {peso(getOrderSubtotal(order))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[#8C7A64]">Delivery Fee</p>
+                              <p className="mt-0.5 font-bold text-[#0D2E18]">
+                                {peso(getDeliveryFee(order))}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[#8C7A64]">Total</p>
+                              <p className="mt-0.5 font-bold text-[#684B35]">
+                                {peso(order.total_amount)}
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2">
                           <div className="inline-flex items-center gap-1.5 font-sans text-xs text-[#6E5D49]">
@@ -1258,7 +1300,7 @@ export function StaffDashboard() {
 
                                 if (requiresFinalDeliveryFee(order)) {
                                   openOrder(order);
-                                  setStaffToast("Add final delivery fee before dispatch.");
+                                  setStaffToast("Delivery fee is missing. Add it before dispatch.");
                                   return;
                                 }
 
@@ -1372,15 +1414,15 @@ export function StaffDashboard() {
                         order.payment_method
                       )}`}
                     >
-                      {getPaymentLabel(order.payment_method)}
+                      {getPaymentLabel(order)}
                     </span>
 
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
-                        order.payment_status
+                        order
                       )}`}
                     >
-                      {order.payment_status === "paid" ? "Paid" : "Unpaid"}
+                      {getPaymentStatusLabel(order)}
                     </span>
                   </div>
 
@@ -1403,6 +1445,29 @@ export function StaffDashboard() {
                       {peso(order.total_amount)}
                     </p>
                   </div>
+
+                  {order.order_type === "delivery" ? (
+                    <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2 font-sans text-xs">
+                      <div>
+                        <p className="text-[#8C7A64]">Items</p>
+                        <p className="mt-0.5 font-bold text-[#0D2E18]">
+                          {peso(getOrderSubtotal(order))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[#8C7A64]">Delivery Fee</p>
+                        <p className="mt-0.5 font-bold text-[#0D2E18]">
+                          {peso(getDeliveryFee(order))}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[#8C7A64]">Total</p>
+                        <p className="mt-0.5 font-bold text-[#684B35]">
+                          {peso(order.total_amount)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -1430,7 +1495,7 @@ export function StaffDashboard() {
 
                   {selectedOrder.payment_status === "unpaid" ? (
                     <span className="rounded-full border border-[#684B35]/30 bg-[#FFF0DA] px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-[0.08em] text-[#684B35]">
-                      Unpaid
+                      {getPaymentStatusLabel(selectedOrder)}
                     </span>
                   ) : null}
                 </div>
@@ -1462,15 +1527,15 @@ export function StaffDashboard() {
                     selectedOrder.payment_method
                   )}`}
                 >
-                  {getPaymentLabel(selectedOrder.payment_method)}
+                  {getPaymentLabel(selectedOrder)}
                 </span>
 
                 <span
                   className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
-                    selectedOrder.payment_status
+                    selectedOrder
                   )}`}
                 >
-                  {selectedOrder.payment_status === "paid" ? "Paid" : "Unpaid"}
+                  {getPaymentStatusLabel(selectedOrder)}
                 </span>
 
                 <span
@@ -1491,7 +1556,7 @@ export function StaffDashboard() {
                 </div>
 
                 <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs text-[#8C7A64]">Current Total</p>
+                  <p className="font-sans text-xs text-[#8C7A64]">Grand Total</p>
                   <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
                     {peso(selectedOrder.total_amount)}
                   </p>
@@ -1500,30 +1565,39 @@ export function StaffDashboard() {
 
               {selectedOrder.order_type === "delivery" ? (
                 <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
-                        Final Delivery Fee
-                      </p>
-                      <p className="mt-1 font-sans text-sm text-[#5F5346]">
-                        Current saved fee: {peso(getDeliveryFee(selectedOrder))}
-                      </p>
-                    </div>
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#684B35]">
+                    Delivery Fee
+                  </p>
 
-                    <div className="text-right">
-                      <p className="font-sans text-xs text-[#8C7A64]">
-                        Updated total
-                      </p>
-                      <p className="mt-1 font-sans text-base font-bold text-[#0D2E18]">
-                        {peso(selectedProjectedTotal)}
-                      </p>
+                  <div className="mt-3 space-y-2 font-sans text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-[#5F5346]">Items</span>
+                      <span className="font-bold tabular-nums text-[#0D2E18]">
+                        {peso(getOrderSubtotal(selectedOrder))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-[#5F5346]">Delivery Fee</span>
+                      <span className="font-bold tabular-nums text-[#0D2E18]">
+                        {peso(getDeliveryFee(selectedOrder))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3 border-t border-[#EFE3CF] pt-2">
+                      <span className="font-bold text-[#684B35]">Grand Total</span>
+                      <span className="font-bold tabular-nums text-[#684B35]">
+                        {peso(
+                          requiresFinalDeliveryFee(selectedOrder)
+                            ? selectedProjectedTotal
+                            : selectedOrder.total_amount
+                        )}
+                      </span>
                     </div>
                   </div>
 
                   {requiresFinalDeliveryFee(selectedOrder) ? (
                     <label className="mt-3 block">
                       <span className="font-sans text-sm font-semibold text-[#0D2E18]">
-                        Final Delivery Fee:
+                        Missing delivery fee:
                       </span>
                       <input
                         type="number"
@@ -1535,7 +1609,7 @@ export function StaffDashboard() {
                           setFinalDeliveryFeeInput(event.target.value)
                         }
                         className="mt-2 w-full rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                        placeholder="Enter final delivery fee"
+                        placeholder="Enter delivery fee"
                       />
                     </label>
                   ) : null}
@@ -1751,7 +1825,7 @@ export function StaffDashboard() {
                               (!Number.isFinite(finalDeliveryFee) ||
                                 finalDeliveryFee <= 0)
                             ) {
-                              setError("Enter the final delivery fee before dispatch.");
+                              setError("Delivery fee is missing. Add it before dispatch.");
                               return;
                             }
 

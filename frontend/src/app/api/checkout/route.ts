@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  getDistanceBasedDeliveryFee,
+  hasDeliveryCoordinates,
+} from "@/lib/delivery-fee";
 import { createClient } from "@/lib/supabase/server";
 import {
   normalizeStoreOverride,
@@ -79,12 +83,14 @@ async function createPayMongoCheckoutSession({
   requestUrl,
   orderId,
   customerEmail,
+  deliveryFee,
   items,
   totalAmount,
 }: {
   requestUrl: URL;
   orderId: string;
   customerEmail: string | null;
+  deliveryFee: number;
   items: CheckoutItem[];
   totalAmount: number;
 }) {
@@ -94,13 +100,26 @@ async function createPayMongoCheckoutSession({
     throw new Error("PayMongo secret key is not configured.");
   }
 
-  const lineItems = items.map((item) => ({
-    currency: "PHP",
-    amount: toPayMongoAmount(item.base_price + item.addon_price),
-    name: item.name,
-    quantity: item.quantity,
-    description: item.special_instructions || undefined,
-  }));
+  const lineItems = [
+    ...items.map((item) => ({
+      currency: "PHP",
+      amount: toPayMongoAmount(item.base_price + item.addon_price),
+      name: item.name,
+      quantity: item.quantity,
+      description: item.special_instructions || undefined,
+    })),
+    ...(deliveryFee > 0
+      ? [
+          {
+            currency: "PHP",
+            amount: toPayMongoAmount(deliveryFee),
+            name: "Delivery Fee",
+            quantity: 1,
+            description: "Distance-based delivery fee",
+          },
+        ]
+      : []),
+  ];
 
   const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
     method: "POST",
@@ -247,13 +266,36 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+
+      if (!hasDeliveryCoordinates(deliveryLat, deliveryLng)) {
+        return NextResponse.json(
+          { error: "Pin your delivery location to calculate the delivery fee." },
+          { status: 400 }
+        );
+      }
     }
 
     const subtotal = items.reduce((sum, item) => {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
-    const baseDeliveryFee = 0;
-    const deliveryFee = baseDeliveryFee;
+    const deliveryFeeQuote =
+      orderType === "delivery" && hasDeliveryCoordinates(deliveryLat, deliveryLng)
+        ? getDistanceBasedDeliveryFee(deliveryLat as number, deliveryLng as number)
+        : null;
+
+    if (deliveryFeeQuote && !deliveryFeeQuote.isDeliverable) {
+      return NextResponse.json(
+        {
+          error: `Delivery is available within ${deliveryFeeQuote.maxDeliveryDistanceKm} km of the cafe.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const deliveryFee =
+      orderType === "delivery" && deliveryFeeQuote?.isDeliverable
+        ? deliveryFeeQuote.fee ?? 0
+        : 0;
     const totalAmount = Math.max(0, subtotal + deliveryFee);
 
     const { data: order, error: orderError } = await supabase
@@ -317,6 +359,7 @@ export async function POST(request: Request) {
           requestUrl,
           orderId: order.id,
           customerEmail: profile?.email || user.email || null,
+          deliveryFee,
           items,
           totalAmount,
         });

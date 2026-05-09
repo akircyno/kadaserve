@@ -136,11 +136,14 @@ function formatDateTime(value: string) {
 function getPaymentMethodLabel(order: StaffOrder) {
   if (order.payment_method === "online") return "Online";
   if (order.payment_method === "gcash") return "GCash";
-  if (order.payment_method === "cash") return "Cash";
+  if (order.payment_method === "cash") {
+    return order.order_type === "delivery" ? "Cash on Delivery" : "Pay at Cafe";
+  }
   return "Payment pending";
 }
 
 function getPaymentStatusLabel(order: StaffOrder) {
+  if (order.status === "pending_payment") return "Awaiting Payment";
   return order.payment_status === "paid" ? "Paid" : "Unpaid";
 }
 
