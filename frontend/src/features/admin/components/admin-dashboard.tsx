@@ -179,30 +179,6 @@ type AdminFeedbackRow = {
   menu_items: { name: string | null; category: string | null } | null;
 };
 
-type AdminRewardPoolItem = {
-  id: string;
-  name: string;
-  description: string;
-  type: "delivery_fee" | "voucher_discount" | "addon_reward";
-  pointsCost: number;
-  value: number;
-  isActive: boolean;
-  redeemedCount: number;
-  usedCount: number;
-  activeUnusedCount: number;
-};
-
-type AdminRewardsPayload = {
-  rewardPool: AdminRewardPoolItem[];
-  summary: {
-    totalRedeemed: number;
-    totalUsed: number;
-    activeUnused: number;
-    freeDeliveryRedeemed: number;
-    freeDeliveryUsed: number;
-  };
-};
-
 type AdminAnalyticsHourlyRow = {
   id: string;
   order_date: string;
@@ -268,134 +244,6 @@ function getOrderWeekdayLabel(value: string) {
       timeZone: "Asia/Manila",
       weekday: "long",
     }).format(new Date(value))
-  );
-}
-
-function RewardsManagementView({
-  orders,
-  adminRewards,
-}: {
-  orders: StaffOrder[];
-  adminRewards: AdminRewardsPayload | null;
-}) {
-  const completedOrders = orders.filter((order) =>
-    ["completed", "delivered"].includes(order.status)
-  );
-  const rewardPool = adminRewards?.rewardPool ?? [];
-  const freeDeliveryReward = rewardPool.find((item) => item.type === "delivery_fee");
-
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Completed Orders
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {completedOrders.length}
-          </p>
-        </div>
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Free Delivery Redeemed
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {adminRewards?.summary.freeDeliveryRedeemed ?? 0}
-          </p>
-        </div>
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Reward Pool
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {rewardPool.filter((item) => item.isActive).length}
-          </p>
-        </div>
-      </div>
-
-      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-        <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-          Customer Reward Items
-        </h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {rewardPool.map((item) => (
-            <article
-              key={item.id}
-              className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] p-4"
-            >
-              <p className="font-sans text-lg font-black text-[#0D2E18]">
-                {item.name.replace(" Voucher", "")}
-              </p>
-              <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
-                Reward type: {normalizeSuggestion(item.type)}
-              </p>
-              <p className="mt-2 font-sans text-sm text-[#684B35]">
-                {item.pointsCost} pts - {peso(item.value)} value
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#DCCFB8] pt-3 font-sans text-sm">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-                    Redeemed
-                  </p>
-                  <p className="font-black text-[#0D2E18]">{item.redeemedCount}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-                    Used
-                  </p>
-                  <p className="font-black text-[#0D2E18]">{item.usedCount}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-                    Active
-                  </p>
-                  <p className="font-black text-[#0D2E18]">
-                    {item.activeUnusedCount}
-                  </p>
-                </div>
-              </div>
-            </article>
-          ))}
-          {rewardPool.length === 0 ? (
-            <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] p-5 font-sans text-sm text-[#8C7A64]">
-              No reward records yet. Run backend/seed/rewards.sql in Supabase.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-        <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-          Free Delivery Summary
-        </h2>
-        <div className="mt-4 grid gap-3 font-sans text-sm sm:grid-cols-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Total Redeemed
-            </p>
-            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
-              {freeDeliveryReward?.redeemedCount ?? 0}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Total Used
-            </p>
-            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
-              {freeDeliveryReward?.usedCount ?? 0}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Active Unused
-            </p>
-            <p className="mt-1 text-2xl font-black text-[#0D2E18]">
-              {freeDeliveryReward?.activeUnusedCount ?? 0}
-            </p>
-          </div>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -557,9 +405,6 @@ export function AdminDashboard() {
   const [isInventorySaving, setIsInventorySaving] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState("");
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
-  const [adminRewards, setAdminRewards] = useState<AdminRewardsPayload | null>(
-    null
-  );
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -657,7 +502,6 @@ export function AdminDashboard() {
         order.status,
         order.delivery_email ?? "",
         order.delivery_phone ?? "",
-        order.reward_code ? "Free Delivery Reward Applied" : "",
         order.delivery_fee?.toString() ?? "",
         order.total_amount.toString(),
       ]
@@ -1223,7 +1067,6 @@ export function AdminDashboard() {
         menuResponse,
         inventoryResponse,
         feedbackResponse,
-        rewardsResponse,
         analyticsHourlyResponse,
         analyticsWeeklyResponse,
         analyticsItemsResponse,
@@ -1233,7 +1076,6 @@ export function AdminDashboard() {
         fetch("/api/admin/menu", { method: "GET" }),
         fetch("/api/admin/inventory", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
-        fetch("/api/admin/rewards", { method: "GET" }),
         fetch("/api/admin/analytics/hourly", { method: "GET" }),
         fetch("/api/admin/analytics/weekly", { method: "GET" }),
         fetch("/api/admin/analytics/items", { method: "GET" }),
@@ -1244,7 +1086,6 @@ export function AdminDashboard() {
       const menuResult = await menuResponse.json();
       const inventoryResult = (await inventoryResponse.json()) as AdminInventoryPayload;
       const feedbackResult = await feedbackResponse.json();
-      const rewardsResult = await rewardsResponse.json();
       const analyticsHourlyResult = (await analyticsHourlyResponse.json()) as {
         analyticsDate?: string;
         analyticsHourly?: AdminAnalyticsHourlyRow[];
@@ -1286,9 +1127,6 @@ export function AdminDashboard() {
       }
       if (feedbackResponse.ok) {
         setFeedbackRows(feedbackResult.feedback ?? []);
-      }
-      if (rewardsResponse.ok) {
-        setAdminRewards(rewardsResult);
       }
       if (analyticsHourlyResponse.ok) {
         setAnalyticsHourly(analyticsHourlyResult.analyticsHourly ?? []);
@@ -1583,7 +1421,7 @@ export function AdminDashboard() {
   function handleTabSelect(tab: AdminTab) {
     setActiveTab(tab);
 
-    if (tab === "feedback" || tab === "rewards" || tab === "inventory") {
+    if (tab === "feedback" || tab === "inventory") {
       void loadAdminData({ showLoading: false });
     }
 
@@ -1630,7 +1468,7 @@ export function AdminDashboard() {
               aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/18"
             >
-              {isSidebarOpen ? <X size={17} /> : <MenuIcon size={18} />}
+              {isSidebarOpen ? <X size={20} /> : <MenuIcon size={20} />}
             </button>
           </div>
 
@@ -1655,7 +1493,7 @@ export function AdminDashboard() {
                     : "rounded-[14px] text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
                     }`}
                 >
-                  <Icon size={18} className="shrink-0" />
+                  <Icon size={20} className="shrink-0" />
                   {isSidebarOpen ? (
                     tab.label
                   ) : (
@@ -1675,7 +1513,7 @@ export function AdminDashboard() {
               className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
                 }`}
             >
-              <LogOut size={17} className="shrink-0" />
+              <LogOut size={20} className="shrink-0" />
               {isSidebarOpen ? (isLoggingOut ? "Logging out..." : "Logout") : null}
             </button>
           </div>
@@ -1691,7 +1529,7 @@ export function AdminDashboard() {
                   aria-label="Open admin navigation"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white lg:hidden"
                 >
-                  <MenuIcon size={18} />
+                  <MenuIcon size={20} />
                 </button>
                 <div>
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
@@ -1877,13 +1715,6 @@ export function AdminDashboard() {
                 globalAnalyticsItems={analyticsItems}
                 menuItems={menuItems}
                 orders={scopedCustomerPreferenceOrders}
-              />
-            ) : null}
-
-            {activeTab === "rewards" ? (
-              <RewardsManagementView
-                orders={orders}
-                adminRewards={adminRewards}
               />
             ) : null}
 

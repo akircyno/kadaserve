@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/customer/orders") ||
     pathname.startsWith("/customer/menu") ||
     (pathname === "/customer" &&
-      ["orders", "rewards"].includes(
+      ["orders"].includes(
         request.nextUrl.searchParams.get("tab") ?? ""
       ));
   const isStaffRoute = pathname.startsWith("/staff");

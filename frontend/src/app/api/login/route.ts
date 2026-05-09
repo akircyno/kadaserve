@@ -26,31 +26,6 @@ function getUserFullName(
   return email;
 }
 
-function getUserPhone(userMetadata: Record<string, unknown> | null | undefined) {
-  const phone = userMetadata?.phone;
-
-  if (typeof phone === "string" && phone.trim()) {
-    return phone.trim();
-  }
-
-  return "09000000000";
-}
-
-function getUserDateOfBirth(
-  userMetadata: Record<string, unknown> | null | undefined
-) {
-  const dateOfBirth = userMetadata?.date_of_birth;
-
-  if (
-    typeof dateOfBirth === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)
-  ) {
-    return dateOfBirth;
-  }
-
-  return "2000-01-01";
-}
-
 function getClientIp(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
 
@@ -146,8 +121,7 @@ export async function POST(request: Request) {
           authData.user.email ?? normalizedEmail
         ),
         email: authData.user.email ?? normalizedEmail,
-        phone: getUserPhone(authData.user.user_metadata),
-        date_of_birth: getUserDateOfBirth(authData.user.user_metadata),
+        phone: null,
         role: "customer",
       });
 

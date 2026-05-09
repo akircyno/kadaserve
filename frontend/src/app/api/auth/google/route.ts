@@ -5,11 +5,16 @@ export async function GET(request: Request) {
   try {
     const requestUrl = new URL(request.url);
     const supabase = await createClient();
+    const next = requestUrl.searchParams.get("next");
+    const safeNext =
+      next?.startsWith("/") && !next.startsWith("//") ? next : null;
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${requestUrl.origin}/auth/callback`,
+        redirectTo: `${requestUrl.origin}/auth/callback${
+          safeNext ? `?next=${encodeURIComponent(safeNext)}` : ""
+        }`,
         queryParams: {
           access_type: "offline",
           prompt: "consent",

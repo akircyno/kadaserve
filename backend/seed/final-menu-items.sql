@@ -1,7 +1,6 @@
 -- KadaServe final controlled menu dataset.
--- Run this in Supabase SQL Editor after backing up any menu_items rows you want to keep.
 -- Prices below are editable placeholders because the source menu file does not include prices.
--- Flavor badges are documented in comments; the current app derives taste badges from order history.
+-- Flavor badges are documented in comments
 
 alter table public.menu_items
   drop constraint if exists menu_items_category_check;

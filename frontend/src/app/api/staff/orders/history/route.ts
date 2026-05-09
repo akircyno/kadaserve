@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const finalStatuses = ["completed", "delivered", "cancelled"];
+const finalStatuses = ["completed", "delivered", "cancelled", "expired"];
 const defaultPageSize = 40;
 const maxPageSize = 80;
 const maxCsvRows = 5000;
@@ -34,8 +34,6 @@ type EnrichedHistoryOrder = {
   payment_status: string | null;
   total_amount: number;
   delivery_fee: number | null;
-  reward_code: string | null;
-  reward_discount_amount: number | null;
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
@@ -55,8 +53,6 @@ type AdminHistoryOrderRow = {
   payment_status: string | null;
   total_amount: number;
   delivery_fee: number | null;
-  reward_code: string | null;
-  reward_discount_amount: number | null;
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
@@ -189,8 +185,6 @@ function buildCsv(orders: EnrichedHistoryOrder[]) {
       "Payment",
       "Total",
       "Delivery Fee",
-      "Reward Applied",
-      "Reward Discount",
       "Time",
       "Items",
       "Special Remarks",
@@ -222,8 +216,6 @@ function buildCsv(orders: EnrichedHistoryOrder[]) {
         }`,
         order.total_amount,
         order.delivery_fee ?? 0,
-        order.reward_code ? "Free Delivery" : "",
-        order.reward_discount_amount ?? 0,
         order.ordered_at,
         items,
         remarks,
@@ -281,8 +273,6 @@ export async function GET(request: Request) {
           payment_status,
           total_amount,
           delivery_fee,
-          reward_code,
-          reward_discount_amount,
           ordered_at,
           walkin_name,
           delivery_address,
@@ -378,8 +368,6 @@ export async function GET(request: Request) {
         payment_status: order.payment_status,
         total_amount: order.total_amount,
         delivery_fee: order.delivery_fee,
-        reward_code: order.reward_code,
-        reward_discount_amount: order.reward_discount_amount,
         ordered_at: order.ordered_at,
         walkin_name: order.walkin_name,
         delivery_address: order.delivery_address,

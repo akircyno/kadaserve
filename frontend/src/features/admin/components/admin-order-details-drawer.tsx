@@ -169,9 +169,6 @@ export function AdminOrderDetailsDrawer({
             {order.order_type === "delivery" ? (
               <InfoText label="Delivery Fee" value={peso(order.delivery_fee ?? 0)} />
             ) : null}
-            {order.reward_code ? (
-              <InfoText label="Reward Applied" value="Free Delivery" />
-            ) : null}
           </div>
 
           <hr className="my-6 border-[#D8C8AA]/70" />
@@ -279,7 +276,7 @@ export function AdminOrderDetailsDrawer({
                         Size: {item.size} - Temp: {item.temperature}
                       </p>
                       <p>
-                        Sugar: {item.sugar_level}%
+                        Sweetness: {item.sugar_level === 0 ? "No Sugar" : `${item.sugar_level}% Sugar`}
                         {item.ice_level ? ` - Ice: ${item.ice_level}` : ""}
                       </p>
                       {item.addons && item.addons.length > 0 ? (

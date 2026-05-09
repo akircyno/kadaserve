@@ -28,6 +28,14 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "kadaserve-cart";
 
+function createCartItemId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function readStoredItems(isAuthenticated: boolean) {
   if (typeof window === "undefined") {
     return [];
@@ -76,7 +84,15 @@ export function CartProvider({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setItems(isAuthenticated ? readStoredItems(isAuthenticated) : []);
+      setItems((currentItems) => {
+        if (!isAuthenticated) {
+          return [];
+        }
+
+        return currentItems.length > 0
+          ? currentItems
+          : readStoredItems(isAuthenticated);
+      });
       setHasLoadedStoredItems(true);
     }, 0);
 
@@ -140,7 +156,7 @@ export function CartProvider({
         ...current,
         {
           ...item,
-          id: crypto.randomUUID(),
+          id: createCartItemId(),
         },
       ];
     });

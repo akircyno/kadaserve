@@ -98,8 +98,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       ? "orders"
       : resolvedSearchParams.tab === "menu"
       ? "menu"
-      : resolvedSearchParams.tab === "rewards"
-      ? "rewards"
       : "home";
 
   const supabase = await createClient();
@@ -227,8 +225,6 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           payment_status,
           total_amount,
           delivery_fee,
-          reward_code,
-          reward_discount_amount,
           ordered_at,
           delivery_address,
           delivery_lat,
@@ -288,15 +284,15 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     if (eligibleOrderItems.length > 0) {
       const { data: existingFeedback } = await supabase
         .from("feedback")
-        .select("order_item_id")
+        .select("order_id")
         .eq("customer_id", user.id);
 
-      const submittedIds = new Set(
-        (existingFeedback ?? []).map((item) => item.order_item_id)
+      const submittedOrderIds = new Set(
+        (existingFeedback ?? []).map((item) => item.order_id)
       );
 
       feedbackItems = eligibleOrderItems.filter(
-        (item) => !submittedIds.has(item.order_item_id)
+        (item) => !submittedOrderIds.has(item.order_id)
       );
     }
 

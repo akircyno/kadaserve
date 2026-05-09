@@ -3,15 +3,15 @@ import Link from "next/link";
 const sections = [
   {
     title: "Account Use",
-    body: "You are responsible for keeping your KadaServe account details accurate and secure. Accounts should be used only for lawful ordering, tracking, feedback, and reward activities within KadaServe.",
+    body: "You are responsible for keeping your KadaServe account details accurate and secure. Accounts should be used only for lawful ordering, tracking, feedback, and customer preference features within KadaServe.",
   },
   {
     title: "Ordering, Delivery, and Pickup",
     body: "Orders placed through KadaServe may be prepared for pickup or delivery depending on store availability. Delivery details, pickup instructions, order status, and estimated times are provided to help coordinate service.",
   },
   {
-    title: "Payment and Rewards",
-    body: "Payments, vouchers, discounts, and rewards are processed according to the options available during checkout. KadaServe may validate reward eligibility before applying a discount or benefit.",
+    title: "Payment",
+    body: "Payments are processed according to the options available during checkout. KadaServe may validate order and delivery details before confirming the final amount.",
   },
   {
     title: "Cancellations",

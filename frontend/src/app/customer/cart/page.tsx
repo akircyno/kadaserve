@@ -7,10 +7,9 @@ import {
   ArrowLeft,
   CreditCard,
   Pencil,
+  Phone,
   Plus,
   ShoppingCart,
-  Ticket,
-  TicketPercent,
   Trash2,
   X,
 } from "lucide-react";
@@ -18,29 +17,6 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { DeliveryLocationPicker } from "@/features/customer/components/delivery-location-picker";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
 import type { StoreStatusPayload } from "@/lib/store-status";
-
-type RewardVoucher = {
-  code: string;
-  title: string;
-  expiresAt: string;
-  value: string;
-};
-
-type CustomerRewardVoucher = {
-  id: string;
-  code: string;
-  status: "active" | "used" | "expired";
-  expiresAt: string;
-  rewardItem: {
-    id: string;
-    name: string;
-    description: string;
-    type: "delivery_fee" | "voucher_discount" | "addon_reward";
-    pointsCost: number;
-    value: number;
-    isActive: boolean;
-  } | null;
-};
 
 type CustomerAddress = {
   id: string;
@@ -50,18 +26,8 @@ type CustomerAddress = {
   is_default: boolean;
 };
 
-const rewardsWalletStorageKey = "kadaserve_rewards_wallet";
-
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
-}
-
-function formatRewardDate(value: string) {
-  return new Date(value).toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function formatAddonLabel(value: string) {
@@ -73,44 +39,6 @@ function formatAddonLabel(value: string) {
 
 function getItemTotal(item: CartItem) {
   return (item.base_price + item.addon_price) * item.quantity;
-}
-
-function getVoucherDiscount(subtotal: number, code: string) {
-  const normalizedCode = code.trim().toUpperCase();
-
-  if (normalizedCode === "KADA10") {
-    return Math.round(subtotal * 0.1);
-  }
-
-  if (normalizedCode === "FIRSTSIP") {
-    return Math.min(50, subtotal);
-  }
-
-  if (normalizedCode === "KADA30") {
-    return Math.min(30, subtotal);
-  }
-
-  if (normalizedCode === "CREAMYADDON") {
-    return Math.min(15, subtotal);
-  }
-
-  return 0;
-}
-
-function readRewardWallet() {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(rewardsWalletStorageKey) ?? "[]"
-    ) as RewardVoucher[];
-
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 }
 
 function getCartUpdatePayload(item: CartItem, specialInstructions: string) {
@@ -131,12 +59,16 @@ function getCartUpdatePayload(item: CartItem, specialInstructions: string) {
   };
 }
 
+function formatSweetnessLevel(value: number) {
+  return value === 0 ? "No Sugar" : `${value}% Sugar`;
+}
+
 export default function CartPage() {
   const router = useRouter();
   const { items, removeItem, updateItem, clearCart } = useCart();
   const deliveryAddressRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const [orderType, setOrderType] = useState<"pickup" | "delivery">("delivery");
+  const [orderType, setOrderType] = useState<"pickup" | "delivery">("pickup");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "gcash">("cash");
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -144,27 +76,15 @@ export default function CartPage() {
   const [isSavingAddress, setIsSavingAddress] = useState(false);
   const [addressMessage, setAddressMessage] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
-  const [voucherCode, setVoucherCode] = useState("");
-  const [voucherDraft, setVoucherDraft] = useState("");
-  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
   const [isStoreStatusLoading, setIsStoreStatusLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [rewardWallet, setRewardWallet] = useState<RewardVoucher[]>([]);
-  const [activeRewardVouchers, setActiveRewardVouchers] = useState<
-    CustomerRewardVoucher[]
-  >([]);
-  const [appliedReward, setAppliedReward] = useState<CustomerRewardVoucher | null>(
-    null
-  );
-  const [rewardMessage, setRewardMessage] = useState("");
-  const [isRewardsLoading, setIsRewardsLoading] = useState(true);
-  const [isApplyingReward, setIsApplyingReward] = useState(false);
   const [isReturningToMenu, setIsReturningToMenu] = useState(false);
 
   useEffect(() => {
@@ -178,37 +98,6 @@ export default function CartPage() {
       return [...retainedIds, ...newIds];
     });
   }, [items]);
-
-  useEffect(() => {
-    setRewardWallet(readRewardWallet());
-  }, []);
-
-  async function loadCustomerRewards() {
-    setIsRewardsLoading(true);
-
-    try {
-      const response = await fetch("/api/customer/rewards");
-      const result = (await response.json()) as {
-        activeVouchers?: CustomerRewardVoucher[];
-        error?: string;
-      };
-
-      if (!response.ok) {
-        setRewardMessage(result.error || "Vouchers are unavailable right now.");
-        return;
-      }
-
-      setActiveRewardVouchers(result.activeVouchers ?? []);
-    } catch {
-      setRewardMessage("Vouchers are unavailable right now.");
-    } finally {
-      setIsRewardsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadCustomerRewards();
-  }, []);
 
   async function loadSavedAddresses() {
     try {
@@ -245,11 +134,8 @@ export default function CartPage() {
   useEffect(() => {
     if (orderType === "delivery") {
       setPaymentMethod("cash");
-    } else if (appliedReward?.rewardItem?.type === "delivery_fee") {
-      setAppliedReward(null);
-      setRewardMessage("Free Delivery can only be used for delivery orders.");
     }
-  }, [orderType, appliedReward]);
+  }, [orderType]);
 
   useEffect(() => {
     let isMounted = true;
@@ -283,34 +169,12 @@ export default function CartPage() {
     [items, selectedItemIds]
   );
   const subtotal = selectedItems.reduce((sum, item) => sum + getItemTotal(item), 0);
-  const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
   const baseDeliveryFee = 0;
   const estimatedDeliveryFeeLabel =
     orderType === "delivery" ? "~P40-P75" : peso(0);
-  const appliedRewardType = appliedReward?.rewardItem?.type;
-  const rewardDiscount =
-    appliedRewardType === "delivery_fee"
-      ? Math.min(baseDeliveryFee, Number(appliedReward?.rewardItem?.value ?? 0))
-      : Math.min(subtotal, Number(appliedReward?.rewardItem?.value ?? 0));
-  const deliveryFee =
-    appliedRewardType === "delivery_fee"
-      ? Math.max(0, baseDeliveryFee - rewardDiscount)
-      : baseDeliveryFee;
-  const rewardItemDiscount =
-    appliedRewardType && appliedRewardType !== "delivery_fee" ? rewardDiscount : 0;
-  const grandTotal = Math.max(
-    0,
-    subtotal + deliveryFee - voucherDiscount - rewardItemDiscount
-  );
-  const pointsEarned = Math.floor(grandTotal / 20);
+  const deliveryFee = baseDeliveryFee;
+  const grandTotal = Math.max(0, subtotal + deliveryFee);
   const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const selectedVoucher = rewardWallet.find(
-    (voucher) => voucher.code === voucherCode.trim().toUpperCase()
-  );
-  const applicableRewardVouchers = activeRewardVouchers.filter(
-    (voucher) =>
-      voucher.rewardItem?.type !== "delivery_fee" || orderType === "delivery"
-  );
   const selectedSavedAddress =
     savedAddresses.find((address) => address.id === selectedAddressId) ?? null;
   const isCheckoutBlocked =
@@ -335,64 +199,6 @@ export default function CartPage() {
       ...getCartUpdatePayload(item, item.special_instructions),
       quantity: nextQuantity,
     });
-  }
-
-  function openVoucherModal() {
-    setVoucherDraft(voucherCode);
-    setIsVoucherModalOpen(true);
-  }
-
-  function applyVoucher(code: string) {
-    setVoucherCode(code.trim().toUpperCase());
-    setVoucherDraft(code.trim().toUpperCase());
-    setAppliedReward(null);
-    setRewardMessage("");
-    setIsVoucherModalOpen(false);
-  }
-
-  async function applyRewardVoucher(voucher: CustomerRewardVoucher) {
-    setRewardMessage("");
-
-    if (voucher.rewardItem?.type === "delivery_fee" && orderType !== "delivery") {
-      setAppliedReward(null);
-      setRewardMessage("Free Delivery can only be used for delivery orders.");
-      return;
-    }
-
-    setIsApplyingReward(true);
-
-    try {
-      const response = await fetch("/api/customer/rewards/apply", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rewardId: voucher.id,
-          orderType,
-        }),
-      });
-      const result = (await response.json()) as {
-        reward?: CustomerRewardVoucher;
-        message?: string;
-        error?: string;
-      };
-
-      if (!response.ok || !result.reward) {
-        setRewardMessage(result.error || "This reward cannot be applied.");
-        return;
-      }
-
-      setAppliedReward(result.reward);
-      setVoucherCode("");
-      setVoucherDraft("");
-      setRewardMessage(result.message || "Reward applied.");
-      setIsVoucherModalOpen(false);
-    } catch {
-      setRewardMessage("Something went wrong while applying this reward.");
-    } finally {
-      setIsApplyingReward(false);
-    }
   }
 
   function openAddressPicker() {
@@ -540,11 +346,9 @@ export default function CartPage() {
           orderType,
           paymentMethod,
           deliveryAddress,
+          deliveryPhone: deliveryPhone.trim(),
           deliveryLat,
           deliveryLng,
-          voucherCode,
-          rewardId: appliedReward?.id ?? null,
-          rewardCode: appliedReward?.code ?? null,
         }),
       });
 
@@ -561,8 +365,6 @@ export default function CartPage() {
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
       clearCart();
-      setAppliedReward(null);
-      void loadCustomerRewards();
 
       router.replace(`/customer?tab=orders&orderId=${orderId}`);
     } catch {
@@ -616,21 +418,8 @@ export default function CartPage() {
               <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                 Order Method
               </p>
-              <div className="flex rounded-full border border-[#D8C8A7] bg-[#FFF8EF] p-1 shadow-sm">
-                {(["pickup", "delivery"] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setOrderType(type)}
-                    className={`min-w-24 rounded-full px-4 py-2 font-sans text-sm font-bold transition ${
-                      orderType === type
-                        ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
-                        : "text-[#684B35] hover:text-[#0D2E18]"
-                    }`}
-                  >
-                    {type === "pickup" ? "Pickup" : "Delivery"}
-                  </button>
-                ))}
+              <div className="rounded-full border border-[#D8C8A7] bg-[#FFF8EF] px-4 py-2">
+                <p className="font-sans text-sm font-bold text-[#0D2E18]">Pickup</p>
               </div>
             </div>
 
@@ -690,6 +479,23 @@ export default function CartPage() {
                     }}
                   />
                 ) : null}
+                <label className="mt-3 block">
+                  <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                    Phone Number <span className="normal-case tracking-normal text-[#8C7A64]">(optional)</span>
+                  </span>
+                  <div className="mt-2 flex items-center rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 transition focus-within:border-[#0D2E18] focus-within:ring-2 focus-within:ring-[#0D2E18]/10">
+                    <Phone className="mr-3 h-4 w-4 shrink-0 text-[#8C7A64]" />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      value={deliveryPhone}
+                      onChange={(event) => setDeliveryPhone(event.target.value)}
+                      placeholder="Optional contact number"
+                      className="min-w-0 flex-1 bg-transparent font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                    />
+                  </div>
+                </label>
                 <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
                   Estimated delivery time: 25-40mins
                 </p>
@@ -758,7 +564,7 @@ export default function CartPage() {
                             ) : (
                               <ul className="mt-2 list-disc space-y-1 pl-5 font-sans text-sm text-[#684B35]">
                                 <li>Size: {item.size}</li>
-                                <li>Sugar level: {item.sugar_level}%</li>
+                                <li>Sweetness: {formatSweetnessLevel(item.sugar_level)}</li>
                                 <li>Ice level: {item.ice_level ?? "None"}</li>
                                 <li>Temperature: {item.temperature}</li>
                                 <li>Quantity: {item.quantity}</li>
@@ -832,58 +638,6 @@ export default function CartPage() {
               </div>
 
               <aside className="h-fit space-y-4">
-                <section className="border-t border-[#D8C8A7] pt-5 lg:border-t-0 lg:pt-0">
-                  <div className="flex items-center gap-2">
-                    <TicketPercent className="h-5 w-5 text-[#0D2E18]" />
-                    <h2 className="font-sans text-lg font-black">Voucher</h2>
-                  </div>
-
-                  <div className="mt-4 rounded-[16px] border border-[#D8C8A7] bg-white/65 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                          Voucher
-                        </p>
-                        <p className="mt-1 truncate font-sans text-sm font-black text-[#0D2E18]">
-                          {appliedReward
-                            ? appliedReward.rewardItem?.name ?? appliedReward.code
-                            : voucherCode
-                            ? selectedVoucher?.title ?? voucherCode
-                            : "No voucher selected"}
-                        </p>
-                        {appliedReward ? (
-                          <p className="font-sans text-xs font-semibold text-[#684B35]">
-                            Code: {appliedReward.code}
-                          </p>
-                        ) : voucherCode ? (
-                          <p className="font-sans text-xs font-semibold text-[#684B35]">
-                            Code: {voucherCode}
-                          </p>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={openVoucherModal}
-                        className="shrink-0 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-bold text-[#FFF0DA]"
-                      >
-                        Add Voucher
-                      </button>
-                    </div>
-                    {rewardMessage ? (
-                      <p className="mt-3 rounded-[12px] bg-[#FFF0DA] px-3 py-2 font-sans text-xs font-semibold text-[#684B35]">
-                        {rewardMessage}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <p className="mt-4 font-sans text-sm font-semibold text-[#2D7A40]">
-                    You will earn {pointsEarned} points
-                  </p>
-                  <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
-                    Adds {cupCount} cup{cupCount === 1 ? "" : "s"} to your goal
-                  </p>
-                </section>
-
                 <section className="border-t border-[#D8C8A7] pt-5">
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-5 w-5 text-[#0D2E18]" />
@@ -900,31 +654,16 @@ export default function CartPage() {
                         Estimated Delivery Fee
                       </span>
                       <span className="font-bold">
-                        {appliedRewardType === "delivery_fee" && deliveryFee === 0
-                          ? peso(0)
-                          : estimatedDeliveryFeeLabel}
+                        {estimatedDeliveryFeeLabel}
                       </span>
                     </div>
                     <p className="-mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
                       fee is depends on the distance. The staff will confirm the final
                       delivery fee to your email.
                     </p>
-                    {appliedReward ? (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[#684B35]">Voucher Applied</span>
-                        <span className="font-bold text-[#0D2E18]">
-                          {appliedRewardType === "delivery_fee"
-                            ? "Free Delivery"
-                            : `-${peso(rewardDiscount)}`}
-                        </span>
-                      </div>
-                    ) : null}
-                    {voucherDiscount > 0 ? (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[#684B35]">Voucher Discount</span>
-                        <span className="font-bold">-{peso(voucherDiscount)}</span>
-                      </div>
-                    ) : null}
+                    <p className="font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                      This order includes {cupCount} item{cupCount === 1 ? "" : "s"}.
+                    </p>
                     <div className="border-t border-[#EFE2C9] pt-3">
                       <div className="flex items-center justify-between gap-4">
                         <span className="font-sans text-sm font-bold text-[#684B35]">
@@ -1143,188 +882,6 @@ export default function CartPage() {
         </div>
       ) : null}
 
-      {isVoucherModalOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
-
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                  Voucher
-                </p>
-                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                  Add a voucher
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsVoucherModalOpen(false)}
-                aria-label="Close voucher modal"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFF0DA] text-[#0D2E18]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <label className="mt-5 block">
-              <span className="font-sans text-sm font-bold text-[#684B35]">
-                Add a voucher code
-              </span>
-              <div className="mt-2 flex gap-2">
-                <input
-                  value={voucherDraft}
-                  onChange={(event) => setVoucherDraft(event.target.value)}
-                  placeholder="Enter voucher code"
-                  className="min-w-0 flex-1 rounded-[16px] border border-[#D8C8A7] bg-[#FFF0DA] px-4 py-3 font-sans text-sm font-bold uppercase text-[#0D2E18] outline-none placeholder:normal-case placeholder:text-[#9B8A74]"
-                />
-                <button
-                  type="button"
-                  onClick={() => applyVoucher(voucherDraft)}
-                  disabled={!voucherDraft.trim()}
-                  className="rounded-[16px] bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0DA] disabled:cursor-not-allowed disabled:bg-[#D8C8A7]"
-                >
-                  Apply
-                </button>
-              </div>
-            </label>
-
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-[#EFE2C9]" />
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#9B8A74]">
-                Or
-              </span>
-              <span className="h-px flex-1 bg-[#EFE2C9]" />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-sans text-lg font-black text-[#0D2E18]">
-                  Available Vouchers
-                </h3>
-                {isRewardsLoading ? (
-                  <LoadingSpinner className="h-4 w-4" label="Loading vouchers" />
-                ) : null}
-              </div>
-
-              {isRewardsLoading ? (
-                <div className="mt-4 flex items-center gap-2 rounded-[18px] bg-[#FFF8EF] px-4 py-5 font-sans text-sm font-bold text-[#684B35]">
-                  <LoadingSpinner className="h-4 w-4" label="Loading vouchers" />
-                  <span>Checking available vouchers...</span>
-                </div>
-              ) : applicableRewardVouchers.length > 0 || rewardWallet.length > 0 ? (
-                <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
-                  {applicableRewardVouchers.map((voucher) => {
-                    const isApplied = appliedReward?.id === voucher.id;
-                    const isDeliveryOnly = voucher.rewardItem?.type === "delivery_fee";
-
-                    return (
-                      <button
-                        key={voucher.id}
-                        type="button"
-                        onClick={() => applyRewardVoucher(voucher)}
-                        disabled={
-                          isApplyingReward ||
-                          isApplied ||
-                          (isDeliveryOnly && orderType !== "delivery")
-                        }
-                        className={`w-full rounded-[18px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${
-                          isApplied
-                            ? "border-[#0D2E18] bg-[#E7F4EA]"
-                            : "border-[#E8D9BE] bg-[#FFF8EF]"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-sans text-base font-black text-[#0D2E18]">
-                              {voucher.rewardItem?.name ?? "Reward Voucher"}
-                            </p>
-                            <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
-                              Code: {voucher.code}
-                            </p>
-                            <p className="font-sans text-xs text-[#8C7A64]">
-                              Expires {formatRewardDate(voucher.expiresAt)}
-                            </p>
-                            {isDeliveryOnly && orderType !== "delivery" ? (
-                              <p className="mt-1 font-sans text-xs font-bold text-[#9C543D]">
-                                Available for delivery orders only
-                              </p>
-                            ) : null}
-                          </div>
-                          {isApplyingReward && !isApplied ? (
-                            <LoadingSpinner
-                              className="h-5 w-5 text-[#0D2E18]"
-                              label="Applying voucher"
-                            />
-                          ) : (
-                            <TicketPercent className="h-6 w-6 text-[#0D2E18]" />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {rewardWallet.map((voucher) => (
-                    <button
-                      key={voucher.code}
-                      type="button"
-                      onClick={() => applyVoucher(voucher.code)}
-                      className={`w-full rounded-[18px] border p-4 text-left transition ${
-                        voucherCode === voucher.code
-                          ? "border-[#0D2E18] bg-[#FFF0DA]"
-                          : "border-[#E8D9BE] bg-[#FFF8EF]"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-sans text-base font-black text-[#0D2E18]">
-                            {voucher.title}
-                          </p>
-                          <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
-                            Code: {voucher.code}
-                          </p>
-                          <p className="font-sans text-xs text-[#8C7A64]">
-                            Expires {voucher.expiresAt}
-                          </p>
-                        </div>
-                        <TicketPercent className="h-6 w-6 text-[#0D2E18]" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-4 rounded-[20px] bg-[#FFF8EF] px-5 py-8 text-center">
-                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#E1E6D9] text-white">
-                    <Ticket className="h-10 w-10" />
-                  </div>
-                  <p className="mt-4 font-sans text-lg font-black text-[#0D2E18]">
-                    No Available Voucher
-                  </p>
-                  <p className="mt-1 font-sans text-sm leading-6 text-[#684B35]">
-                    Your My Rewards vouchers will appear here when available.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {voucherCode || appliedReward ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setVoucherCode("");
-                  setVoucherDraft("");
-                  setAppliedReward(null);
-                  setRewardMessage("");
-                  setIsVoucherModalOpen(false);
-                }}
-                className="mt-4 w-full rounded-full border border-[#D8C8A7] px-4 py-3 font-sans text-sm font-bold text-[#684B35]"
-              >
-                Remove selected voucher
-              </button>
-            ) : null}
-          </section>
-        </div>
-      ) : null}
     </main>
   );
 }

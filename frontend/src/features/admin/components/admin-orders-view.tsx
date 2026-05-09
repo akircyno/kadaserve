@@ -148,8 +148,6 @@ function getExportRows(orders: StaffOrder[]) {
     ),
     total_amount: order.total_amount,
     delivery_fee: order.delivery_fee ?? 0,
-    reward_code: order.reward_code ?? "",
-    reward_discount_amount: order.reward_discount_amount ?? 0,
     delivery_address: order.delivery_address ?? "",
     delivery_lat: order.delivery_lat ?? "",
     delivery_lng: order.delivery_lng ?? "",
@@ -172,8 +170,6 @@ function downloadCsv(orders: StaffOrder[], timeFilter: TimeFilter) {
     items_array: "",
     total_amount: "",
     delivery_fee: "",
-    reward_code: "",
-    reward_discount_amount: "",
     delivery_address: "",
     delivery_lat: "",
     delivery_lng: "",
@@ -658,11 +654,6 @@ export function OrdersView({
                 <p className="mt-1 line-clamp-2 font-normal text-[#8C7A64]">
                   {formatOrderItems(order) || "No items"}
                 </p>
-                {order.reward_code ? (
-                  <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
-                    Reward Applied: Free Delivery
-                  </p>
-                ) : null}
               </div>
               <span className="font-semibold text-[#684B35]">
                 {getEncodedByName(order)}

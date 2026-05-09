@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type {
@@ -10,6 +10,7 @@ import type {
 } from "@/lib/store-status";
 import {
   ClipboardList,
+  ArrowRight,
   ExternalLink,
   MapPin,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   Truck,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
@@ -30,11 +32,16 @@ type StaffProfile = {
 };
 type BoardOrderStatus = Exclude<
   OrderStatus,
-  "completed" | "delivered" | "cancelled"
+  "completed" | "delivered" | "cancelled" | "expired"
 >;
 
 const fallbackOrders: StaffOrder[] = [];
-const finalStatuses: OrderStatus[] = ["completed", "delivered", "cancelled"];
+const finalStatuses: OrderStatus[] = [
+  "completed",
+  "delivered",
+  "cancelled",
+  "expired",
+];
 
 
 const boardColumns: Array<{
@@ -122,16 +129,46 @@ function formatElapsed(value: string, now: Date) {
   return `${Math.max(1, minutes)}m`;
 }
 
+function getMinutesUntilExpiration(value: string, now: Date) {
+  const expirationAt = new Date(value).getTime() + 60 * 60 * 1000;
+  const minutesLeft = Math.ceil((expirationAt - now.getTime()) / 60000);
+  return minutesLeft;
+}
+
+function isPendingOrderExpired(value: string, now: Date) {
+  return getMinutesUntilExpiration(value, now) <= 0;
+}
+
+function getExpirationCountdownStyle(minutesLeft: number) {
+  if (minutesLeft <= 10) {
+    return "bg-[#FDE8E2] text-[#A6422A]";
+  }
+
+  if (minutesLeft <= 30) {
+    return "bg-[#FFF0DA] text-[#684B35]";
+  }
+
+  return "bg-[#E6F2E8] text-[#0D2E18]";
+}
+
+function formatExpirationCountdown(minutesLeft: number) {
+  if (minutesLeft <= 0) {
+    return "Expired";
+  }
+
+  if (minutesLeft >= 60) {
+    return "60m left";
+  }
+
+  return `${minutesLeft}m left`;
+}
+
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
 }
 
 function getDeliveryFee(order: StaffOrder) {
   return order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
-}
-
-function hasFreeDeliveryVoucher(order: StaffOrder) {
-  return Boolean(order.reward_code?.toUpperCase().startsWith("FREEDELIVERY"));
 }
 
 function getOrderSubtotal(order: StaffOrder) {
@@ -141,8 +178,7 @@ function getOrderSubtotal(order: StaffOrder) {
 function requiresFinalDeliveryFee(order: StaffOrder) {
   return (
     order.order_type === "delivery" &&
-    order.status === "ready" &&
-    !hasFreeDeliveryVoucher(order)
+    order.status === "ready"
   );
 }
 
@@ -163,6 +199,8 @@ function formatStatus(status: OrderStatus) {
       return "Completed";
     case "cancelled":
       return "Cancelled";
+    case "expired":
+      return "Expired";
     default:
       return status;
   }
@@ -245,6 +283,8 @@ function getStatusBadgeStyle(status: OrderStatus) {
       return "bg-[#FFF0DA] text-[#684B35]";
     case "cancelled":
       return "bg-[#FFF1EC] text-[#C55432]";
+    case "expired":
+      return "bg-[#FDE8E2] text-[#A6422A]";
     default:
       return "bg-[#F4EEE6] text-[#684B35]";
   }
@@ -277,9 +317,14 @@ function canMarkPaid(order: StaffOrder) {
 }
 
 function canCancelOrder(order: StaffOrder) {
-  return !["ready", "out_for_delivery", "completed", "delivered", "cancelled"].includes(
-    order.status
-  );
+  return ![
+    "ready",
+    "out_for_delivery",
+    "completed",
+    "delivered",
+    "cancelled",
+    "expired",
+  ].includes(order.status);
 }
 
 function getDrawerActionLabel(order: StaffOrder) {
@@ -322,6 +367,8 @@ function getFinalStatusMessage(status: OrderStatus) {
       return "This delivery order has been delivered.";
     case "cancelled":
       return "This order has been cancelled.";
+    case "expired":
+      return "This order expired after waiting too long in pending.";
     default:
       return null;
   }
@@ -354,6 +401,7 @@ export function StaffDashboard() {
   const [dispatchToast, setDispatchToast] = useState("");
   const [staffToast, setStaffToast] = useState("");
   const [error, setError] = useState("");
+  const [expiringOrderIds, setExpiringOrderIds] = useState<string[]>([]);
 
   const activeOrders = useMemo(() => {
     return orders.filter((order) => !finalStatuses.includes(order.status));
@@ -368,20 +416,6 @@ export function StaffDashboard() {
           new Date(first.ordered_at).getTime()
       )
       .slice(0, 8);
-  }, [orders]);
-
-  const ordersHandledToday = useMemo(() => {
-    const today = new Date();
-
-    return orders.filter((order) => {
-      const orderedAt = new Date(order.ordered_at);
-      return (
-        finalStatuses.includes(order.status) &&
-        orderedAt.getFullYear() === today.getFullYear() &&
-        orderedAt.getMonth() === today.getMonth() &&
-        orderedAt.getDate() === today.getDate()
-      );
-    }).length;
   }, [orders]);
 
 
@@ -412,12 +446,26 @@ export function StaffDashboard() {
   }, [activeOrders, orderFilter, search]);
 
   const groupedOrders = useMemo(() => {
+    function sortOldestFirst(items: StaffOrder[]) {
+      return [...items].sort(
+        (first, second) =>
+          new Date(first.ordered_at).getTime() -
+          new Date(second.ordered_at).getTime()
+      );
+    }
+
     return {
-      pending: filteredOrders.filter((order) => order.status === "pending"),
-      preparing: filteredOrders.filter((order) => order.status === "preparing"),
-      ready: filteredOrders.filter((order) => order.status === "ready"),
-      out_for_delivery: filteredOrders.filter(
-        (order) => order.status === "out_for_delivery"
+      pending: sortOldestFirst(
+        filteredOrders.filter((order) => order.status === "pending")
+      ),
+      preparing: sortOldestFirst(
+        filteredOrders.filter((order) => order.status === "preparing")
+      ),
+      ready: sortOldestFirst(
+        filteredOrders.filter((order) => order.status === "ready")
+      ),
+      out_for_delivery: sortOldestFirst(
+        filteredOrders.filter((order) => order.status === "out_for_delivery")
       ),
     };
   }, [filteredOrders]);
@@ -442,7 +490,7 @@ export function StaffDashboard() {
     staffProfile?.role?.replace("_", " ").replace(/\b\w/g, (letter) =>
       letter.toUpperCase()
     ) || "Staff";
-  const staffChipLabel = `Staff ${staffFirstName}`;
+  
   const selectedFinalDeliveryFee = Number(finalDeliveryFeeInput);
   const selectedProjectedTotal =
     selectedOrder && Number.isFinite(selectedFinalDeliveryFee)
@@ -458,6 +506,88 @@ export function StaffDashboard() {
             })}`
           : ""
       }`;
+
+  const headerContainerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    headerContainerRef.current = document.getElementById(
+      "staff-header-controls"
+    ) as HTMLElement | null;
+  }, []);
+
+  function TopbarControlsPortal() {
+    if (!headerContainerRef.current) return null;
+
+    const controls = (
+      <div className="flex w-full items-center gap-3">
+        <button
+          type="button"
+          onClick={() => loadOrders({ showLoading: true })}
+          disabled={isLoading}
+          title="Force refresh order queue"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
+        >
+          <RefreshCw
+            size={15}
+            className={isLoading || isSyncing ? "animate-spin" : ""}
+          />
+          <span className="sr-only">
+            {isLoading || isSyncing
+              ? "Syncing latest orders"
+              : "Sync latest orders"}
+          </span>
+        </button>
+
+        <label className="hidden sm:flex h-10 min-w-[220px] items-center gap-2 rounded-xl bg-[#FFF8EF] px-3">
+          <Search size={16} className="text-[#8C7A64]" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search orders..."
+            className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+          />
+        </label>
+
+        <span
+          className={`hidden sm:inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold ${
+            stationStatus === "accepting"
+              ? "bg-[#0F441D]/10 text-[#0D2E18]"
+              : stationStatus === "busy"
+              ? "bg-[#FFF8EF] text-[#684B35]"
+              : "bg-[#FFF1EC] text-[#9C543D]"
+          }`}
+        >
+          <span className="h-2 w-2 rounded-full bg-current" />
+          {stationStatus === "accepting"
+            ? "Accepting"
+            : stationStatus === "busy"
+            ? "Busy"
+            : "Closed"}
+        </span>
+
+        <select
+          value={storeOverrideStatus}
+          onChange={(event) =>
+            handleStoreOverrideChange(event.target.value as StoreOverrideStatus)
+          }
+          disabled={isStoreStatusUpdating}
+          aria-label="Store status override"
+          className="hidden sm:inline-flex h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
+        >
+          <option value="auto">Auto</option>
+          <option value="open">Open</option>
+          <option value="busy">Busy</option>
+          <option value="closed">Closed</option>
+        </select>
+
+        <p className="hidden sm:block font-sans text-[11px] text-[#8C7A64]">
+          {syncMeta}
+        </p>
+      </div>
+    );
+
+    return createPortal(controls, headerContainerRef.current);
+  }
 
   const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
     setStoreOverrideStatus(status.overrideStatus);
@@ -577,6 +707,61 @@ export function StaffDashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [staffToast]);
+
+  useEffect(() => {
+    const expiredPending = orders.filter(
+      (order) =>
+        order.status === "pending" &&
+        isPendingOrderExpired(order.ordered_at, now) &&
+        !expiringOrderIds.includes(order.id)
+    );
+
+    if (expiredPending.length === 0) {
+      return;
+    }
+
+    const ids = expiredPending.map((order) => order.id);
+    let isCancelled = false;
+
+    const run = async () => {
+      setExpiringOrderIds((current) => [...current, ...ids]);
+
+      try {
+        await Promise.all(
+          ids.map(async (orderId) => {
+            await fetch("/api/staff/orders/update-status", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                orderId,
+                action: "expire",
+                expectedStatus: "pending",
+              }),
+            });
+          })
+        );
+
+        if (!isCancelled) {
+          setStaffToast("Expired pending orders were moved to history.");
+          await loadOrders({ showLoading: false });
+        }
+      } finally {
+        if (!isCancelled) {
+          setExpiringOrderIds((current) =>
+            current.filter((id) => !ids.includes(id))
+          );
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [expiringOrderIds, loadOrders, now, orders]);
 
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
@@ -804,102 +989,7 @@ export function StaffDashboard() {
 
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <section className="border-b border-[#DCCFB8] bg-[#FFF0DA]">
-        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 lg:flex-nowrap lg:px-5">
-          <div className="flex min-w-[44px] items-center">
-            <button
-              type="button"
-              onClick={() => loadOrders({ showLoading: true })}
-              disabled={isLoading}
-              title="Force refresh order queue"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
-            >
-              <RefreshCw
-                size={15}
-                className={isLoading || isSyncing ? "animate-spin" : ""}
-              />
-              <span className="sr-only">
-                {isLoading || isSyncing
-                  ? "Syncing latest orders"
-                  : "Sync latest orders"}
-              </span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-2xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0F441D] font-sans text-xs font-bold text-[#FFF0DA]">
-              SC
-            </div>
-            <div className="min-w-[118px]">
-              <p className="font-sans text-sm font-normal leading-tight text-[#0D2E18]">
-                {staffChipLabel}
-              </p>
-              <p className="font-sans text-xs text-[#8C7A64]">{staffRole}</p>
-            </div>
-
-            <div className="min-w-[74px]">
-              <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#8C7A64]">
-                Handled
-              </p>
-              <p className="font-sans text-xl font-bold leading-none text-[#0D2E18]">
-                {ordersHandledToday} today
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-3 lg:flex-nowrap">
-            <label className="flex h-10 min-w-full items-center gap-2 rounded-xl bg-[#FFF8EF] px-3 sm:min-w-[260px] sm:max-w-[340px]">
-              <Search size={16} className="text-[#8C7A64]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search orders..."
-                className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
-              />
-            </label>
-
-            <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
-              <span
-                className={`inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold ${
-                  stationStatus === "accepting"
-                    ? "bg-[#0F441D]/10 text-[#0D2E18]"
-                    : stationStatus === "busy"
-                    ? "bg-[#FFF8EF] text-[#684B35]"
-                    : "bg-[#FFF1EC] text-[#9C543D]"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-current" />
-                {stationStatus === "accepting"
-                  ? "Accepting"
-                  : stationStatus === "busy"
-                  ? "Busy"
-                  : "Closed"}
-              </span>
-
-              <select
-                value={storeOverrideStatus}
-                onChange={(event) =>
-                  handleStoreOverrideChange(
-                    event.target.value as StoreOverrideStatus
-                  )
-                }
-                disabled={isStoreStatusUpdating}
-                aria-label="Store status override"
-                className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
-              >
-                <option value="auto">Auto</option>
-                <option value="open">Open</option>
-                <option value="busy">Busy</option>
-                <option value="closed">Closed</option>
-              </select>
-
-              <p className="font-sans text-[11px] text-[#8C7A64]">
-                {syncMeta}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <TopbarControlsPortal />
 
       <section className="px-4 py-4 lg:px-5">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -934,25 +1024,7 @@ export function StaffDashboard() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {(["all", "pickup", "delivery"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setOrderFilter(value)}
-              className={`rounded-full px-3 py-1.5 font-sans text-xs font-semibold transition ${orderFilter === value
-                ? "bg-[#0D2E18] text-[#FFF0DA]"
-                : "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]"
-                }`}
-            >
-              {value === "all"
-                ? "All Orders"
-                : value === "pickup"
-                  ? "Pickup"
-                  : "Delivery"}
-            </button>
-          ))}
-        </div>
+        
 
         {error ? (
           <div className="mt-4 rounded-[16px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
@@ -983,14 +1055,15 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {boardColumns.map((column) => {
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
+          {boardColumns.map((column, index) => {
             const columnOrders = groupedOrders[column.key] ?? [];
+            const isLastColumn = index === boardColumns.length - 1;
 
             return (
               <section
                 key={column.key}
-                className="rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-3"
+                className="relative rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-3"
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h2
@@ -1011,6 +1084,15 @@ export function StaffDashboard() {
                   >
                     {columnOrders.length}
                   </span>
+
+                  {!isLastColumn ? (
+                    <span
+                      aria-hidden="true"
+                      className="hidden xl:flex absolute -right-5 top-2 z-10 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-1 text-[#0D2E18]"
+                    >
+                      <ArrowRight size={14} strokeWidth={2.4} />
+                    </span>
+                  ) : null}
                 </div>
 
                 {column.key === "out_for_delivery" && dispatchToast ? (
@@ -1032,8 +1114,16 @@ export function StaffDashboard() {
                       order.order_type,
                       order.status
                     );
+                    const minutesUntilExpiry =
+                      order.status === "pending"
+                        ? getMinutesUntilExpiration(order.ordered_at, now)
+                        : null;
+                    const isExpiredPendingOrder =
+                      order.status === "pending" &&
+                      isPendingOrderExpired(order.ordered_at, now);
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
                     const isUpdatingOrder = updatingOrderIds.includes(order.id);
+                    const isExpiringOrder = expiringOrderIds.includes(order.id);
                     const orderEmail = getOrderEmail(order);
                     const orderPhone = getOrderPhone(order);
 
@@ -1071,6 +1161,16 @@ export function StaffDashboard() {
                           <span className="inline-flex rounded-full bg-[#F4EEE6] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
                             {formatElapsed(order.ordered_at, now)}
                           </span>
+
+                          {minutesUntilExpiry !== null ? (
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getExpirationCountdownStyle(
+                                minutesUntilExpiry
+                              )}`}
+                            >
+                              {formatExpirationCountdown(minutesUntilExpiry)}
+                            </span>
+                          ) : null}
 
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
@@ -1131,6 +1231,10 @@ export function StaffDashboard() {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (isExpiredPendingOrder || isExpiringOrder) {
+                                  return;
+                                }
+
                                 if (paymentRequired) {
                                   openOrder(order);
                                   return;
@@ -1144,14 +1248,18 @@ export function StaffDashboard() {
 
                                 handleAdvance(order.id, order.status);
                               }}
-                              disabled={isUpdatingOrder}
+                              disabled={isUpdatingOrder || isExpiredPendingOrder || isExpiringOrder}
                               className={`rounded-xl px-3 py-2 font-sans text-xs font-semibold transition ${
-                                paymentRequired
+                                isExpiredPendingOrder || isExpiringOrder
+                                  ? "border border-[#D6C6AC] bg-[#F4EEE6] text-[#8A755D]"
+                                  : paymentRequired
                                   ? "border border-[#B76522]/30 bg-[#FFF8EF] text-[#B76522]"
                                   : `text-white ${getColumnActionStyle(order.status)}`
                               } disabled:cursor-not-allowed disabled:opacity-60`}
                             >
-                              {paymentRequired
+                              {isExpiredPendingOrder || isExpiringOrder
+                                ? "Expired"
+                                : paymentRequired
                                 ? "Mark Paid First"
                                 : isUpdatingOrder
                                 ? "Updating..."
@@ -1182,7 +1290,7 @@ export function StaffDashboard() {
                 Session Summary
               </p>
               <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                Latest finished and cancelled orders
+                Latest finished, cancelled, and expired orders
               </h2>
             </div>
 
@@ -1293,7 +1401,7 @@ export function StaffDashboard() {
             onClick={closeOrder}
           />
 
-          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-lg flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
+          <aside className="fixed inset-x-2 top-2 z-50 mx-auto flex max-h-[90vh] w-[calc(100%-1rem)] max-w-lg flex-col overflow-hidden rounded-2xl bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:inset-x-auto sm:right-3 sm:top-3 sm:w-full">
             <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
               <div>
                 <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
@@ -1414,10 +1522,6 @@ export function StaffDashboard() {
                         placeholder="Enter final delivery fee"
                       />
                     </label>
-                  ) : hasFreeDeliveryVoucher(selectedOrder) ? (
-                    <p className="mt-3 rounded-xl bg-[#E9F5E7] px-3 py-2 font-sans text-sm font-semibold text-[#0D2E18]">
-                      Free Delivery voucher applied. Delivery fee is locked at {peso(0)}.
-                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -1505,7 +1609,7 @@ export function StaffDashboard() {
                             Size: {item.size} • Temp: {item.temperature}
                           </p>
                           <p>
-                            Sugar: {item.sugar_level}%
+                            Sweetness: {item.sugar_level === 0 ? "No Sugar" : `${item.sugar_level}% Sugar`}
                             {item.ice_level ? ` • Ice: ${item.ice_level}` : ""}
                           </p>
 

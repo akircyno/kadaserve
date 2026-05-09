@@ -7,6 +7,7 @@ type OrderStatus =
   | "preparing"
   | "ready"
   | "out_for_delivery"
+  | "expired"
   | "delivered"
   | "completed"
   | "cancelled";
@@ -55,10 +56,6 @@ function getNumberValue(value: unknown) {
 
 function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
   return Math.max(0, getNumberValue(totalAmount) - getNumberValue(deliveryFee));
-}
-
-function hasFreeDeliveryVoucher(order: { reward_code?: string | null }) {
-  return Boolean(order.reward_code?.toUpperCase().startsWith("FREEDELIVERY"));
 }
 
 function getNextStatus(
@@ -430,7 +427,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const orderId = body.orderId as string;
     const expectedStatus = body.expectedStatus as OrderStatus | undefined;
-    const action = body.action as "advance" | "mark_paid" | undefined;
+    const action = body.action as "advance" | "mark_paid" | "expire" | undefined;
     const finalDeliveryFee = Number(body.finalDeliveryFee);
 
     if (!orderId) {
@@ -442,7 +439,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status, total_amount, delivery_fee, reward_code")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee")
       .eq("id", orderId)
       .single();
 
@@ -480,6 +477,35 @@ export async function POST(request: Request) {
       });
     }
 
+    if (action === "expire") {
+      if (order.status !== "pending") {
+        return NextResponse.json(
+          { error: "Only pending orders can be expired." },
+          { status: 400 }
+        );
+      }
+
+      const { error: expireError } = await supabase
+        .from("orders")
+        .update({ status: "expired" })
+        .eq("id", orderId)
+        .eq("status", expectedStatus ?? "pending");
+
+      if (expireError) {
+        return NextResponse.json(
+          { error: expireError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        nextStatus: "expired",
+        notificationSent: false,
+        receiptSent: false,
+      });
+    }
+
     if (expectedStatus && order.status !== expectedStatus) {
       return NextResponse.json(
         {
@@ -504,15 +530,9 @@ export async function POST(request: Request) {
     }
 
     const paymentStatus = order.payment_status as PaymentStatus;
-    const isFreeDeliveryOrder = hasFreeDeliveryVoucher(order);
     const shouldSetFinalDeliveryFee =
       order.order_type === "delivery" &&
-      nextStatus === "out_for_delivery" &&
-      !isFreeDeliveryOrder;
-    const shouldLockFreeDeliveryFee =
-      order.order_type === "delivery" &&
-      nextStatus === "out_for_delivery" &&
-      isFreeDeliveryOrder;
+      nextStatus === "out_for_delivery";
 
     if (shouldSetFinalDeliveryFee) {
       if (!Number.isFinite(finalDeliveryFee) || finalDeliveryFee <= 0) {
@@ -551,13 +571,6 @@ export async function POST(request: Request) {
       updatePayload.delivery_fee = Math.round(finalDeliveryFee);
       updatePayload.total_amount =
         getNumberValue(order.total_amount) - previousDeliveryFee + updatePayload.delivery_fee;
-    } else if (shouldLockFreeDeliveryFee) {
-      const previousDeliveryFee = getNumberValue(order.delivery_fee);
-      updatePayload.delivery_fee = 0;
-      updatePayload.total_amount = Math.max(
-        0,
-        getNumberValue(order.total_amount) - previousDeliveryFee
-      );
     }
 
     const { error: updateError } = await supabase

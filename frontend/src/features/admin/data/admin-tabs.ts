@@ -3,7 +3,6 @@ import {
   Boxes,
   ClipboardList,
   Coffee,
-  Gift,
   LayoutDashboard,
   MessageSquareText,
   Star,
@@ -20,7 +19,6 @@ export type AdminTab =
   | "item-ranking"
   | "satisfaction"
   | "customer-pref"
-  | "rewards"
   | "feedback"
   | "menu"
   | "inventory";
@@ -37,7 +35,6 @@ export const adminTabs: Array<{
   { key: "item-ranking", label: "Item Ranking", icon: TrendingUp },
   { key: "satisfaction", label: "Satisfaction", icon: Star },
   { key: "customer-pref", label: "Customer Pref", icon: Target },
-  { key: "rewards", label: "Rewards", icon: Gift },
   { key: "feedback", label: "Feedback", icon: MessageSquareText },
   { key: "menu", label: "Menu", icon: Coffee },
   { key: "inventory", label: "Inventory", icon: Boxes },

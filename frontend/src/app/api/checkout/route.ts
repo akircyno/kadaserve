@@ -5,7 +5,6 @@ import {
   resolveStoreStatus,
   STORE_STATUS_SETTING_KEY,
 } from "@/lib/store-status";
-import { validateCheckoutReward } from "@/lib/reward-service";
 
 type CheckoutItem = {
   menu_item_id: string;
@@ -21,28 +20,6 @@ type CheckoutItem = {
   special_instructions: string;
   image_url: string | null;
 };
-
-function getVoucherDiscount(subtotal: number, code: string) {
-  const normalizedCode = code.trim().toUpperCase();
-
-  if (normalizedCode === "KADA10") {
-    return Math.round(subtotal * 0.1);
-  }
-
-  if (normalizedCode === "FIRSTSIP") {
-    return Math.min(50, subtotal);
-  }
-
-  if (normalizedCode === "KADA30") {
-    return Math.min(30, subtotal);
-  }
-
-  if (normalizedCode === "CREAMYADDON") {
-    return Math.min(15, subtotal);
-  }
-
-  return 0;
-}
 
 function isMissingStoreSettingsTable(error: { message?: string; code?: string } | null) {
   return (
@@ -125,11 +102,10 @@ export async function POST(request: Request) {
     const paymentMethod = body.paymentMethod as "cash" | "gcash";
     const deliveryAddress =
       typeof body.deliveryAddress === "string" ? body.deliveryAddress.trim() : "";
+    const deliveryPhone =
+      typeof body.deliveryPhone === "string" ? body.deliveryPhone.trim() : "";
     const deliveryLat = getOptionalCoordinate(body.deliveryLat);
     const deliveryLng = getOptionalCoordinate(body.deliveryLng);
-    const voucherCode = typeof body.voucherCode === "string" ? body.voucherCode : "";
-    const rewardId = typeof body.rewardId === "string" ? body.rewardId : null;
-    const rewardCode = typeof body.rewardCode === "string" ? body.rewardCode : null;
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -182,44 +158,8 @@ export async function POST(request: Request) {
       return sum + (item.base_price + item.addon_price) * item.quantity;
     }, 0);
     const baseDeliveryFee = 0;
-    let deliveryFee = baseDeliveryFee;
-    let rewardDiscountAmount = 0;
-    let rewardSubtotalDiscountAmount = 0;
-    let appliedRewardCode: string | null = null;
-    let appliedRewardId: string | null = null;
-
-    if (rewardId || rewardCode) {
-      const rewardValidation = await validateCheckoutReward({
-        supabase,
-        customerId: user.id,
-        rewardId,
-        rewardCode,
-        orderType,
-      });
-
-      if (!rewardValidation.ok) {
-        return NextResponse.json(
-          { error: rewardValidation.error },
-          { status: rewardValidation.status }
-        );
-      }
-
-      appliedRewardId = rewardValidation.voucher.id;
-      appliedRewardCode = rewardValidation.voucher.code;
-      if (rewardValidation.rewardItem.type === "delivery_fee") {
-        rewardDiscountAmount = rewardValidation.discountAmount;
-        deliveryFee = 0;
-      } else {
-        rewardDiscountAmount = Math.min(subtotal, rewardValidation.discountAmount);
-        rewardSubtotalDiscountAmount = rewardDiscountAmount;
-      }
-    }
-
-    const voucherDiscount = getVoucherDiscount(subtotal, voucherCode);
-    const totalAmount = Math.max(
-      0,
-      subtotal + deliveryFee - voucherDiscount - rewardSubtotalDiscountAmount
-    );
+    const deliveryFee = baseDeliveryFee;
+    const totalAmount = Math.max(0, subtotal + deliveryFee);
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -231,14 +171,13 @@ export async function POST(request: Request) {
         payment_status: "unpaid",
         total_amount: totalAmount,
         delivery_fee: deliveryFee,
-        reward_code: appliedRewardCode,
-        reward_discount_amount: rewardDiscountAmount,
         delivery_address: orderType === "delivery" ? deliveryAddress : null,
         delivery_lat: orderType === "delivery" ? deliveryLat : null,
         delivery_lng: orderType === "delivery" ? deliveryLng : null,
         delivery_email:
           orderType === "delivery" ? profile?.email || user.email || null : null,
-        delivery_phone: orderType === "delivery" ? profile?.phone || null : null,
+        delivery_phone:
+          orderType === "delivery" ? deliveryPhone || profile?.phone || null : null,
       })
       .select("id")
       .single();
@@ -275,38 +214,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (appliedRewardId) {
-      const { data: usedVoucher, error: rewardUseError } = await supabase
-        .from("customer_rewards")
-        .update({
-          status: "used",
-          used_at: new Date().toISOString(),
-          order_id: order.id,
-        })
-        .eq("id", appliedRewardId)
-        .eq("customer_id", user.id)
-        .eq("status", "active")
-        .select("id")
-        .maybeSingle();
-
-      if (rewardUseError || !usedVoucher) {
-        return NextResponse.json(
-          {
-            error:
-              rewardUseError?.message ||
-              "This reward could not be marked as used. Please try again.",
-          },
-          { status: 409 }
-        );
-      }
-    }
-
     return NextResponse.json({
       success: true,
       orderId: order.id,
       orderType,
       deliveryFee,
-      rewardCode: appliedRewardCode,
     });
   } catch {
     return NextResponse.json(

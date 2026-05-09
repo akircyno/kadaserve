@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
-  Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -53,6 +52,8 @@ function formatStatus(status: OrderStatus) {
       return "Completed";
     case "cancelled":
       return "Cancelled";
+    case "expired":
+      return "Expired";
     default:
       return status;
   }
@@ -67,6 +68,8 @@ function getStatusStyle(status: OrderStatus) {
       return "bg-[#E6F2E8] text-[#0F441D]";
     case "cancelled":
       return "bg-[#FFF1EC] text-[#C55432]";
+    case "expired":
+      return "bg-[#FDE8E2] text-[#A6422A]";
     default:
       return "bg-[#F4EEE6] text-[#684B35]";
   }
@@ -279,86 +282,9 @@ export function StaffOrderHistory() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
-      <section className="border-b border-[#DCCFB8] bg-white px-5 py-4">
-        <div className="flex flex-wrap items-center justify-end gap-4">
-          <button
-            type="button"
-            onClick={handleDownloadCsv}
-            disabled={isExporting || orders.length === 0}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#D6C6AC] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
-          >
-            <Download size={16} />
-            {isExporting ? "Preparing..." : "Download CSV"}
-          </button>
-        </div>
-      </section>
-
-      <section className="px-5 py-5">
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
-          <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-end">
-            <label className="block">
-              <span className="sr-only">Search orders</span>
-              <span className="mt-2 flex h-11 items-center gap-2 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3">
-                <Search size={16} className="text-[#8C7A64]" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Order ID, customer name, phone number"
-                  className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
-                />
-              </span>
-            </label>
-
-            <div className="flex flex-wrap gap-2">
-              {(["today", "yesterday", "custom", "all"] as const).map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  onClick={() => setDateRange(range)}
-                  className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 font-sans text-sm font-bold capitalize transition ${
-                    dateRange === range
-                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                      : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
-                  }`}
-                >
-                  {range === "custom" ? <CalendarDays size={15} /> : null}
-                  {range}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {dateRange === "custom" ? (
-            <div className="mt-3 flex flex-wrap gap-3">
-              <label className="block">
-                <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                  From
-                </span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(event) => setCustomFrom(event.target.value)}
-                  className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                  To
-                </span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(event) => setCustomTo(event.target.value)}
-                  className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
-                />
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+    <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18] lg:h-[calc(100dvh-4.5rem)] lg:overflow-hidden lg:flex lg:flex-col">
+      <section className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-4">
             <p className="font-sans text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
               Matching Orders
@@ -384,6 +310,62 @@ export function StaffOrderHistory() {
             </p>
           </div>
         </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {(["today", "yesterday", "custom", "all"] as const).map((range) => (
+            <button
+              key={range}
+              type="button"
+              onClick={() => setDateRange(range)}
+              className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 font-sans text-sm font-bold capitalize transition ${
+                dateRange === range
+                  ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                  : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
+              }`}
+            >
+              {range === "custom" ? <CalendarDays size={15} /> : null}
+              {range}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            disabled={isExporting || orders.length === 0}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#D6C6AC] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
+          >
+            <Download size={16} />
+            {isExporting ? "Exporting..." : "CSV"}
+          </button>
+        </div>
+
+        {dateRange === "custom" ? (
+          <div className="mt-3 flex flex-wrap gap-3">
+            <label className="block">
+              <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                From
+              </span>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(event) => setCustomFrom(event.target.value)}
+                className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
+                To
+              </span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(event) => setCustomTo(event.target.value)}
+                className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
+              />
+            </label>
+          </div>
+        ) : null}
 
         {error ? (
           <div className="mt-4 rounded-[16px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
@@ -676,14 +658,6 @@ export function StaffOrderHistory() {
                 </div>
               </section>
 
-              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
-                  Voucher & Point Deductions
-                </p>
-                <p className="mt-3 rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#8C7A64]">
-                  No voucher or point deductions are recorded for this order.
-                </p>
-              </section>
             </div>
           </aside>
         </>

@@ -7,6 +7,7 @@ import {
   ClipboardList,
   History,
   Menu as MenuIcon,
+  ChevronLeft,
   Pencil,
   X,
 } from "lucide-react";
@@ -38,12 +39,7 @@ export default function StaffLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const activeNavItem =
-    navItems.find(
-      (item) =>
-        pathname === item.href ||
-        (item.href !== "/staff" && pathname.startsWith(item.href))
-    ) ?? navItems[0];
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -57,6 +53,10 @@ export default function StaffLayout({
 
     return () => mediaQuery.removeEventListener("change", syncSidebarState);
   }, []);
+
+  function toggleSidebarCollapse() {
+    setIsSidebarCollapsed((prev) => !prev);
+  }
 
   async function handleLogout() {
     try {
@@ -83,29 +83,60 @@ export default function StaffLayout({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[250px] flex-col overflow-hidden rounded-r-[24px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_18px_40px_rgba(13,46,24,0.22)] transition-transform duration-300 lg:w-[232px] lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden rounded-r-[24px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_18px_40px_rgba(13,46,24,0.22)] transition-all duration-250 lg:translate-x-0 ${
           isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+        } ${
+          isSidebarCollapsed ? "w-[70px] lg:w-[70px]" : "w-[250px] lg:w-[232px]"
+        }`}
       >
-        <div className="flex items-center justify-between gap-3 px-5 pt-6">
+        <div className="flex items-center justify-between gap-2 px-3 pt-4 lg:px-4 lg:pt-5">
           <Link
             href="/staff"
-            className="font-sans text-[1.7rem] font-bold leading-none tracking-[-0.04em] text-[#FFF0DA]"
+            className={`flex-shrink-0 font-sans font-bold leading-none tracking-[-0.04em] text-[#FFF0DA] transition-all duration-250 ${
+              isSidebarCollapsed
+                ? "text-base opacity-0 w-0"
+                : "text-[1.7rem] opacity-100"
+            }`}
+            style={{
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+            }}
           >
             KadaServe
           </Link>
 
-          <button
-            type="button"
-            onClick={() => setIsMobileSidebarOpen(false)}
-            aria-label="Close staff navigation"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/18 lg:hidden"
-          >
-            <X size={17} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleSidebarCollapse}
+              aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="hidden lg:flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/20"
+            >
+              <ChevronLeft
+                size={16}
+                className={`transition-transform duration-250 ${
+                  isSidebarCollapsed ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              aria-label="Close staff navigation"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/18 lg:hidden"
+            >
+              <X size={17} />
+            </button>
+          </div>
         </div>
 
-        <nav className="mt-20 space-y-1 px-3">
+        <nav
+          className={`mt-12 space-y-1 transition-all duration-250 ${
+            isSidebarCollapsed ? "px-2" : "px-3"
+          }`}
+        >
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -113,40 +144,80 @@ export default function StaffLayout({
               (item.href !== "/staff" && pathname.startsWith(item.href));
 
             return (
-              <Link
+              <div
                 key={item.href}
-                href={item.href}
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className={`flex min-h-11 items-center gap-3 rounded-[14px] px-4 py-3 font-sans text-sm font-semibold transition ${
-                  isActive
-                    ? "bg-[#FFF0DA] text-[#0D2E18]"
-                    : "text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
-                }`}
+                className="group/nav relative"
               >
-                <Icon size={18} className="shrink-0" />
-                <span>{item.label}</span>
-              </Link>
+                <Link
+                  href={item.href}
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className={`flex min-h-11 items-center justify-center rounded-[14px] px-3 py-3 font-sans text-sm font-semibold transition-all duration-250 lg:justify-start lg:gap-3 lg:px-4 ${
+                    isActive
+                      ? "bg-[#FFF0DA] text-[#0D2E18]"
+                      : "text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
+                  }`}
+                >
+                  <Icon size={18} className="shrink-0" />
+                  <span
+                    className={`hidden font-sans text-sm font-semibold transition-all duration-250 lg:inline ${
+                      isSidebarCollapsed
+                        ? "w-0 overflow-hidden opacity-0"
+                        : "w-auto overflow-visible opacity-100"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+
+                {isSidebarCollapsed && (
+                  <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#0D2E18] px-2 py-1 font-sans text-xs font-semibold text-[#FFF0DA] opacity-0 shadow-lg transition-opacity duration-200 group-hover/nav:pointer-events-auto group-hover/nav:opacity-100">
+                    {item.label}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
 
-        <div className="mt-auto px-3 pb-5">
+        <div
+          className={`mt-auto transition-all duration-250 ${
+            isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-5"
+          }`}
+        >
           <button
             type="button"
             onClick={handleLogout}
             title="Logout"
-            className="flex w-full items-center gap-3 rounded-[14px] px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
+            className="group/logout relative flex w-full items-center justify-center rounded-[14px] px-3 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition-all duration-250 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA] lg:justify-start lg:gap-3 lg:px-4"
           >
             <ArrowLeft size={17} className="shrink-0" />
-            <span>Logout</span>
+            <span
+              className={`hidden font-sans text-sm font-semibold transition-all duration-250 lg:inline ${
+                isSidebarCollapsed
+                  ? "w-0 overflow-hidden opacity-0"
+                  : "w-auto overflow-visible opacity-100"
+              }`}
+            >
+              Logout
+            </span>
+
+            {isSidebarCollapsed && (
+              <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#0D2E18] px-2 py-1 font-sans text-xs font-semibold text-[#FFF0DA] opacity-0 shadow-lg transition-opacity duration-200 group-hover/logout:pointer-events-auto group-hover/logout:opacity-100">
+                Logout
+              </div>
+            )}
           </button>
         </div>
       </aside>
 
-      <div className="min-h-screen lg:pl-[232px]">
+      <div
+        className={`min-h-screen transition-all duration-250 ${
+          isSidebarCollapsed ? "lg:pl-[70px]" : "lg:pl-[232px]"
+        }`}
+      >
         <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-[#FFF0DA]/96 backdrop-blur">
-          <div className="flex flex-col gap-3 px-4 py-4 sm:px-5 lg:px-6">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6">
+            <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
@@ -161,14 +232,29 @@ export default function StaffLayout({
                   Staff Command Center
                 </p>
                 <h1 className="truncate font-sans text-[1.55rem] font-bold leading-tight text-[#0D2E18] sm:text-2xl">
-                  {activeNavItem.label}
+                  {pathname.includes("encode-order")
+                    ? "Encode Order"
+                    : pathname.includes("order-history")
+                    ? "Order History"
+                    : "Order Queue"}
                 </h1>
+                <p className="mt-0.5 text-sm text-[#8C7A64]">
+                  {pathname.includes("encode-order")
+                    ? "Create walk-in pickup or delivery orders"
+                    : pathname.includes("order-history")
+                    ? "View past orders, search, and manage historical records"
+                    : "Manage and monitor customer orders in real time"}
+                </p>
               </div>
             </div>
+
+            <div className="ml-2 flex shrink-0 items-center justify-end" id="staff-header-controls" />
           </div>
         </header>
 
-        <main className="min-w-0 px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
+        <main
+          className={`min-w-0 px-4 sm:px-5 lg:px-6 ${pathname.includes("encode-order") ? "py-1 lg:py-1" : "py-4 lg:py-5"}`}
+        >
           {children}
         </main>
       </div>

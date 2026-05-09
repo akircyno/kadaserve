@@ -4,9 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 type StaffCartItem = {
   id: string;
   name: string;
-  price: number;
+  price?: number;
+  base_price?: number;
   size: "regular" | "small" | "large";
   quantity: number;
+  sugar_level?: number;
+  ice_level?: string | null;
+  addons?: string[];
+  addon_price?: number;
+  special_instructions?: string;
+  temperature?: string;
 };
 
 type CreateStaffOrderBody = {
@@ -112,10 +119,12 @@ export async function POST(request: Request) {
     }
 
 
-    const calculatedTotal = body.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
+    const calculatedTotal = body.items.reduce((sum, item) => {
+      const basePrice = Number(item.base_price ?? item.price ?? 0);
+      const addonPrice = Number(item.addon_price ?? 0);
+
+      return sum + (basePrice + addonPrice) * item.quantity;
+    }, 0);
 
     if (calculatedTotal !== body.totalAmount) {
       return NextResponse.json(
@@ -182,13 +191,13 @@ export async function POST(request: Request) {
       order_id: order.id,
       menu_item_id: item.id,
       quantity: item.quantity,
-      unit_price: item.price,
-      sugar_level: 100,
-      ice_level: "regular",
+      unit_price: Number(item.base_price ?? item.price ?? 0) + Number(item.addon_price ?? 0),
+      sugar_level: Number(item.sugar_level ?? 100),
+      ice_level: item.ice_level ?? "regular",
       size: normalizeSize(item.size),
-      temperature: "iced",
-      addons: [],
-      special_instructions: null,
+      temperature: item.temperature ?? "iced",
+      addons: item.addons ?? [],
+      special_instructions: item.special_instructions?.trim() || null,
     }));
 
     const { error: itemsError } = await supabase

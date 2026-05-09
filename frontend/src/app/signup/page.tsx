@@ -6,13 +6,11 @@ import { FormEvent, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
-  CalendarDays,
   CheckCircle2,
   Eye,
   EyeOff,
   Lock,
   Mail,
-  Phone,
   User,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -28,16 +26,12 @@ const passwordRequirements = [
     test: (value: string) => value.length >= 8,
   },
   {
-    label: "At least one number",
+    label: "At least 1 letter",
+    test: (value: string) => /[A-Za-z]/.test(value),
+  },
+  {
+    label: "At least 1 number",
     test: (value: string) => /\d/.test(value),
-  },
-  {
-    label: "At least one uppercase letter",
-    test: (value: string) => /[A-Z]/.test(value),
-  },
-  {
-    label: "At least one special character",
-    test: (value: string) => /[^A-Za-z0-9]/.test(value),
   },
 ];
 
@@ -66,69 +60,12 @@ function isValidName(value: string) {
   return nameRegex.test(value.trim());
 }
 
-function getPhoneDigits(value: string) {
-  const digits = value.replace(/\D/g, "");
-
-  if (digits.startsWith("639")) {
-    return `0${digits.slice(2, 12)}`;
-  }
-
-  return digits.slice(0, 11);
-}
-
-function formatPhoneNumber(value: string) {
-  const digits = getPhoneDigits(value);
-
-  if (digits.length <= 4) {
-    return digits;
-  }
-
-  if (digits.length <= 7) {
-    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  }
-
-  return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
-}
-
-function isValidPhone(value: string) {
-  return /^09\d{9}$/.test(getPhoneDigits(value));
-}
-
 function isValidEmail(value: string) {
   return emailRegex.test(value.trim());
 }
 
-function formatDateInput(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getAdultCutoffDate() {
-  const today = new Date();
-  return new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-}
-
-function isAtLeast18(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const selectedDate = new Date(`${value}T00:00:00`);
-
-  if (Number.isNaN(selectedDate.getTime())) {
-    return false;
-  }
-
-  return selectedDate <= getAdultCutoffDate();
-}
-
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -137,10 +74,10 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [successTitle, setSuccessTitle] = useState("");
+  const [successActionLabel, setSuccessActionLabel] = useState("");
   const [touchedFields, setTouchedFields] = useState({
     fullName: false,
-    phone: false,
-    dateOfBirth: false,
     email: false,
     password: false,
     confirmPassword: false,
@@ -157,33 +94,19 @@ export default function SignupPage() {
   const trimmedFullName = fullName.trim();
   const trimmedEmail = email.trim();
   const isFullNameValid = isValidName(trimmedFullName);
-  const isPhoneValid = isValidPhone(phone);
-  const isDateOfBirthValid = isAtLeast18(dateOfBirth);
   const isEmailValid = isValidEmail(trimmedEmail);
   const passwordsMatch = password === confirmPassword && confirmPassword !== "";
-  const adultCutoffDate = formatDateInput(getAdultCutoffDate());
   const canSubmit =
     isFullNameValid &&
-    isPhoneValid &&
-    isDateOfBirthValid &&
     isEmailValid &&
     isPasswordValid &&
     passwordsMatch &&
-    hasAgreedToPolicies &&
     !isLoading;
 
   const fieldErrors = {
     fullName:
       touchedFields.fullName && trimmedFullName && !isFullNameValid
         ? "Use letters, spaces, hyphens, and dots only."
-        : "",
-    phone:
-      touchedFields.phone && phone && !isPhoneValid
-        ? "Use a valid Philippine mobile number: 0917-123-4567."
-        : "",
-    dateOfBirth:
-      touchedFields.dateOfBirth && dateOfBirth && !isDateOfBirthValid
-        ? "You must be at least 18 years old to create an account."
         : "",
     email:
       touchedFields.email && trimmedEmail && !isEmailValid
@@ -199,6 +122,8 @@ export default function SignupPage() {
     event.preventDefault();
     setError("");
     setSuccessMessage("");
+    setSuccessTitle("");
+    setSuccessActionLabel("");
 
     if (!hasAgreedToPolicies) {
       setError(consentErrorMessage);
@@ -212,21 +137,6 @@ export default function SignupPage() {
 
     if (!isValidName(fullName)) {
       setError("Full name can only include letters, spaces, hyphens, and dots.");
-      return;
-    }
-
-    if (!phone.trim()) {
-      setError("Phone number is required.");
-      return;
-    }
-
-    if (!isValidPhone(phone)) {
-      setError("Phone number must be a valid Philippine mobile number.");
-      return;
-    }
-
-    if (!isAtLeast18(dateOfBirth)) {
-      setError("You must be at least 18 years old to create an account.");
       return;
     }
 
@@ -255,8 +165,6 @@ export default function SignupPage() {
         },
         body: JSON.stringify({
           fullName: trimmedFullName,
-          phone: getPhoneDigits(phone),
-          dateOfBirth,
           email: trimmedEmail,
           password,
         }),
@@ -270,14 +178,19 @@ export default function SignupPage() {
       }
 
       if (result.needsEmailConfirmation) {
+        setSuccessTitle("Check your email");
         setSuccessMessage(
-          "Account created. Please check your email to confirm your account before signing in."
+          "Verification email sent. Open the link in your inbox to finish creating this account."
         );
+        setSuccessActionLabel("Go to sign in after verification");
         return;
       }
 
-      window.sessionStorage.setItem("kadaserve_show_customer_splash", "true");
-      window.location.assign("/customer?splash=1");
+      setSuccessTitle("Account created");
+      setSuccessMessage(
+        "Your account was created. Email verification is not active in Supabase yet, so no verification email was required. You can sign in now."
+      );
+      setSuccessActionLabel("Go to sign in");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -287,13 +200,16 @@ export default function SignupPage() {
 
   function handleGoogleAuth() {
     setError("");
+    setSuccessMessage("");
+    setSuccessTitle("");
+    setSuccessActionLabel("");
 
     if (!hasAgreedToPolicies) {
       setError(consentErrorMessage);
       return;
     }
 
-    window.location.href = "/api/auth/google";
+    window.location.href = "/api/auth/google?next=/customer?splash=1";
   }
 
   return (
@@ -444,86 +360,6 @@ export default function SignupPage() {
 
               <div>
                 <label
-                  htmlFor="phone"
-                  className="mb-1.5 block font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#0F441D]"
-                >
-                  Phone Number
-                </label>
-
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
-                  <Phone className="mr-3 text-[#8C7A64]" size={18} />
-                  <input
-                    id="phone"
-                    type="tel"
-                    inputMode="tel"
-                    value={phone}
-                    onChange={(event) => {
-                      setPhone(formatPhoneNumber(event.target.value));
-                    }}
-                    onBlur={() =>
-                      setTouchedFields((current) => ({
-                        ...current,
-                        phone: true,
-                      }))
-                    }
-                    placeholder="0917-123-4567"
-                    className={inputClass}
-                    pattern="09[0-9]{2}-[0-9]{3}-[0-9]{4}"
-                    title="Use a valid Philippine mobile number. Format: 0917-123-4567."
-                    required
-                  />
-                  {isPhoneValid ? (
-                    <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 fill-[#0F441D] text-white" />
-                  ) : null}
-                </div>
-                {fieldErrors.phone ? (
-                  <p className="mt-2 flex items-center gap-2 font-sans text-xs text-[#9C543D]">
-                    <AlertTriangle className="h-4 w-4" />
-                    {fieldErrors.phone}
-                  </p>
-                ) : null}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="date-of-birth"
-                  className="mb-1.5 block font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#0F441D]"
-                >
-                  Date of Birth
-                </label>
-
-                <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
-                  <CalendarDays className="mr-3 text-[#8C7A64]" size={18} />
-                  <input
-                    id="date-of-birth"
-                    type="date"
-                    value={dateOfBirth}
-                    max={adultCutoffDate}
-                    onChange={(event) => setDateOfBirth(event.target.value)}
-                    onBlur={() =>
-                      setTouchedFields((current) => ({
-                        ...current,
-                        dateOfBirth: true,
-                      }))
-                    }
-                    className={inputClass}
-                    title="You must be at least 18 years old."
-                    required
-                  />
-                  {isDateOfBirthValid ? (
-                    <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 fill-[#0F441D] text-white" />
-                  ) : null}
-                </div>
-                {fieldErrors.dateOfBirth ? (
-                  <p className="mt-2 flex items-center gap-2 font-sans text-xs text-[#9C543D]">
-                    <AlertTriangle className="h-4 w-4" />
-                    {fieldErrors.dateOfBirth}
-                  </p>
-                ) : null}
-              </div>
-
-              <div>
-                <label
                   htmlFor="email"
                   className="mb-1.5 block font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#0F441D]"
                 >
@@ -665,7 +501,7 @@ export default function SignupPage() {
                 ))}
               </div>
 
-              <label className="flex items-start gap-2 rounded-lg border border-[#DCCFB8] bg-white/90 px-3 py-2 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+              <label className="flex items-start gap-2 rounded-[16px] border border-[#DCCFB8] bg-white/90 px-4 py-3 font-sans text-xs font-semibold leading-5 text-[#684B35]">
                 <input
                   type="checkbox"
                   checked={hasAgreedToPolicies}
@@ -673,10 +509,10 @@ export default function SignupPage() {
                     setHasAgreedToPolicies(event.target.checked);
                     setError("");
                   }}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#0F441D]"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F441D]"
                 />
                 <span>
-                  I agree to the{" "}
+                  I agree to KadaServe&apos;s{" "}
                   <Link href="/terms" className="font-black text-[#0F441D] underline underline-offset-2">
                     Terms and Conditions
                   </Link>{" "}
@@ -695,9 +531,25 @@ export default function SignupPage() {
               ) : null}
 
               {successMessage ? (
-                <p className="rounded-xl bg-[#E7F4EA] px-4 py-3 font-sans text-sm text-[#1E7A3D]">
-                  {successMessage}
-                </p>
+                <div className="rounded-xl border border-[#BFD1B5] bg-[#E7F4EA] px-4 py-3 font-sans text-sm text-[#1E7A3D]">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 fill-[#0F441D] text-white" />
+                    <div>
+                      <p className="font-bold text-[#0D2E18]">
+                        {successTitle}
+                      </p>
+                      <p className="mt-1 leading-relaxed">{successMessage}</p>
+                      {successActionLabel ? (
+                        <Link
+                          href="/login"
+                          className="mt-3 inline-flex rounded-lg bg-[#0F441D] px-4 py-2 font-bold text-white transition hover:bg-[#0D2E18]"
+                        >
+                          {successActionLabel}
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               ) : null}
 
               <button
@@ -720,7 +572,7 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={handleGoogleAuth}
-                disabled={!hasAgreedToPolicies || isLoading}
+                disabled={isLoading}
                 className="mt-3 flex w-full items-center justify-center gap-3 rounded-xl border border-[#BFD1B5] bg-white px-5 py-2.5 font-sans text-base font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <span className="text-lg">

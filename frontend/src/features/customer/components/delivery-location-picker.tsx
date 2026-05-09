@@ -364,7 +364,7 @@ export function DeliveryLocationPicker({
   }
 
   return (
-    <div className="mt-3 rounded-[18px] border border-[#D8C8A7] bg-white/65 p-3">
+    <div className="relative z-0 mt-3 overflow-hidden rounded-[18px] border border-[#D8C8A7] bg-white/65 p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E7F1E6] text-[#0D2E18]">
@@ -397,7 +397,7 @@ export function DeliveryLocationPicker({
 
       <div
         ref={containerRef}
-        className="mt-3 h-64 overflow-hidden rounded-[16px] border border-[#E3D3B7] bg-[#FFF8EF]"
+        className="relative isolate z-0 mt-3 h-56 overflow-hidden rounded-[16px] border border-[#E3D3B7] bg-[#FFF8EF] sm:h-64 [&_.leaflet-bottom]:!z-[2] [&_.leaflet-control]:!z-[2] [&_.leaflet-control-container]:!z-[2] [&_.leaflet-map-pane]:!z-0 [&_.leaflet-marker-icon]:!z-[1] [&_.leaflet-marker-shadow]:!z-[1] [&_.leaflet-pane]:!z-0 [&_.leaflet-popup-pane]:!z-[3] [&_.leaflet-shadow-pane]:!z-0 [&_.leaflet-tile-pane]:!z-0 [&_.leaflet-top]:!z-[2] [&_.leaflet-tooltip-pane]:!z-[3]"
       />
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 font-sans text-xs font-semibold text-[#684B35]">

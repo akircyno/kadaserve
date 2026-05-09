@@ -3,6 +3,7 @@ export type OrderStatus =
   | "preparing"
   | "ready"
   | "out_for_delivery"
+  | "expired"
   | "delivered"
   | "completed"
   | "cancelled";
@@ -37,8 +38,6 @@ export type StaffOrder = {
   payment_status: PaymentStatus | null;
   total_amount: number;
   delivery_fee?: number | null;
-  reward_code?: string | null;
-  reward_discount_amount?: number | null;
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
@@ -86,8 +85,6 @@ export type CustomerOrder = {
   payment_status?: PaymentStatus | null;
   total_amount: number;
   delivery_fee?: number | null;
-  reward_code?: string | null;
-  reward_discount_amount?: number | null;
   ordered_at: string;
   delivery_address?: string | null;
   delivery_lat?: number | null;

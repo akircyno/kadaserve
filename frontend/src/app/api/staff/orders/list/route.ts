@@ -10,8 +10,6 @@ type AdminOrderRow = {
   payment_status: string | null;
   total_amount: number;
   delivery_fee: number | null;
-  reward_code: string | null;
-  reward_discount_amount: number | null;
   ordered_at: string;
   walkin_name: string | null;
   delivery_address: string | null;
@@ -89,8 +87,6 @@ export async function GET() {
           payment_status,
           total_amount,
           delivery_fee,
-          reward_code,
-          reward_discount_amount,
           ordered_at,
           walkin_name,
           delivery_address,
@@ -166,8 +162,6 @@ export async function GET() {
         payment_status: order.payment_status,
         total_amount: order.total_amount,
         delivery_fee: order.delivery_fee,
-        reward_code: order.reward_code,
-        reward_discount_amount: order.reward_discount_amount,
         ordered_at: order.ordered_at,
         walkin_name: order.walkin_name,
         delivery_address: order.delivery_address,

@@ -12,11 +12,11 @@ type CustomizeOrderProps = {
 };
 
 const sugarLevels = [
-  { label: "0%", value: 0 },
-  { label: "25%", value: 25 },
-  { label: "50%", value: 50 },
-  { label: "75%", value: 75 },
   { label: "100%", value: 100 },
+  { label: "75%", value: 75 },
+  { label: "50%", value: 50 },
+  { label: "25%", value: 25 },
+  { label: "0% (No Sugar)", value: 0 },
 ];
 
 const iceLevels = [
@@ -38,7 +38,6 @@ const temperatures = [
 ];
 
 const addons = [
-  { label: "Extra Sugar", value: "extra_sugar", price: 10 },
   { label: "Extra Coffee", value: "extra_coffee", price: 20 },
   { label: "Extra Milk", value: "extra_milk", price: 15 },
   { label: "Vanilla Syrup", value: "vanilla_syrup", price: 15 },
@@ -72,7 +71,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const isEditing = Boolean(editingItem);
 
   const [quantity, setQuantity] = useState(1);
-  const [sugarLevel, setSugarLevel] = useState(50);
+  const [sugarLevel, setSugarLevel] = useState(100);
   const [iceLevel, setIceLevel] = useState("regular");
   const [size, setSize] = useState("medium");
   const [temperature, setTemperature] = useState("iced");
@@ -214,16 +213,17 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
             <div className="space-y-6">
               {!isPastry && menuItem.has_sugar_level && (
                 <div>
-                  <h2 className="text-lg font-bold">Sugar Level</h2>
+                  <h2 className="text-lg font-bold">Sweetness Level</h2>
                   <div className="mt-3 flex flex-wrap gap-3">
                     {sugarLevels.map((item) => (
                       <button
                         key={item.value}
                         type="button"
                         onClick={() => setSugarLevel(item.value)}
-                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        aria-pressed={sugarLevel === item.value}
+                        className={`rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
                           sugarLevel === item.value
-                            ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
+                            ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
                         }`}
                       >
