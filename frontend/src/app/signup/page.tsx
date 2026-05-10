@@ -322,6 +322,7 @@ export default function SignupPage() {
                 <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <User className="mr-3 text-[#8C7A64]" size={18} />
                   <input
+                    suppressHydrationWarning
                     id="full-name"
                     type="text"
                     inputMode="text"
@@ -369,6 +370,7 @@ export default function SignupPage() {
                 <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2">
                   <Mail className="mr-3 text-[#8C7A64]" size={18} />
                   <input
+                    suppressHydrationWarning
                     id="email"
                     type="email"
                     value={email}
@@ -411,6 +413,7 @@ export default function SignupPage() {
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
+                    suppressHydrationWarning
                     id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
@@ -449,6 +452,7 @@ export default function SignupPage() {
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
+                    suppressHydrationWarning
                     id="confirm-password"
                     type={showPassword ? "text" : "password"}
                     value={confirmPassword}
@@ -503,6 +507,7 @@ export default function SignupPage() {
 
               <label className="flex items-start gap-2 rounded-[16px] border border-[#DCCFB8] bg-white/90 px-4 py-3 font-sans text-xs font-semibold leading-5 text-[#684B35]">
                 <input
+                  suppressHydrationWarning
                   type="checkbox"
                   checked={hasAgreedToPolicies}
                   onChange={(event) => {

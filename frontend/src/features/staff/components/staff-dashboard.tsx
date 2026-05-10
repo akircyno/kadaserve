@@ -10,12 +10,15 @@ import type {
 } from "@/lib/store-status";
 import {
   ClipboardList,
+  Clock3,
+  CircleDollarSign,
   ArrowRight,
   ExternalLink,
   MapPin,
   RefreshCw,
   Search,
   Truck,
+  UserRound,
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -36,6 +39,7 @@ type BoardOrderStatus = Exclude<
 >;
 
 const fallbackOrders: StaffOrder[] = [];
+const pendingOrderTimeoutMinutes = 45;
 const finalStatuses: OrderStatus[] = [
   "completed",
   "delivered",
@@ -47,12 +51,51 @@ const finalStatuses: OrderStatus[] = [
 const boardColumns: Array<{
   key: BoardOrderStatus;
   label: string;
+  caption: string;
+  accent: string;
+  header: string;
+  count: string;
 }> = [
-    { key: "pending_payment", label: "Awaiting Payment" },
-    { key: "pending", label: "Pending" },
-    { key: "preparing", label: "Preparing" },
-    { key: "ready", label: "Ready" },
-    { key: "out_for_delivery", label: "Out for Delivery" },
+    {
+      key: "pending_payment",
+      label: "Awaiting Payment",
+      caption: "Online checkout not paid",
+      accent: "bg-[#B76522]",
+      header: "border-[#E7C08A] bg-[#FFF7E8]",
+      count: "bg-[#FFF0DA] text-[#684B35]",
+    },
+    {
+      key: "pending",
+      label: "Pending",
+      caption: "New orders to accept",
+      accent: "bg-[#0D2E18]",
+      header: "border-[#DCCFB8] bg-[#F9F1E4]",
+      count: "bg-[#EFE3CF] text-[#684B35]",
+    },
+    {
+      key: "preparing",
+      label: "Preparing",
+      caption: "In kitchen workflow",
+      accent: "bg-[#2D7A40]",
+      header: "border-[#CFE4CB] bg-[#EFF8EC]",
+      count: "bg-[#E6F2E8] text-[#0D2E18]",
+    },
+    {
+      key: "ready",
+      label: "Ready",
+      caption: "Pickup or dispatch next",
+      accent: "bg-[#0F441D]",
+      header: "border-[#BFD9C0] bg-[#EAF5E8]",
+      count: "bg-[#DFF0E1] text-[#0F441D]",
+    },
+    {
+      key: "out_for_delivery",
+      label: "Out for Delivery",
+      caption: "Rider/customer handoff",
+      accent: "bg-[#684B35]",
+      header: "border-[#E6C79E] bg-[#FFF0DA]",
+      count: "bg-[#FFF8EF] text-[#684B35]",
+    },
   ];
 
 function formatOrderCode(id: string) {
@@ -130,8 +173,112 @@ function formatElapsed(value: string, now: Date) {
   return `${Math.max(1, minutes)}m`;
 }
 
+function getElapsedMinutes(value: string, now: Date) {
+  return Math.floor(
+    Math.max(0, now.getTime() - new Date(value).getTime()) / 60000
+  );
+}
+
+function getQueueAgeStyle(minutes: number) {
+  if (minutes >= 45) {
+    return "border-[#C55432]/25 bg-[#FFF1EC] text-[#A6422A]";
+  }
+
+  if (minutes >= 25) {
+    return "border-[#B76522]/25 bg-[#FFF0DA] text-[#684B35]";
+  }
+
+  return "border-[#0F441D]/15 bg-[#E6F2E8] text-[#0D2E18]";
+}
+
+function getQueueHeatmapStyle(minutes: number) {
+  if (minutes >= 45) {
+    return {
+      card:
+        "border-[#C55432]/45 bg-[#FFF1EC] shadow-[0_14px_30px_rgba(166,66,42,0.16)]",
+      rail: "bg-[#C55432]",
+      panel: "border-[#F2C8BD] bg-white/75",
+      label: "Critical wait",
+    };
+  }
+
+  if (minutes >= 31) {
+    return {
+      card:
+        "border-[#D98A45]/40 bg-[#FFF5EA] shadow-[0_12px_26px_rgba(183,101,34,0.12)]",
+      rail: "bg-[#D98A45]",
+      panel: "border-[#E9C79B] bg-white/70",
+      label: "Needs attention",
+    };
+  }
+
+  if (minutes >= 16) {
+    return {
+      card:
+        "border-[#D9BB78]/35 bg-[#FFF9EC] shadow-[0_10px_22px_rgba(104,75,53,0.09)]",
+      rail: "bg-[#D9BB78]",
+      panel: "border-[#E8D5AA] bg-white/70",
+      label: "Warming up",
+    };
+  }
+
+  return {
+    card:
+      "border-[#DCCFB8] bg-white shadow-[0_8px_18px_rgba(104,75,53,0.06)]",
+    rail: "",
+    panel: "border-[#EFE3CF] bg-[#FFF8EF]",
+    label: "Normal pace",
+  };
+}
+
+function getQueueAccent(status: OrderStatus) {
+  switch (status) {
+    case "pending_payment":
+      return "bg-[#B76522]";
+    case "pending":
+      return "bg-[#0D2E18]";
+    case "preparing":
+      return "bg-[#2D7A40]";
+    case "ready":
+      return "bg-[#0F441D]";
+    case "out_for_delivery":
+      return "bg-[#684B35]";
+    default:
+      return "bg-[#DCCFB8]";
+  }
+}
+
+function getOrderItemQuantity(order: StaffOrder) {
+  return order.order_items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+}
+
+function getQueueFocusLabel(order: StaffOrder, minutesUntilExpiry: number | null) {
+  if (order.status === "pending_payment") {
+    return "Waiting online payment";
+  }
+
+  if (minutesUntilExpiry !== null && minutesUntilExpiry <= 10) {
+    return "Expires soon";
+  }
+
+  if (requiresPaymentBeforeNextAction(order)) {
+    return "Collect payment first";
+  }
+
+  if (requiresFinalDeliveryFee(order)) {
+    return "Missing delivery fee";
+  }
+
+  if (order.status === "ready") {
+    return order.order_type === "delivery" ? "Ready to dispatch" : "Ready for pickup";
+  }
+
+  return order.order_type === "delivery" ? "Delivery order" : "Pickup order";
+}
+
 function getMinutesUntilExpiration(value: string, now: Date) {
-  const expirationAt = new Date(value).getTime() + 60 * 60 * 1000;
+  const expirationAt =
+    new Date(value).getTime() + pendingOrderTimeoutMinutes * 60 * 1000;
   const minutesLeft = Math.ceil((expirationAt - now.getTime()) / 60000);
   return minutesLeft;
 }
@@ -157,8 +304,8 @@ function formatExpirationCountdown(minutesLeft: number) {
     return "Expired";
   }
 
-  if (minutesLeft >= 60) {
-    return "60m left";
+  if (minutesLeft >= pendingOrderTimeoutMinutes) {
+    return `${pendingOrderTimeoutMinutes}m left`;
   }
 
   return `${minutesLeft}m left`;
@@ -525,12 +672,62 @@ export function StaffDashboard() {
     staffProfile?.role?.replace("_", " ").replace(/\b\w/g, (letter) =>
       letter.toUpperCase()
     ) || "Staff";
+  const queueSummaryCards = [
+    {
+      label: "Pending",
+      value: summary.pending,
+      helper: "Needs acceptance",
+      accent: "bg-[#0D2E18]",
+      valueColor: "text-[#0D2E18]",
+    },
+    {
+      label: "Preparing",
+      value: summary.preparing,
+      helper: "Being made",
+      accent: "bg-[#2D7A40]",
+      valueColor: "text-[#0D2E18]",
+    },
+    {
+      label: "Ready",
+      value: summary.ready,
+      helper: "Next handoff",
+      accent: "bg-[#0F441D]",
+      valueColor: "text-[#0F441D]",
+    },
+    {
+      label: "Out for delivery",
+      value: summary.outForDelivery,
+      helper: "Needs completion",
+      accent: "bg-[#684B35]",
+      valueColor: "text-[#684B35]",
+    },
+  ];
   
   const selectedFinalDeliveryFee = Number(finalDeliveryFeeInput);
   const selectedProjectedTotal =
     selectedOrder && Number.isFinite(selectedFinalDeliveryFee)
       ? getOrderSubtotal(selectedOrder) + Math.max(0, selectedFinalDeliveryFee)
       : selectedOrder?.total_amount ?? 0;
+  const selectedOrderElapsedMinutes = selectedOrder
+    ? getElapsedMinutes(selectedOrder.ordered_at, now)
+    : 0;
+  const selectedOrderHeatmapStyle = getQueueHeatmapStyle(
+    selectedOrderElapsedMinutes
+  );
+  const selectedOrderItemQuantity = selectedOrder
+    ? getOrderItemQuantity(selectedOrder)
+    : 0;
+  const selectedOrderFocusLabel = selectedOrder
+    ? getQueueFocusLabel(
+        selectedOrder,
+        selectedOrder.status === "pending"
+          ? getMinutesUntilExpiration(selectedOrder.ordered_at, now)
+          : null
+      )
+    : "";
+  const selectedOrderRemarks = selectedOrder
+    ? getOrderSpecialRemarks(selectedOrder)
+    : [];
   const syncMeta = isLoading || isSyncing
     ? "Syncing..."
     : `Auto-sync 15s${
@@ -560,7 +757,7 @@ export function StaffDashboard() {
           onClick={() => loadOrders({ showLoading: true })}
           disabled={isLoading}
           title="Force refresh order queue"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white disabled:opacity-60"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
         >
           <RefreshCw
             size={15}
@@ -573,7 +770,7 @@ export function StaffDashboard() {
           </span>
         </button>
 
-        <label className="hidden sm:flex h-10 min-w-[220px] items-center gap-2 rounded-xl bg-[#FFF8EF] px-3">
+        <label className="hidden sm:flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-[#E7DDCC] bg-white px-3">
           <Search size={16} className="text-[#8C7A64]" />
           <input
             value={search}
@@ -586,9 +783,9 @@ export function StaffDashboard() {
         <span
           className={`hidden sm:inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold ${
             stationStatus === "accepting"
-              ? "bg-[#0F441D]/10 text-[#0D2E18]"
+              ? "bg-[#E6F2E8] text-[#0D2E18]"
               : stationStatus === "busy"
-              ? "bg-[#FFF8EF] text-[#684B35]"
+              ? "bg-[#FFF0DA] text-[#684B35]"
               : "bg-[#FFF1EC] text-[#9C543D]"
           }`}
         >
@@ -607,7 +804,7 @@ export function StaffDashboard() {
           }
           disabled={isStoreStatusUpdating}
           aria-label="Store status override"
-          className="hidden sm:inline-flex h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
+          className="hidden sm:inline-flex h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-[#FFF0DA] disabled:opacity-60"
         >
           <option value="auto">Auto</option>
           <option value="open">Open</option>
@@ -1028,38 +1225,28 @@ export function StaffDashboard() {
 
       <section className="px-4 py-4 lg:px-5">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
-            <p className="font-sans text-xs text-[#8C7A64]">Pending</p>
-            <p className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
-              {summary.pending}
-            </p>
-          </div>
-
-          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
-            <p className="font-sans text-xs text-[#8C7A64]">Preparing</p>
-            <p className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
-              {summary.preparing}
-            </p>
-          </div>
-
-          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
-            <p className="font-sans text-xs text-[#8C7A64]">Ready</p>
-            <p className="mt-1 font-sans text-3xl font-bold text-[#0F441D]">
-              {summary.ready}
-            </p>
-          </div>
-
-          <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
-            <p className="font-sans text-xs text-[#8C7A64]">
-              Out for delivery
-            </p>
-            <p className="mt-1 font-sans text-3xl font-bold text-[#684B35]">
-              {summary.outForDelivery}
-            </p>
-          </div>
+          {queueSummaryCards.map((card) => (
+            <div
+              key={card.label}
+              className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white shadow-[0_6px_16px_rgba(104,75,53,0.05)]"
+            >
+              <div className={`h-1.5 ${card.accent}`} />
+              <div className="flex items-end justify-between gap-3 p-3">
+                <div>
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8C7A64]">
+                    {card.label}
+                  </p>
+                  <p className="mt-1 font-sans text-xs text-[#6E5D49]">
+                    {card.helper}
+                  </p>
+                </div>
+                <p className={`font-sans text-3xl font-bold ${card.valueColor}`}>
+                  {card.value}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-
-        
 
         {error ? (
           <div className="mt-4 rounded-[16px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
@@ -1098,24 +1285,23 @@ export function StaffDashboard() {
             return (
               <section
                 key={column.key}
-                className="relative rounded-[20px] border border-[#DCCFB8] bg-[#F9F1E4] p-3"
+                className={`relative rounded-[20px] border p-3 shadow-[0_10px_24px_rgba(104,75,53,0.06)] ${column.header}`}
               >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2
-                    className={`font-sans text-base font-bold ${
-                      column.key === "out_for_delivery"
-                        ? "text-[#684B35]"
-                        : "text-[#0D2E18]"
-                    }`}
-                  >
-                    {column.label}
-                  </h2>
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${column.accent}`} />
+                      <h2 className="font-sans text-base font-black text-[#0D2E18]">
+                        {column.label}
+                      </h2>
+                    </div>
+                    <p className="mt-1 truncate font-sans text-[11px] font-semibold text-[#8C7A64]">
+                      {column.caption}
+                    </p>
+                  </div>
+
                   <span
-                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${
-                      column.key === "out_for_delivery"
-                        ? "bg-[#FFF0DA] text-[#684B35]"
-                        : "bg-[#EFE3CF] text-[#684B35]"
-                    }`}
+                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-black ${column.count}`}
                   >
                     {columnOrders.length}
                   </span>
@@ -1161,21 +1347,37 @@ export function StaffDashboard() {
                     const isExpiringOrder = expiringOrderIds.includes(order.id);
                     const orderEmail = getOrderEmail(order);
                     const orderPhone = getOrderPhone(order);
+                    const elapsedMinutes = getElapsedMinutes(order.ordered_at, now);
+                    const heatmapStyle = getQueueHeatmapStyle(elapsedMinutes);
+                    const queueFocusLabel = getQueueFocusLabel(
+                      order,
+                      minutesUntilExpiry
+                    );
+                    const itemQuantity = getOrderItemQuantity(order);
 
                     return (
                       <article
                         key={order.id}
                         onClick={() => openOrder(order)}
-                        className="group/order cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
+                        className={`group/order cursor-pointer overflow-hidden rounded-[18px] border transition hover:-translate-y-0.5 hover:border-[#CBB68F] hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)] ${heatmapStyle.card}`}
                       >
+                        <div
+                          className={`h-1.5 ${
+                            heatmapStyle.rail || getQueueAccent(order.status)
+                          }`}
+                        />
+                        <div className="p-3">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-sans text-[1.2rem] font-bold leading-none text-[#0D2E18]">
+                          <div className="min-w-0">
+                            <p className="font-sans text-[1.2rem] font-black leading-none text-[#0D2E18]">
                               {formatOrderCode(order.id)}
                             </p>
-                            <p className="mt-1 font-sans text-xs font-semibold text-[#684B35]">
-                              {getOrderDisplayName(order)}
-                            </p>
+                            <div className="mt-2 flex items-center gap-1.5 font-sans text-xs font-bold text-[#684B35]">
+                              <UserRound size={13} />
+                              <span className="truncate">
+                                {getOrderDisplayName(order)}
+                              </span>
+                            </div>
                             {orderEmail || orderPhone ? (
                               <p className="mt-1 max-h-0 overflow-hidden font-sans text-[11px] leading-snug text-[#8C7A64] opacity-0 transition-all duration-200 group-hover/order:max-h-10 group-hover/order:opacity-100 group-focus-within/order:max-h-10 group-focus-within/order:opacity-100">
                                 {[orderEmail, orderPhone].filter(Boolean).join(" | ")}
@@ -1184,7 +1386,7 @@ export function StaffDashboard() {
                           </div>
 
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getStatusBadgeStyle(
+                            className={`inline-flex shrink-0 rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getStatusBadgeStyle(
                               order.status
                             )}`}
                           >
@@ -1192,14 +1394,37 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex rounded-full bg-[#F4EEE6] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
+                        <div
+                          className={`mt-3 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 font-sans text-xs ${heatmapStyle.panel}`}
+                        >
+                          <span className="font-black uppercase tracking-[0.12em] text-[#8C7A64]">
+                            Queue Heat
+                          </span>
+                          <span className="font-black text-[#0D2E18]">
+                            {heatmapStyle.label}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2 font-sans text-xs">
+                          <span
+                            className={`inline-flex items-center justify-center gap-1 rounded-full border px-2.5 py-1 font-bold ${getQueueAgeStyle(
+                              elapsedMinutes
+                            )}`}
+                          >
+                            <Clock3 size={13} />
                             {formatElapsed(order.ordered_at, now)}
                           </span>
 
+                          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-2.5 py-1 font-bold text-[#684B35]">
+                            <ClipboardList size={13} />
+                            {itemQuantity} item{itemQuantity === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           {minutesUntilExpiry !== null ? (
                             <span
-                              className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getExpirationCountdownStyle(
+                              className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getExpirationCountdownStyle(
                                 minutesUntilExpiry
                               )}`}
                             >
@@ -1208,7 +1433,7 @@ export function StaffDashboard() {
                           ) : null}
 
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getOrderTypeStyle(
                               order.order_type
                             )}`}
                           >
@@ -1218,7 +1443,7 @@ export function StaffDashboard() {
                           </span>
 
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getPaymentStyle(
                               order.payment_method
                             )}`}
                           >
@@ -1226,7 +1451,7 @@ export function StaffDashboard() {
                           </span>
 
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
+                            className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getPaymentStatusStyle(
                               order
                             )}`}
                           >
@@ -1234,23 +1459,36 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between gap-3 font-sans">
-                          <p className="truncate text-sm text-[#3C332A]">
-                            {items[0] ?? "No item summary"}
-                            {items.length > 1 ? ` +${items.length - 1}` : ""}
+                        <div className={`mt-3 rounded-xl border px-3 py-2 ${heatmapStyle.panel}`}>
+                          <p className="font-sans text-[11px] font-black uppercase tracking-[0.12em] text-[#8C7A64]">
+                            Focus
                           </p>
-                          <div className="text-right">
-                            <p className="text-[11px] text-[#9A856C]">
-                              {formatTime(order.ordered_at)}
+                          <p className="mt-0.5 font-sans text-sm font-bold text-[#0D2E18]">
+                            {queueFocusLabel}
+                          </p>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3 font-sans">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[#3C332A]">
+                              {items[0] ?? "No item summary"}
                             </p>
-                            <p className="text-base font-semibold text-[#684B35]">
+                            <p className="mt-0.5 text-xs text-[#8C7A64]">
+                              {items.length > 1
+                                ? `+${items.length - 1} more line item${items.length === 2 ? "" : "s"}`
+                                : `Placed ${formatTime(order.ordered_at)}`}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[11px] text-[#9A856C]">Total</p>
+                            <p className="text-base font-black text-[#684B35]">
                               {peso(order.total_amount)}
                             </p>
                           </div>
                         </div>
 
                         {order.order_type === "delivery" ? (
-                          <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2 font-sans text-xs">
+                          <div className={`mt-3 grid grid-cols-3 gap-2 rounded-xl border px-3 py-2 font-sans text-xs ${heatmapStyle.panel}`}>
                             <div>
                               <p className="text-[#8C7A64]">Items</p>
                               <p className="mt-0.5 font-bold text-[#0D2E18]">
@@ -1272,16 +1510,16 @@ export function StaffDashboard() {
                           </div>
                         ) : null}
 
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          <div className="inline-flex items-center gap-1.5 font-sans text-xs text-[#6E5D49]">
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#EFE3CF] pt-3">
+                          <div className="inline-flex items-center gap-1.5 font-sans text-xs font-bold text-[#6E5D49]">
                             {order.order_type === "delivery" ? (
                               <Truck size={14} />
                             ) : (
-                              <ClipboardList size={14} />
+                              <CircleDollarSign size={14} />
                             )}
                             {order.order_type === "delivery"
                               ? "Delivery flow"
-                              : "Pickup flow"}
+                              : "Counter flow"}
                           </div>
 
                           {nextAction ? (
@@ -1307,7 +1545,7 @@ export function StaffDashboard() {
                                 handleAdvance(order.id, order.status);
                               }}
                               disabled={isUpdatingOrder || isExpiredPendingOrder || isExpiringOrder}
-                              className={`rounded-xl px-3 py-2 font-sans text-xs font-semibold transition ${
+                              className={`rounded-xl px-3 py-2 font-sans text-xs font-black transition ${
                                 isExpiredPendingOrder || isExpiringOrder
                                   ? "border border-[#D6C6AC] bg-[#F4EEE6] text-[#8A755D]"
                                   : paymentRequired
@@ -1328,6 +1566,7 @@ export function StaffDashboard() {
                               No next action
                             </span>
                           )}
+                        </div>
                         </div>
                       </article>
                     );
@@ -1482,94 +1721,136 @@ export function StaffDashboard() {
             onClick={closeOrder}
           />
 
-          <aside className="fixed inset-x-2 top-2 z-50 mx-auto flex max-h-[90vh] w-[calc(100%-1rem)] max-w-lg flex-col overflow-hidden rounded-2xl bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:inset-x-auto sm:right-3 sm:top-3 sm:w-full">
-            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
-              <div>
-                <p className="font-sans text-xs uppercase tracking-[0.14em] text-[#684B35]">
-                  Order Details
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h2 className="font-sans text-3xl font-bold leading-none text-[#0D2E18]">
-                    {formatOrderCode(selectedOrder.id)}
-                  </h2>
+          <aside className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[94vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:inset-y-0 sm:left-auto sm:right-0 sm:mx-0 sm:h-screen sm:max-h-none sm:w-[30rem] sm:rounded-none sm:rounded-l-[22px] sm:border-y-0 sm:border-r-0">
+            <div className={`h-1.5 ${selectedOrderHeatmapStyle.rail || getQueueAccent(selectedOrder.status)}`} />
+            <div className="border-b border-[#DCCFB8] bg-white px-4 py-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
+                    Order Details
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <h2 className="font-sans text-[1.45rem] font-black leading-none text-[#0D2E18]">
+                      {formatOrderCode(selectedOrder.id)}
+                    </h2>
+                    <span
+                      className={`rounded-full px-2.5 py-1 font-sans text-xs font-black ${getStatusBadgeStyle(
+                        selectedOrder.status
+                      )}`}
+                    >
+                      {formatStatus(selectedOrder.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-sans text-sm font-semibold text-[#684B35]">
+                    {getOrderDisplayName(selectedOrder)}
+                  </p>
+                </div>
 
-                  {selectedOrder.payment_status === "unpaid" ? (
-                    <span className="rounded-full border border-[#684B35]/30 bg-[#FFF0DA] px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-[0.08em] text-[#684B35]">
+                <button
+                  type="button"
+                  onClick={closeOrder}
+                  className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-2 text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className={`mt-3 flex flex-wrap items-center gap-2 rounded-2xl border px-3 py-2 font-sans text-xs ${selectedOrderHeatmapStyle.panel}`}>
+                <span className="font-black uppercase tracking-[0.12em] text-[#8C7A64]">
+                  Queue Heat
+                </span>
+                <span className="font-black text-[#0D2E18]">
+                  {selectedOrderHeatmapStyle.label}
+                </span>
+                <span className="text-[#B59A79]">|</span>
+                <span className="font-bold text-[#684B35]">
+                  {formatElapsed(selectedOrder.ordered_at, now)}
+                </span>
+                <span className="text-[#B59A79]">|</span>
+                <span className="font-bold text-[#684B35]">
+                  {selectedOrderItemQuantity} item{selectedOrderItemQuantity === 1 ? "" : "s"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className="grid gap-2">
+                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                    Fulfillment
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getOrderTypeStyle(
+                        selectedOrder.order_type
+                      )}`}
+                    >
+                      {selectedOrder.order_type === "pickup"
+                        ? "Pickup"
+                        : "Delivery"}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getPaymentStyle(
+                        selectedOrder.payment_method
+                      )}`}
+                    >
+                      {getPaymentLabel(selectedOrder)}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getPaymentStatusStyle(
+                        selectedOrder
+                      )}`}
+                    >
                       {getPaymentStatusLabel(selectedOrder)}
                     </span>
-                  ) : null}
+                  </div>
+                </div>
+
+                <div className={`rounded-[16px] border p-3 ${selectedOrderHeatmapStyle.panel}`}>
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                    Current Focus
+                  </p>
+                  <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
+                    {selectedOrderFocusLabel}
+                  </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={closeOrder}
-                className="rounded-full bg-white p-2 text-[#0D2E18]"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
-                    selectedOrder.order_type
-                  )}`}
-                >
-                  {selectedOrder.order_type === "pickup"
-                    ? "Pickup"
-                    : "Delivery"}
-                </span>
-
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStyle(
-                    selectedOrder.payment_method
-                  )}`}
-                >
-                  {getPaymentLabel(selectedOrder)}
-                </span>
-
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getPaymentStatusStyle(
-                    selectedOrder
-                  )}`}
-                >
-                  {getPaymentStatusLabel(selectedOrder)}
-                </span>
-
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getStatusBadgeStyle(
-                    selectedOrder.status
-                  )}`}
-                >
-                  {formatStatus(selectedOrder.status)}
-                </span>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-2 grid gap-2">
                 <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs text-[#8C7A64]">Placed at</p>
-                  <p className="mt-1 font-sans text-sm font-semibold text-[#0D2E18]">
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#8C7A64]">
+                    Placed At
+                  </p>
+                  <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
                     {formatDateTime(selectedOrder.ordered_at)}
                   </p>
                 </div>
 
                 <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs text-[#8C7A64]">Grand Total</p>
-                  <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#8C7A64]">
+                    Grand Total
+                  </p>
+                  <p className="mt-1 font-sans text-base font-black text-[#684B35]">
                     {peso(selectedOrder.total_amount)}
                   </p>
                 </div>
               </div>
 
               {selectedOrder.order_type === "delivery" ? (
-                <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.08em] text-[#684B35]">
-                    Delivery Fee
-                  </p>
+                <div className="mt-3 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                        Delivery Fee
+                      </p>
+                      <p className="mt-1 font-sans text-xs text-[#6E5D49]">
+                        Distance-based checkout total
+                      </p>
+                    </div>
+                    <Truck size={20} className="text-[#684B35]" />
+                  </div>
 
-                  <div className="mt-3 space-y-2 font-sans text-sm">
+                  <div className="mt-3 space-y-1.5 font-sans text-sm">
                     <div className="flex justify-between gap-3">
                       <span className="text-[#5F5346]">Items</span>
                       <span className="font-bold tabular-nums text-[#0D2E18]">
@@ -1616,40 +1897,45 @@ export function StaffDashboard() {
                 </div>
               ) : null}
 
-              <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
-                  Customer & Delivery Hub
-                </p>
-
-                <div className="mt-3 grid gap-2 font-sans text-sm text-[#3C332A]">
+              <div className="mt-3 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs text-[#8C7A64]">Customer</p>
-                    <p className="font-semibold text-[#0D2E18]">
+                    <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                      Customer & Delivery
+                    </p>
+                    <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
                       {getOrderDisplayName(selectedOrder)}
                     </p>
                   </div>
+                  <UserRound size={20} className="text-[#684B35]" />
+                </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <p>
-                      <span className="font-semibold text-[#0D2E18]">
-                        Phone:
-                      </span>{" "}
-                      {getOrderPhone(selectedOrder) || "No phone"}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-[#0D2E18]">
-                        Email:
-                      </span>{" "}
-                      {getOrderEmail(selectedOrder) || "No email"}
-                    </p>
+                <div className="mt-3 grid gap-2 font-sans text-sm text-[#3C332A]">
+                  <div className="grid gap-2">
+                    <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
+                        Phone
+                      </p>
+                      <p className="mt-1 font-semibold text-[#0D2E18]">
+                        {getOrderPhone(selectedOrder) || "No phone"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
+                        Email
+                      </p>
+                      <p className="mt-1 truncate font-semibold text-[#0D2E18]">
+                        {getOrderEmail(selectedOrder) || "No email"}
+                      </p>
+                    </div>
                   </div>
 
                   {selectedOrder.order_type === "delivery" ? (
-                    <div>
-                      <p>
-                        <span className="font-semibold text-[#0D2E18]">
-                          Address:
-                        </span>{" "}
+                    <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
+                        Address
+                      </p>
+                      <p className="mt-1 font-semibold text-[#0D2E18]">
                         {selectedOrder.delivery_address || "No address"}
                       </p>
 
@@ -1677,10 +1963,15 @@ export function StaffDashboard() {
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3">
-                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
-                  Order Items
-                </p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                    Order Items
+                  </p>
+                  <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-black text-[#684B35]">
+                    {selectedOrderItemQuantity} item{selectedOrderItemQuantity === 1 ? "" : "s"}
+                  </span>
+                </div>
 
                 {selectedOrder.order_items.map((item) => (
                   <div
@@ -1688,8 +1979,8 @@ export function StaffDashboard() {
                     className="rounded-[16px] border border-[#DCCFB8] bg-white p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-sans text-base font-semibold text-[#0D2E18]">
+                      <div className="min-w-0">
+                        <p className="font-sans text-base font-black text-[#0D2E18]">
                           {item.menu_items?.name ?? "Menu item"} ×{" "}
                           {item.quantity}
                         </p>
@@ -1713,7 +2004,7 @@ export function StaffDashboard() {
                         </div>
                       </div>
 
-                      <p className="font-sans text-base font-semibold text-[#684B35]">
+                      <p className="shrink-0 font-sans text-base font-black text-[#684B35]">
                         {peso(item.unit_price * item.quantity)}
                       </p>
                     </div>
@@ -1721,17 +2012,17 @@ export function StaffDashboard() {
                 ))}
               </div>
 
-              <div className="mt-4 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                <p className="font-sans text-xs uppercase tracking-[0.08em] text-[#684B35]">
+              <div className="mt-3 rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
                   Special Remarks
                 </p>
 
                 <div className="mt-3 space-y-2">
-                  {getOrderSpecialRemarks(selectedOrder).length > 0 ? (
-                    getOrderSpecialRemarks(selectedOrder).map((remark, index) => (
+                  {selectedOrderRemarks.length > 0 ? (
+                    selectedOrderRemarks.map((remark, index) => (
                       <p
                         key={`${selectedOrder.id}-remark-${index}`}
-                        className="rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#3C332A]"
+                        className="rounded-xl border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2 font-sans text-sm font-semibold text-[#3C332A]"
                       >
                         {remark}
                       </p>
@@ -1745,7 +2036,7 @@ export function StaffDashboard() {
               </div>
             </div>
 
-            <div className="border-t border-[#DCCFB8] px-5 py-4">
+            <div className="border-t border-[#DCCFB8] bg-white px-4 py-3">
               {isConfirmingCancel ? (
                 <div className="rounded-[16px] border border-[#E8B8A8] bg-[#FFF1EC] p-3">
                   <p className="font-sans text-sm font-semibold text-[#9C543D]">
@@ -1776,11 +2067,19 @@ export function StaffDashboard() {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="grid gap-3">
                   <div>
-                    <p className="font-sans text-base font-semibold text-[#0D2E18]">
+                    <p className="font-sans text-base font-black text-[#0D2E18]">
                       Order actions
                     </p>
+                    {!getFinalStatusMessage(selectedOrder.status) ? (
+                      <p className="mt-1 font-sans text-sm text-[#8C7A64]">
+                        Next move:{" "}
+                        {requiresPaymentBeforeNextAction(selectedOrder)
+                          ? "Collect payment first"
+                          : getDrawerActionLabel(selectedOrder) ?? "No action needed"}
+                      </p>
+                    ) : null}
                     {getFinalStatusMessage(selectedOrder.status) ? (
                       <p className="mt-1 font-sans text-sm text-[#8C7A64]">
                         {getFinalStatusMessage(selectedOrder.status)}
@@ -1788,13 +2087,13 @@ export function StaffDashboard() {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {canMarkPaid(selectedOrder) ? (
                       <button
                         type="button"
                         onClick={() => handleMarkPaid(selectedOrder.id)}
                         disabled={isMarkingPaid}
-                        className="inline-flex items-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#684B35] px-4 py-2.5 font-sans text-sm font-black text-white transition hover:bg-[#5A3F2D] disabled:opacity-60"
                       >
                         {isMarkingPaid ? <LoadingSpinner label="Marking paid" /> : null}
                         {isMarkingPaid ? "Marking..." : "Mark Paid"}
@@ -1805,7 +2104,7 @@ export function StaffDashboard() {
                       <button
                         type="button"
                         onClick={() => setIsConfirmingCancel(true)}
-                        className="rounded-xl border border-[#684B35] bg-transparent px-3 py-2 font-sans text-sm font-semibold text-[#684B35] transition hover:bg-[#FFF0DA]"
+                        className="rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 py-2 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA]"
                       >
                         Cancel Order
                       </button>
@@ -1840,7 +2139,7 @@ export function StaffDashboard() {
                             );
                           }}
                           disabled={updatingOrderIds.includes(selectedOrder.id)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-semibold text-white transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-black text-white transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {updatingOrderIds.includes(selectedOrder.id) ? (
                             <LoadingSpinner label="Updating order" />

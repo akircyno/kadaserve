@@ -1,6 +1,6 @@
 # Demonstration Checklist
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 Use this before every demo or defense rehearsal.
 
@@ -37,6 +37,7 @@ npm run build
 - Customize drink options.
 - Confirm cart item appears.
 - Confirm item total price appears beside the quantity controls.
+- Confirm order tracker shows automatic update status without manually refreshing the page.
 
 ## Pickup Checkout
 
@@ -64,7 +65,20 @@ npm run build
 ## Staff Flow
 
 - Open staff dashboard.
+- Confirm staff header is a clean white command bar and controls are readable.
+- Confirm sidebar navigation has clean labels, a professional collapse/expand icon, and a simple `Sign out` action without redundant session text.
+- Open Encode Order and confirm menu summary metrics, category filters, compact product cards, active order rail, fulfillment cards, and payment controls look polished.
+- Encode a staff delivery order and confirm delivery fee is included in the grand total and submits successfully.
 - Confirm new order appears.
+- Keep the customer tracker open and confirm it updates automatically when staff changes order status.
+- Confirm order queue columns are easy to scan with counts, timing, item count, focus label, and next action.
+- Click an order and confirm the detail modal shows queue heat, wait time, item count, payment labels, customer/delivery details, item breakdown, and clear next action.
+- Confirm queue heatmap appears on long-waiting orders:
+  - normal for new orders
+  - warming up around 16 minutes
+  - needs attention around 31 minutes
+  - critical wait around 45 minutes for active non-pending stages
+  - pending orders expire at 45 minutes
 - Confirm payment method labels are clear:
   - `Pay at Cafe` for pickup cash orders.
   - `Cash on Delivery` for delivery cash orders.
@@ -79,6 +93,8 @@ npm run build
   - delivered
 - Confirm paid requirement before delivery completion.
 - Confirm delivery fee input appears only when a delivery order has no calculated delivery fee.
+- Confirm pending orders use a 45-minute expiry limit.
+- Confirm expired orders move to session summary/order history as `expired`, not `cancelled`.
 
 ## Feedback Flow
 
@@ -104,5 +120,6 @@ npm run build
 - No rewards/voucher UI appears.
 - Login does not require Terms checkbox.
 - Signup requires Terms checkbox.
+- Login/signup pages do not show a hydration overlay from browser-injected input attributes.
 - Signup does not ask for date of birth.
 - Checkout phone is optional.

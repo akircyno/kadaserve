@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { RefreshCw, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 interface EncodeOrderHeaderControlsProps {
     search: string;
@@ -19,11 +19,11 @@ export function EncodeOrderHeaderControls({
     onRefresh,
     menuSyncMeta,
 }: EncodeOrderHeaderControlsProps) {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    const mounted = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false
+    );
 
     if (!mounted) return null;
 
@@ -32,7 +32,7 @@ export function EncodeOrderHeaderControls({
 
     return createPortal(
         <div className="flex shrink-0 items-center justify-end gap-2">
-            <label className="flex h-9 items-center gap-2 rounded-lg bg-[#FFF8EF] px-2.5 min-w-[180px] max-w-[280px] sm:min-w-[220px] sm:max-w-[300px]">
+            <label className="flex h-9 items-center gap-2 rounded-xl border border-[#E7DDCC] bg-white px-2.5 min-w-[180px] max-w-[280px] sm:min-w-[220px] sm:max-w-[300px]">
                 <Search size={16} className="text-[#8C7A64]" />
                 <input
                     value={search}
@@ -47,7 +47,7 @@ export function EncodeOrderHeaderControls({
                 onClick={onRefresh}
                 disabled={isLoadingMenu}
                 title="Refresh menu"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-60"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
             >
                 <RefreshCw
                     size={16}

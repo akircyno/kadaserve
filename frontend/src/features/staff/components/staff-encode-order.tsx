@@ -2,15 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+    AlertTriangle,
+    CheckCircle2,
+    CreditCard,
+    MapPin,
     Minus,
+    PackageCheck,
     Plus,
-    RefreshCw,
-    Search,
+    ReceiptText,
     ShoppingCart,
     Trash2,
+    UserRound,
     X,
 } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EncodeOrderHeaderControls } from "./encode-order-header-controls";
 import type { MenuCategory, MenuFilterCategory, StaffMenuItem } from "@/types/menu";
 import type { OrderType, PaymentMethod, PaymentStatus } from "@/types/orders";
@@ -72,6 +76,10 @@ const addonOptions: AddonOption[] = [
 
 function formatPrice(value: number) {
     return Math.round(value);
+}
+
+function peso(value: number) {
+    return `PHP ${formatPrice(value)}`;
 }
 
 function formatCategory(category: MenuCategory) {
@@ -224,6 +232,19 @@ export function StaffEncodeOrder() {
             letter.toUpperCase()
         ) || "Staff";
     const staffChipLabel = `Staff ${staffFirstName}`;
+    const canSubmitOrder =
+        cart.length > 0 &&
+        !isSubmitting &&
+        hasRequiredCustomerName &&
+        hasRequiredDeliveryInfo;
+    const visibleCategoryLabel =
+        categoryButtons.find((button) => button.key === activeCategory)?.label ?? "All";
+    const paymentMethodLabel =
+        orderType === "delivery"
+            ? "Cash on Delivery"
+            : paymentMethod === "gcash"
+            ? "GCash"
+            : "Cash";
     const menuSyncMeta = isLoadingMenu
         ? "Syncing..."
         : `Menu sync${
@@ -464,26 +485,53 @@ export function StaffEncodeOrder() {
                 menuSyncMeta={menuSyncMeta}
             />
 
-            <section className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-0 lg:grid lg:h-[calc(100dvh-4.5rem)] lg:grid-cols-[minmax(0,1fr)_380px] lg:overflow-hidden">
+            <section className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-0 lg:grid lg:h-[calc(100dvh-4.5rem)] lg:grid-cols-[minmax(0,1fr)_408px] lg:overflow-hidden">
                 {/* Products Section */}
                 <div className="min-w-0 flex flex-1 flex-col lg:h-full lg:overflow-hidden">
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {/* Categories */}
-                    <div className="sticky top-0 z-10 bg-[#FFF0DA]/95 px-4 py-2 backdrop-blur sm:px-5 lg:px-6">
+                    <div className="sticky top-0 z-10 border-b border-[#E6D7C0] bg-[#FFF0DA]/95 px-4 py-3 backdrop-blur sm:px-5 lg:px-6">
+                        <div className="mb-3 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
+                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
+                                    Menu Items
+                                </p>
+                                <p className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                    {menuItems.length}
+                                </p>
+                            </div>
+                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
+                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
+                                    Showing
+                                </p>
+                                <p className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                    {filteredItems.length}
+                                </p>
+                            </div>
+                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
+                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
+                                    Category
+                                </p>
+                                <p className="mt-1 truncate font-sans text-lg font-black text-[#0D2E18]">
+                                    {visibleCategoryLabel}
+                                </p>
+                            </div>
+                        </div>
+
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                             {categoryButtons.map((button) => (
                                 <button
                                     key={button.key}
                                     type="button"
                                     onClick={() => setActiveCategory(button.key)}
-                                    className={`flex-shrink-0 rounded-full border px-4 py-2 font-sans text-sm font-semibold transition-all duration-200 ${
+                                    className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-4 font-sans text-sm font-bold transition-all duration-200 ${
                                         activeCategory === button.key
                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_4px_12px_rgba(13,46,24,0.15)]"
                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
                                     }`}
                                 >
                                     {button.label}
-                                    <span className="ml-1.5 opacity-60">{categoryCounts[button.key]}</span>
+                                    <span className="rounded-full bg-current/10 px-2 py-0.5 text-xs">{categoryCounts[button.key]}</span>
                                 </button>
                             ))}
                         </div>
@@ -492,14 +540,16 @@ export function StaffEncodeOrder() {
                     {/* Messages */}
                     <div className="px-4 py-2 sm:px-5 lg:px-6">
                         {error && (
-                            <div className="mb-3 animate-in rounded-[14px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-medium text-[#A6422A] shadow-sm">
-                                {error}
+                            <div className="mb-3 flex items-start gap-2 rounded-[14px] border border-[#F2C8BD] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-semibold text-[#A6422A] shadow-sm">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{error}</span>
                             </div>
                         )}
 
                         {successMessage && (
-                            <div className="mb-3 animate-in rounded-[14px] border border-[#0F441D]/15 bg-white px-4 py-3 font-sans text-sm font-medium text-[#0D2E18] shadow-[0_2px_8px_rgba(13,46,24,0.08)]">
-                                ✓ {successMessage}
+                            <div className="mb-3 flex items-start gap-2 rounded-[14px] border border-[#BFD1B5] bg-white px-4 py-3 font-sans text-sm font-semibold text-[#0D2E18] shadow-[0_2px_8px_rgba(13,46,24,0.08)]">
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 fill-[#0F441D] text-white" />
+                                <span>{successMessage}</span>
                             </div>
                         )}
                     </div>
@@ -525,28 +575,29 @@ export function StaffEncodeOrder() {
 
                     {/* Product Grid */}
                     {!isLoadingMenu && filteredItems.length > 0 && (
-                        <div className="px-4 py-2 sm:px-5 lg:px-6">
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                        <div className="px-4 py-3 sm:px-5 lg:px-6">
+                            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                                 {filteredItems.map((item) => {
                                     const selectedQuantity = getSelectedQuantity(item.id);
+                                    const selectedLineTotal = selectedQuantity * item.price;
 
                                     return (
                                         <article
                                             key={`${item.category}-${item.id}`}
-                                            className="group flex gap-3 overflow-hidden rounded-[16px] border border-[#E6D7C0] bg-white shadow-[0_2px_8px_rgba(104,75,53,0.06)] transition-all duration-200 hover:border-[#D6C6AC] hover:shadow-[0_6px_16px_rgba(104,75,53,0.12)] hover:-translate-y-0.5 p-3"
+                                            className="group grid grid-cols-[92px_minmax(0,1fr)] gap-3 rounded-[16px] border border-[#E6D7C0] bg-white p-3 shadow-[0_4px_14px_rgba(104,75,53,0.06)] transition-all duration-200 hover:border-[#BDAE92] hover:shadow-[0_10px_24px_rgba(104,75,53,0.1)]"
                                         >
                                             {/* Image - Left Side, Compact */}
-                                            <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-gradient-to-br from-[#F7F5F1] to-[#EFE9DF]">
+                                            <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-[12px] bg-[#F4EEE6]">
                                                 {item.imageUrl ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
                                                     <img
                                                         src={item.imageUrl}
                                                         alt={item.name}
-                                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                                     />
                                                 ) : (
                                                     <div className="flex h-full w-full items-center justify-center bg-[#E6D7C0]">
-                                                        <ShoppingCart size={32} className="text-[#D6C6AC]" />
+                                                        <ShoppingCart size={28} className="text-[#BDAE92]" />
                                                     </div>
                                                 )}
 
@@ -572,7 +623,7 @@ export function StaffEncodeOrder() {
                                                         </h3>
                                                     </div>
                                                     <p className="flex-shrink-0 font-sans text-base font-bold text-[#684B35]">
-                                                        ₱{formatPrice(item.price)}
+                                                        {peso(item.price)}
                                                     </p>
                                                 </div>
 
@@ -583,32 +634,36 @@ export function StaffEncodeOrder() {
                                                         <button
                                                             type="button"
                                                             onClick={() => changeItemQuantity(item.id, -1)}
-                                                            className="flex h-7 w-7 items-center justify-center rounded-[8px] text-[#0D2E18] transition-all hover:bg-white active:bg-[#E7F4EA]"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-full text-[#0D2E18] transition-all hover:bg-white active:bg-[#E7F4EA]"
                                                             aria-label={`Decrease ${item.name}`}
                                                         >
                                                             <Minus size={14} strokeWidth={2.5} />
                                                         </button>
 
-                                                        <span className="w-6 text-center font-sans text-xs font-bold text-[#3C332A]">
+                                                        <span className="min-w-7 text-center font-sans text-sm font-black text-[#0D2E18]">
                                                             {selectedQuantity}
                                                         </span>
 
                                                         <button
                                                             type="button"
                                                             onClick={() => changeItemQuantity(item.id, 1)}
-                                                            className="flex h-7 w-7 items-center justify-center rounded-[8px] text-[#0D2E18] transition-all hover:bg-white active:bg-[#E7F4EA]"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-full text-[#0D2E18] transition-all hover:bg-white active:bg-[#E7F4EA]"
                                                             aria-label={`Increase ${item.name}`}
                                                         >
                                                             <Plus size={14} strokeWidth={2.5} />
                                                         </button>
                                                     </div>
 
+                                                    <p className="hidden font-sans text-xs font-bold text-[#8C7A64] sm:block">
+                                                        {selectedQuantity > 0 ? peso(selectedLineTotal) : "Ready"}
+                                                    </p>
+
                                                     {/* Add to Cart Button */}
                                                     <button
                                                         type="button"
                                                         onClick={() => openCustomization(item)}
                                                         disabled={selectedQuantity === 0}
-                                                        className="flex-1 rounded-[10px] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-bold text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-md active:scale-95 disabled:bg-[#EFE3CF] disabled:text-[#8C7A64]"
+                                                        className="flex-1 rounded-[12px] bg-[#0D2E18] px-3 py-2.5 font-sans text-xs font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-md active:scale-95 disabled:bg-[#EFE3CF] disabled:text-[#8C7A64]"
                                                     >
                                                         Customize
                                                     </button>
@@ -626,18 +681,21 @@ export function StaffEncodeOrder() {
                 {/* Cart Section */}
                 <aside className="flex flex-col border-l border-[#E6D7C0] bg-white lg:sticky lg:top-0 lg:h-full lg:max-h-[calc(100dvh-4.5rem)] lg:self-start lg:overflow-hidden">
                     {/* Cart Header */}
-                    <div className="shrink-0 border-b border-[#E6D7C0] px-3 py-2 sm:px-4">
-                        <div className="flex items-center justify-between gap-3">
+                    <div className="shrink-0 border-b border-[#E6D7C0] bg-[#FFF8EF] px-4 py-4">
+                        <div className="flex items-start justify-between gap-3">
                             <div>
-                                <p className="font-sans text-xs font-bold uppercase tracking-widest text-[#8C7A64]">
+                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.18em] text-[#8C7A64]">
                                     Active Order
                                 </p>
-                                <h2 className="font-sans text-[1.2rem] font-bold text-[#0D2E18]">
-                                    Cart
+                                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                                    {cartCount} item{cartCount === 1 ? "" : "s"}
                                 </h2>
+                                <p className="mt-1 font-sans text-xs font-bold text-[#8C7A64]">
+                                    Encoded by {staffChipLabel} - {staffRole}
+                                </p>
                             </div>
-                            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#0D2E18] shadow-sm">
-                                <ShoppingCart size={17} className="text-[#FFF0DA]" />
+                            <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#0D2E18] text-[#FFF0DA] shadow-sm">
+                                <ReceiptText size={20} />
                             </div>
                         </div>
                     </div>
@@ -645,86 +703,99 @@ export function StaffEncodeOrder() {
                     {/* Cart Content */}
                     <div className="min-w-0 flex flex-1 flex-col overflow-hidden">
                         {/* Order Type */}
-                        <div className="shrink-0 border-b border-[#E6D7C0] px-3 py-2 sm:px-4">
-                            <p className="mb-2 font-sans text-xs font-bold uppercase tracking-widest text-[#684B35]">
-                                Delivery Type
+                        <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
+                            <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
+                                Fulfillment
                             </p>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {(["pickup", "delivery"] as const).map((type) => (
-                                    <button
-                                        key={type}
-                                        type="button"
-                                        onClick={() => {
-                                            setOrderType(type);
-                                            if (type === "delivery") {
-                                                setPaymentMethod("cash");
-                                            }
-                                        }}
-                                        className={`rounded-[10px] border-2 px-3 py-1.5 font-sans text-xs font-bold transition-all duration-200 ${
-                                            orderType === type
-                                                ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-sm"
-                                                : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
-                                        }`}
-                                    >
-                                        {type === "pickup" ? "Pickup" : "Delivery"}
-                                    </button>
-                                ))}
+                            <div className="grid grid-cols-2 gap-2">
+                                {(["pickup", "delivery"] as const).map((type) => {
+                                    const Icon = type === "pickup" ? PackageCheck : MapPin;
+
+                                    return (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => {
+                                                setOrderType(type);
+                                                if (type === "delivery") {
+                                                    setPaymentMethod("cash");
+                                                }
+                                            }}
+                                            className={`min-h-20 rounded-[14px] border p-3 text-left font-sans transition-all duration-200 ${
+                                                orderType === type
+                                                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.16)]"
+                                                    : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
+                                            }`}
+                                        >
+                                            <Icon size={18} />
+                                            <p className="mt-2 text-sm font-black">
+                                                {type === "pickup" ? "Pickup" : "Delivery"}
+                                            </p>
+                                            <p className="mt-0.5 text-xs font-semibold opacity-75">
+                                                {type === "pickup" ? "Counter handoff" : "Address required"}
+                                            </p>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
                         {/* Customer Info */}
-                        <div className="shrink-0 border-b border-[#E6D7C0] px-3 py-2 sm:px-4">
+                        <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
                             <label className="block">
-                                <span className="font-sans text-xs font-bold uppercase tracking-widest text-[#684B35]">
-                                    Customer{" "}
+                                <span className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
+                                    <UserRound size={14} />
+                                    Customer Name{" "}
                                     {orderType === "pickup" && <span className="text-[#C55432]">*</span>}
                                 </span>
                                 <input
                                     value={walkinName}
                                     onChange={(event) => setWalkinName(event.target.value)}
-                                    placeholder="Customer name"
-                                    className="mt-1 w-full rounded-[10px] border-2 border-[#D6C6AC] bg-white px-3 py-1.5 font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:shadow-sm"
+                                    placeholder={orderType === "pickup" ? "Walk-in customer name" : "Receiver name"}
+                                    className="mt-2 h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                 />
                             </label>
                         </div>
 
                         {/* Delivery Info */}
                         {orderType === "delivery" && (
-                            <div className="shrink-0 border-b border-[#E6D7C0] px-3 py-2 sm:px-4">
-                                <p className="mb-2 font-sans text-xs font-bold uppercase tracking-widest text-[#684B35]">
+                            <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
+                                <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
                                     Delivery Details
                                 </p>
-                                <div className="space-y-1">
+                                <div className="grid gap-2">
                                     <input
                                         value={deliveryAddress}
                                         onChange={(event) => setDeliveryAddress(event.target.value)}
-                                        placeholder="Street address"
+                                        placeholder="Full delivery address"
                                         required
-                                        className="w-full rounded-[10px] border-2 border-[#D6C6AC] bg-white px-3 py-1.5 font-sans text-xs text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:shadow-sm"
+                                        className="h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                     />
-                                    <input
-                                        type="tel"
-                                        value={deliveryPhone}
-                                        onChange={(event) => setDeliveryPhone(event.target.value)}
-                                        placeholder="Phone number"
-                                        required
-                                        className="w-full rounded-[10px] border-2 border-[#D6C6AC] bg-white px-3 py-1.5 font-sans text-xs text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:shadow-sm"
-                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="tel"
+                                            value={deliveryPhone}
+                                            onChange={(event) => setDeliveryPhone(event.target.value)}
+                                            placeholder="Phone number"
+                                            required
+                                            className="h-11 min-w-0 rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={deliveryFee}
+                                            onChange={(event) => setDeliveryFee(Math.max(0, Number(event.target.value) || 0))}
+                                            placeholder="Delivery fee"
+                                            min="0"
+                                            step="1"
+                                            className="h-11 min-w-0 rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                        />
+                                    </div>
                                     <input
                                         type="email"
                                         value={deliveryEmail}
                                         onChange={(event) => setDeliveryEmail(event.target.value)}
                                         placeholder="Email (optional)"
-                                        className="w-full rounded-[10px] border-2 border-[#D6C6AC] bg-white px-3 py-1.5 font-sans text-xs text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:shadow-sm"
-                                    />
-                                    <input
-                                        type="number"
-                                        value={deliveryFee}
-                                        onChange={(event) => setDeliveryFee(Math.max(0, Number(event.target.value) || 0))}
-                                        placeholder="Delivery fee"
-                                        min="0"
-                                        step="1"
-                                        className="w-full rounded-[10px] border-2 border-[#D6C6AC] bg-white px-3 py-1.5 font-sans text-xs text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:shadow-sm"
+                                        className="h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                     />
                                 </div>
                             </div>
@@ -734,21 +805,25 @@ export function StaffEncodeOrder() {
                         <div className="min-h-0 flex-1 border-b border-[#E6D7C0]">
                             {cart.length === 0 ? (
                                 <div className="flex h-full items-center justify-center px-3 py-3 text-center sm:px-4">
-                                    <div className="inline-block rounded-[14px] border border-dashed border-[#D6C6AC] bg-[#F7F5F1] px-4 py-3">
-                                        <p className="font-sans text-xs text-[#8C7A64]">
-                                            No items in cart
+                                    <div className="rounded-[16px] border border-dashed border-[#D6C6AC] bg-[#FFF8EF] px-4 py-8">
+                                        <ShoppingCart className="mx-auto h-6 w-6 text-[#BDAE92]" />
+                                        <p className="mt-2 font-sans text-sm font-black text-[#0D2E18]">
+                                            Cart is empty
+                                        </p>
+                                        <p className="mt-1 font-sans text-xs font-semibold text-[#8C7A64]">
+                                            Add quantities from the menu, then customize.
                                         </p>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-full overflow-y-auto px-3 py-2 sm:px-4">
-                                    <div className="space-y-1.5">
+                                <div className="h-full overflow-y-auto px-4 py-4">
+                                    <div className="space-y-2">
                                     {cart.map((item, index) => (
                                         <div
                                             key={`${item.id}-${item.size}-${index}`}
-                                            className="flex gap-2 rounded-[10px] border-2 border-[#E6D7C0] bg-white p-2 transition-all hover:border-[#0D2E18]"
+                                            className="flex gap-3 rounded-[14px] border border-[#E6D7C0] bg-white p-3 transition-all hover:border-[#0D2E18]"
                                         >
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-[#E7F4EA]">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[#E7F4EA]">
                                                 {item.imageUrl ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
                                                     <img
@@ -764,20 +839,20 @@ export function StaffEncodeOrder() {
                                             <div className="min-w-0 flex-1 flex flex-col">
                                                 <div className="flex items-start justify-between gap-1.5">
                                                     <div className="min-w-0">
-                                                        <p className="font-sans text-xs font-bold leading-tight text-[#0D2E18]">
+                                                        <p className="line-clamp-2 font-sans text-sm font-black leading-tight text-[#0D2E18]">
                                                             {item.name}
                                                         </p>
                                                         <p className="font-sans text-[11px] text-[#8C7A64]">
-                                                            ₱{formatPrice(item.price + item.addon_price)} × {item.quantity}
+                                                            {peso(item.price + item.addon_price)} x {item.quantity}
                                                         </p>
                                                     </div>
                                                     <button
                                                         type="button"
                                                         onClick={() => removeCartItem(index)}
-                                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-[#C55432] transition-all hover:bg-[#FFF1EC]"
+                                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#F2C8BD] bg-[#FFF1EC] text-[#A6422A] transition-all hover:bg-[#FFE2D9]"
                                                         aria-label={`Remove ${item.name}`}
                                                     >
-                                                        <Trash2 size={11} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 </div>
 
@@ -791,14 +866,14 @@ export function StaffEncodeOrder() {
                                                     ) : null}
 
                                                 <div className="mt-auto flex items-center justify-between gap-2 pt-1.5">
-                                                    <p className="font-sans text-xs font-bold text-[#0D2E18]">
-                                                        ₱{formatPrice((item.price + item.addon_price) * item.quantity)}
+                                                    <p className="font-sans text-base font-black text-[#0D2E18]">
+                                                        {peso((item.price + item.addon_price) * item.quantity)}
                                                     </p>
-                                                    <div className="flex items-center gap-0.5 rounded-[6px] border border-[#D6C6AC] bg-[#FFF8EF]">
+                                                    <div className="flex h-8 items-center gap-0.5 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-1">
                                                         <button
                                                             type="button"
                                                             onClick={() => changeCartQuantity(index, -1)}
-                                                            className="flex h-5 w-5 items-center justify-center text-[#0D2E18] hover:bg-white"
+                                                            className="flex h-6 w-6 items-center justify-center rounded-full text-[#0D2E18] hover:bg-white"
                                                         >
                                                             <Minus size={10} strokeWidth={2.5} />
                                                         </button>
@@ -808,7 +883,7 @@ export function StaffEncodeOrder() {
                                                         <button
                                                             type="button"
                                                             onClick={() => changeCartQuantity(index, 1)}
-                                                            className="flex h-5 w-5 items-center justify-center text-[#0D2E18] hover:bg-white"
+                                                            className="flex h-6 w-6 items-center justify-center rounded-full text-[#0D2E18] hover:bg-white"
                                                         >
                                                             <Plus size={10} strokeWidth={2.5} />
                                                         </button>
@@ -824,16 +899,17 @@ export function StaffEncodeOrder() {
 
                         {/* Payment Method (Only show if cart has items) */}
                         {cart.length > 0 && (
-                            <div className="shrink-0 border-b border-[#E6D7C0] px-3 py-2 sm:px-4">
-                                <p className="mb-2 font-sans text-xs font-bold uppercase tracking-widest text-[#684B35]">
+                            <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
+                                <p className="mb-2 flex items-center gap-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
+                                    <CreditCard size={14} />
                                     Payment
                                 </p>
-                                <div className="space-y-1.5">
+                                <div className="space-y-3">
                                     <div>
                                         <p className="mb-1 font-sans text-xs font-semibold text-[#684B35]">
                                             Method
                                         </p>
-                                        <div className="grid grid-cols-2 gap-1.5">
+                                        <div className="grid grid-cols-2 gap-2">
                                             {(orderType === "delivery"
                                                 ? (["cash"] as const)
                                                 : (["cash", "gcash"] as const)
@@ -842,13 +918,26 @@ export function StaffEncodeOrder() {
                                                     key={method}
                                                     type="button"
                                                     onClick={() => setPaymentMethod(method)}
-                                                    className={`rounded-[8px] border-2 px-2 py-1.5 font-sans text-xs font-bold transition-all duration-200 ${
+                                                    className={`rounded-[12px] border px-3 py-3 text-left font-sans transition-all duration-200 ${
                                                         paymentMethod === method
                                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-sm"
                                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
                                                     }`}
                                                 >
-                                                    {method === "cash" ? "Cash" : "GCash"}
+                                                    <p className="text-sm font-black">
+                                                        {method === "cash"
+                                                            ? orderType === "delivery"
+                                                                ? "COD"
+                                                                : "Cash"
+                                                            : "GCash"}
+                                                    </p>
+                                                    <p className="mt-0.5 text-xs font-semibold opacity-75">
+                                                        {method === "cash"
+                                                            ? orderType === "delivery"
+                                                                ? "Collect on delivery"
+                                                                : "Counter payment"
+                                                            : "Digital wallet"}
+                                                    </p>
                                                 </button>
                                             ))}
                                         </div>
@@ -858,13 +947,13 @@ export function StaffEncodeOrder() {
                                         <p className="mb-1 font-sans text-xs font-semibold text-[#684B35]">
                                             Status
                                         </p>
-                                        <div className="grid grid-cols-2 gap-1.5">
+                                        <div className="grid grid-cols-2 gap-2">
                                             {(["paid", "unpaid"] as const).map((status) => (
                                                 <button
                                                     key={status}
                                                     type="button"
                                                     onClick={() => setPaymentStatus(status)}
-                                                    className={`rounded-[8px] border-2 px-2 py-1.5 font-sans text-xs font-bold transition-all duration-200 ${
+                                                    className={`rounded-[12px] border px-3 py-2.5 font-sans text-sm font-black transition-all duration-200 ${
                                                         paymentStatus === status
                                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-sm"
                                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
@@ -881,41 +970,49 @@ export function StaffEncodeOrder() {
                     </div>
 
                     {/* Cart Footer */}
-                    <div className="shrink-0 border-t border-[#E6D7C0] bg-[#FFF8EF] px-3 py-2 sm:px-4">
+                    <div className="shrink-0 border-t border-[#E6D7C0] bg-[#FFF8EF] px-4 py-4">
                         {/* Totals */}
-                        <div className="mb-2 flex items-center justify-between gap-3 rounded-[10px] border border-[#D6C6AC] bg-white px-3 py-1.5">
-                            <div>
-                                <p className="font-sans text-[11px] text-[#8C7A64]">
-                                    Subtotal: ₱{formatPrice(subtotal)}
+                        <div className="mb-3 rounded-[16px] border border-[#D6C6AC] bg-white p-4">
+                            <div className="space-y-2 border-b border-[#EFE3CF] pb-3">
+                                <p className="flex items-center justify-between font-sans text-sm font-bold text-[#684B35]">
+                                    <span>Items subtotal</span>
+                                    <span>{peso(subtotal)}</span>
+                                </p>
+                                <p className="hidden font-sans text-[11px] text-[#8C7A64]">
+                                    Subtotal: {peso(subtotal)}
                                 </p>
                                 {orderType === "delivery" && (
-                                    <p className="font-sans text-[11px] text-[#8C7A64]">
-                                        Delivery fee: ₱{formatPrice(deliveryFee)}
+                                    <p className="flex items-center justify-between font-sans text-sm font-bold text-[#684B35]">
+                                        <span>Delivery fee</span>
+                                        <span>{peso(deliveryFee)}</span>
                                     </p>
                                 )}
-                                <p className="font-sans text-xs uppercase tracking-widest text-[#8C7A64]">
-                                    {cartCount} item{cartCount === 1 ? "" : "s"}
-                                </p>
-                                <p className="font-sans text-sm font-bold text-[#0D2E18]">
-                                    Total
+                                <p className="flex items-center justify-between font-sans text-sm font-bold text-[#684B35]">
+                                    <span>Payment</span>
+                                    <span className="text-right">{paymentMethodLabel} - {paymentStatus}</span>
                                 </p>
                             </div>
-                            <p className="font-sans text-[1.55rem] font-bold text-[#0D2E18]">
-                                ₱{formatPrice(total)}
-                            </p>
+                            <div className="mt-3 flex items-end justify-between gap-3">
+                                <div>
+                                    <p className="font-sans text-[10px] font-black uppercase tracking-[0.18em] text-[#8C7A64]">
+                                        Grand Total
+                                    </p>
+                                    <p className="font-sans text-sm font-bold text-[#684B35]">
+                                        {orderType === "delivery" ? "Delivery order" : "Pickup order"}
+                                    </p>
+                                </div>
+                                <p className="font-sans text-3xl font-black text-[#0D2E18]">
+                                    {peso(total)}
+                                </p>
+                            </div>
                         </div>
 
                         {/* Submit Button */}
                         <button
                             type="button"
                             onClick={handleSubmitOrderQueue}
-                            disabled={
-                                cart.length === 0 ||
-                                isSubmitting ||
-                                !hasRequiredCustomerName ||
-                                !hasRequiredDeliveryInfo
-                            }
-                            className="flex w-full items-center justify-center gap-2 rounded-[10px] border-2 border-[#0D2E18] bg-[#0D2E18] px-4 py-2.5 font-sans text-sm font-bold text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:border-[#BFD0B8] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
+                            disabled={!canSubmitOrder}
+                            className="flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#0D2E18] px-4 font-sans text-sm font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:bg-[#DCE8D7] disabled:text-[#75836F]"
                         >
                             {isSubmitting ? (
                                 <>
@@ -923,7 +1020,10 @@ export function StaffEncodeOrder() {
                                     Submitting...
                                 </>
                             ) : (
-                                "Submit Order"
+                                <>
+                                    <PackageCheck size={17} />
+                                    Submit Order
+                                </>
                             )}
                         </button>
                     </div>
@@ -939,7 +1039,7 @@ export function StaffEncodeOrder() {
                         onClick={closeCustomization}
                     />
 
-                    <section className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[30px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
+                    <section className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[24px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[22px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
                         <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4 sm:px-6">
                             <div>
                                 <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
@@ -1002,7 +1102,7 @@ export function StaffEncodeOrder() {
                                                         key={item.value}
                                                         type="button"
                                                         onClick={() => toggleCustomizationAddon(item.value)}
-                                                        className={`rounded-[18px] border px-4 py-4 text-left font-sans transition ${
+                                                        className={`rounded-[14px] border px-4 py-4 text-left font-sans transition ${
                                                             selected
                                                                 ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
                                                                 : "border-[#D8C8A7] bg-white text-[#684B35]"
@@ -1010,7 +1110,7 @@ export function StaffEncodeOrder() {
                                                     >
                                                         <p className="font-black">{item.label}</p>
                                                         <p className="mt-1 text-xs">
-                                                            +₱{formatPrice(item.price)}
+                                                            +{peso(item.price)}
                                                         </p>
                                                     </button>
                                                 );
@@ -1019,11 +1119,11 @@ export function StaffEncodeOrder() {
                                     </section>
                                 </div>
 
-                                <aside className="flex h-fit flex-col rounded-[24px] border border-[#E1D0B2] bg-white/72 p-5">
+                                <aside className="flex h-fit flex-col rounded-[18px] border border-[#E1D0B2] bg-white p-5">
                                     <div className="space-y-3 border-b border-[#E9DCC1] pb-4">
                                         <div className="flex items-center justify-between gap-3">
                                             <span className="font-sans text-sm font-semibold text-[#6F634E]">Base Price</span>
-                                            <span className="font-sans text-sm font-bold text-[#0D2E18]">₱{formatPrice(customizingItem.price)}</span>
+                                            <span className="font-sans text-sm font-bold text-[#0D2E18]">{peso(customizingItem.price)}</span>
                                         </div>
                                         <div className="flex items-center justify-between gap-3">
                                             <span className="font-sans text-sm font-semibold text-[#6F634E]">Sweetness</span>
@@ -1031,7 +1131,7 @@ export function StaffEncodeOrder() {
                                         </div>
                                         <div className="flex items-center justify-between gap-3">
                                             <span className="font-sans text-sm font-semibold text-[#6F634E]">Add-ons</span>
-                                            <span className="font-sans text-sm font-bold text-[#0D2E18]">₱{formatPrice(customizingAddonTotal)}</span>
+                                            <span className="font-sans text-sm font-bold text-[#0D2E18]">{peso(customizingAddonTotal)}</span>
                                         </div>
                                     </div>
 
@@ -1064,7 +1164,7 @@ export function StaffEncodeOrder() {
                                         <div className="flex items-center justify-between">
                                             <span className="text-base font-semibold">Total</span>
                                             <span className="text-3xl font-black text-[#765531]">
-                                                ₱{formatPrice((customizingItem.price + customizingAddonTotal) * customizingQuantity)}
+                                                {peso((customizingItem.price + customizingAddonTotal) * customizingQuantity)}
                                             </span>
                                         </div>
                                     </div>

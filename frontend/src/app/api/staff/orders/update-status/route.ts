@@ -15,6 +15,8 @@ type OrderStatus =
 
 type PaymentStatus = "unpaid" | "paid";
 
+const pendingOrderTimeoutMinutes = 45;
+
 function getSmtpConfig() {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 465);
@@ -57,6 +59,12 @@ function getNumberValue(value: unknown) {
 
 function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
   return Math.max(0, getNumberValue(totalAmount) - getNumberValue(deliveryFee));
+}
+
+function getPendingOrderAgeMinutes(orderedAt: string) {
+  return Math.floor(
+    Math.max(0, Date.now() - new Date(orderedAt).getTime()) / 60000
+  );
 }
 
 function getNextStatus(
@@ -440,7 +448,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status, total_amount, delivery_fee")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee, ordered_at")
       .eq("id", orderId)
       .single();
 
@@ -482,6 +490,16 @@ export async function POST(request: Request) {
       if (order.status !== "pending") {
         return NextResponse.json(
           { error: "Only pending orders can be expired." },
+          { status: 400 }
+        );
+      }
+
+      if (
+        getPendingOrderAgeMinutes(String(order.ordered_at)) <
+        pendingOrderTimeoutMinutes
+      ) {
+        return NextResponse.json(
+          { error: "Pending order has not reached the 45-minute expiry limit." },
           { status: 400 }
         );
       }

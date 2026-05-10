@@ -1,6 +1,6 @@
 # Demonstration Guide
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ## Demo Story
 
@@ -73,14 +73,20 @@ The delivery fee is calculated using geographic coordinates and distance, not a 
 Show:
 
 - order appears in staff dashboard
+- clean white staff header and simplified staff sidebar navigation
+- professional Encode Order page for walk-in pickup and staff delivery encoding
+- professional order queue columns with counts, timing, item quantity, focus label, queue heatmap, and next action
+- professional order detail modal with queue heat, fulfillment summary, customer/delivery details, and clear action footer
 - staff advances order status
+- customer tracker updates automatically after staff changes the status
 - delivery flow
 - payment visibility using `Pay at Cafe`, `Cash on Delivery`, `Online`, and `Awaiting Payment`
 - delivery order breakdown: items total, delivery fee, and grand total
+- automatic pending-order expiry after 45 minutes
 
 Talking point:
 
-Order status is modeled as a state machine. Staff actions move the order through valid transitions, while payment status remains a separate field so online payment and cash collection are not confused.
+Order status is modeled as a state machine. Staff can encode walk-in and delivery orders through a controlled form that validates totals, including delivery fee for staff delivery orders. Staff actions move orders through valid transitions, while the queue heatmap turns waiting time into a visual priority signal. Pending orders automatically become `expired` after 45 minutes and move to history, which is different from a manual cancellation. The customer tracker syncs status automatically and payment status remains a separate field so online payment and cash collection are not confused.
 
 ### 6. Feedback
 

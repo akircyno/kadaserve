@@ -1,6 +1,6 @@
 # KadaServe API Documentation
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ## Authentication
 
@@ -106,6 +106,16 @@ Updates a saved address or default address.
 
 Cancels a pending customer order.
 
+### `GET /api/customer/orders`
+
+Returns the signed-in customer's orders for automatic order tracker sync.
+
+Behavior:
+
+- Requires an authenticated customer session.
+- Returns order status, payment status, delivery details, and order items.
+- Used by the customer dashboard every 10 seconds so the tracker updates without a manual page refresh.
+
 ### `POST /api/feedback`
 
 Submits feedback for a completed or delivered order item.
@@ -157,9 +167,40 @@ Payment rule:
 - Delivery cannot be closed as delivered unless payment is marked paid.
 - Online payment orders become paid only through PayMongo webhook.
 
+Expiry rule:
+
+- Pending orders expire after 45 minutes.
+- Expired orders use status `expired`, not `cancelled`.
+- Expired orders are treated as final orders and appear in session summary/order history.
+- The update-status API rejects early expiry attempts before the 45-minute limit.
+
 ### `POST /api/staff/orders/create`
 
 Creates walk-in/staff encoded orders.
+
+Body:
+
+```json
+{
+  "orderType": "pickup",
+  "items": [],
+  "totalAmount": 129,
+  "deliveryFee": 0,
+  "walkinName": "Walk-in Customer",
+  "deliveryAddress": "",
+  "deliveryEmail": "",
+  "deliveryPhone": "",
+  "paymentMethod": "cash",
+  "paymentStatus": "paid"
+}
+```
+
+Rules:
+
+- Pickup requires `walkinName`.
+- Delivery requires `deliveryAddress` and `deliveryPhone`.
+- Staff delivery order totals include `deliveryFee`.
+- API validates item subtotal plus delivery fee against `totalAmount`.
 
 ### `GET /api/staff/orders/history`
 

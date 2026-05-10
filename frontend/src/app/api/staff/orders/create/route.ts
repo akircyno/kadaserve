@@ -20,6 +20,7 @@ type CreateStaffOrderBody = {
   orderType: "pickup" | "delivery";
   items: StaffCartItem[];
   totalAmount: number;
+  deliveryFee?: number;
   walkinName?: string;
   deliveryAddress?: string;
   deliveryEmail?: string;
@@ -119,12 +120,15 @@ export async function POST(request: Request) {
     }
 
 
-    const calculatedTotal = body.items.reduce((sum, item) => {
+    const calculatedItemsTotal = body.items.reduce((sum, item) => {
       const basePrice = Number(item.base_price ?? item.price ?? 0);
       const addonPrice = Number(item.addon_price ?? 0);
 
       return sum + (basePrice + addonPrice) * item.quantity;
     }, 0);
+    const deliveryFee =
+      body.orderType === "delivery" ? Math.max(0, Number(body.deliveryFee ?? 0)) : 0;
+    const calculatedTotal = calculatedItemsTotal + deliveryFee;
 
     if (calculatedTotal !== body.totalAmount) {
       return NextResponse.json(
@@ -140,6 +144,7 @@ export async function POST(request: Request) {
         payment_method: paymentMethod,
         payment_status: paymentStatus,
         total_amount: calculatedTotal,
+        delivery_fee: deliveryFee,
         walkin_name: body.walkinName?.trim() || null,
         delivery_address:
           body.orderType === "delivery" ? body.deliveryAddress?.trim() : null,
@@ -164,6 +169,7 @@ export async function POST(request: Request) {
         payment_method: orderPayload.payment_method,
         payment_status: orderPayload.payment_status,
         total_amount: orderPayload.total_amount,
+        delivery_fee: orderPayload.delivery_fee,
         walkin_name: orderPayload.walkin_name,
         delivery_address: orderPayload.delivery_address,
         delivery_email: orderPayload.delivery_email,

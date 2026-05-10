@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   ClipboardList,
   History,
+  LogOut,
   Menu as MenuIcon,
-  ChevronLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   X,
 } from "lucide-react";
@@ -92,17 +93,22 @@ export default function StaffLayout({
         <div className="flex items-center justify-between gap-2 px-3 pt-4 lg:px-4 lg:pt-5">
           <Link
             href="/staff"
-            className={`flex-shrink-0 font-sans font-bold leading-none tracking-[-0.04em] text-[#FFF0DA] transition-all duration-250 ${
+            className={`min-w-0 flex-shrink-0 font-sans text-[#FFF0DA] transition-all duration-250 ${
               isSidebarCollapsed
-                ? "text-base opacity-0 w-0"
-                : "text-[1.7rem] opacity-100"
+                ? "w-0 opacity-0"
+                : "w-auto opacity-100"
             }`}
             style={{
               overflow: "hidden",
               whiteSpace: "nowrap",
             }}
           >
-            KadaServe
+            <span className="block text-[1.7rem] font-bold leading-none tracking-[-0.04em]">
+              KadaServe
+            </span>
+            <span className="mt-1 block font-sans text-[10px] font-black uppercase tracking-[0.2em] text-[#DCCFB8]">
+              Staff Workspace
+            </span>
           </Link>
 
           <div className="flex items-center gap-1">
@@ -111,14 +117,13 @@ export default function StaffLayout({
               onClick={toggleSidebarCollapse}
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="hidden lg:flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/20"
+              className="hidden lg:flex h-9 w-9 items-center justify-center rounded-xl border border-[#FFF0DA]/15 bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:border-[#FFF0DA]/30 hover:bg-[#FFF0DA]/18"
             >
-              <ChevronLeft
-                size={16}
-                className={`transition-transform duration-250 ${
-                  isSidebarCollapsed ? "rotate-180" : ""
-                }`}
-              />
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen size={17} strokeWidth={2.4} />
+              ) : (
+                <PanelLeftClose size={17} strokeWidth={2.4} />
+              )}
             </button>
 
             <button
@@ -133,10 +138,16 @@ export default function StaffLayout({
         </div>
 
         <nav
-          className={`mt-12 space-y-1 transition-all duration-250 ${
+          className={`mt-9 space-y-1 transition-all duration-250 ${
             isSidebarCollapsed ? "px-2" : "px-3"
           }`}
         >
+          {!isSidebarCollapsed ? (
+            <p className="mb-2 px-2 font-sans text-[10px] font-black uppercase tracking-[0.18em] text-[#DCCFB8]/80">
+              Navigation
+            </p>
+          ) : null}
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -153,7 +164,7 @@ export default function StaffLayout({
                   onClick={() => setIsMobileSidebarOpen(false)}
                   className={`flex min-h-11 items-center justify-center rounded-[14px] px-3 py-3 font-sans text-sm font-semibold transition-all duration-250 lg:justify-start lg:gap-3 lg:px-4 ${
                     isActive
-                      ? "bg-[#FFF0DA] text-[#0D2E18]"
+                      ? "bg-[#FFF0DA] text-[#0D2E18] shadow-[0_10px_22px_rgba(0,0,0,0.16)]"
                       : "text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
                   }`}
                 >
@@ -184,13 +195,19 @@ export default function StaffLayout({
             isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-5"
           }`}
         >
+          <div className="mb-3 h-px bg-[#FFF0DA]/12" />
+
           <button
             type="button"
             onClick={handleLogout}
-            title="Logout"
-            className="group/logout relative flex w-full items-center justify-center rounded-[14px] px-3 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition-all duration-250 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA] lg:justify-start lg:gap-3 lg:px-4"
+            title="Sign out"
+            className={`group/logout relative flex w-full items-center justify-center rounded-[16px] border font-sans text-sm font-bold transition-all duration-250 lg:justify-start lg:gap-3 ${
+              isSidebarCollapsed
+                ? "border-[#FFF0DA]/12 bg-[#FFF0DA]/8 px-3 py-3 text-[#FFF0DA]/90 hover:bg-[#FFF0DA]/14 hover:text-[#FFF0DA]"
+                : "border-[#F2C8BD]/25 bg-[#FFF1EC]/10 px-4 py-3 text-[#FFE4DA] hover:border-[#F2C8BD]/45 hover:bg-[#FFF1EC]/18 hover:text-white"
+            }`}
           >
-            <ArrowLeft size={17} className="shrink-0" />
+            <LogOut size={17} className="shrink-0" />
             <span
               className={`hidden font-sans text-sm font-semibold transition-all duration-250 lg:inline ${
                 isSidebarCollapsed
@@ -198,12 +215,12 @@ export default function StaffLayout({
                   : "w-auto overflow-visible opacity-100"
               }`}
             >
-              Logout
+              Sign out
             </span>
 
             {isSidebarCollapsed && (
               <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#0D2E18] px-2 py-1 font-sans text-xs font-semibold text-[#FFF0DA] opacity-0 shadow-lg transition-opacity duration-200 group-hover/logout:pointer-events-auto group-hover/logout:opacity-100">
-                Logout
+                Sign out
               </div>
             )}
           </button>
@@ -215,30 +232,30 @@ export default function StaffLayout({
           isSidebarCollapsed ? "lg:pl-[70px]" : "lg:pl-[232px]"
         }`}
       >
-        <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-[#FFF0DA]/96 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-[#E7DDCC] bg-white/95 shadow-[0_10px_24px_rgba(104,75,53,0.07)] backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
                 aria-label="Open staff navigation"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF8EF] lg:hidden"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-[#FFF0DA] lg:hidden"
               >
                 <MenuIcon size={18} />
               </button>
 
               <div className="min-w-0">
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                <p className="font-sans text-[11px] font-black uppercase tracking-[0.18em] text-[#684B35]">
                   Staff Command Center
                 </p>
-                <h1 className="truncate font-sans text-[1.55rem] font-bold leading-tight text-[#0D2E18] sm:text-2xl">
+                <h1 className="truncate font-sans text-[1.45rem] font-black leading-tight text-[#0D2E18] sm:text-[1.65rem]">
                   {pathname.includes("encode-order")
                     ? "Encode Order"
                     : pathname.includes("order-history")
                     ? "Order History"
                     : "Order Queue"}
                 </h1>
-                <p className="mt-0.5 text-sm text-[#8C7A64]">
+                <p className="mt-0.5 max-w-[42rem] truncate font-sans text-sm font-medium text-[#7D6B55]">
                   {pathname.includes("encode-order")
                     ? "Create walk-in pickup or delivery orders"
                     : pathname.includes("order-history")
@@ -248,7 +265,7 @@ export default function StaffLayout({
               </div>
             </div>
 
-            <div className="ml-2 flex shrink-0 items-center justify-end" id="staff-header-controls" />
+            <div className="ml-2 flex shrink-0 items-center justify-end rounded-2xl border border-[#EFE3CF] bg-[#FFF8EF] px-2 py-1 shadow-[0_6px_16px_rgba(104,75,53,0.05)] empty:hidden" id="staff-header-controls" />
           </div>
         </header>
 

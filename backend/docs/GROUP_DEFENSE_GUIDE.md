@@ -1,6 +1,6 @@
 # Group Defense Guide
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ## Suggested Role Assignment
 
@@ -25,6 +25,7 @@ Explain:
 - search and category filter
 - cart
 - pickup/delivery checkout
+- automatic order tracker sync
 - map pinning
 - distance-based delivery fee
 
@@ -34,12 +35,19 @@ Demo:
 - switch pickup to delivery
 - pin map
 - show delivery fee
+- keep tracker open while staff changes the order status
 
 ### Member 3: Staff Module
 
 Explain:
 
 - active order dashboard
+- professional queue scanning UI
+- polished Encode Order workflow for staff-created pickup and delivery orders
+- clean staff header and simplified sidebar navigation
+- professional order detail modal
+- queue heatmap urgency
+- 45-minute pending expiry
 - order status flow
 - payment status
 - payment method labels
@@ -50,6 +58,11 @@ Explain:
 Demo:
 
 - move order from pending to preparing
+- encode a staff order and point out delivery fee inclusion for delivery orders
+- point out queue timing, heatmap level, focus label, and next-action button
+- show the clean sidebar collapse/expand behavior and direct sign-out action
+- open an order and explain the detail modal sections
+- explain that timed-out pending orders become `expired`, not `cancelled`
 - show delivery details
 - show payment status and payment method separately
 - show items total, delivery fee, and grand total for a delivery order

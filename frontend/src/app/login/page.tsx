@@ -201,6 +201,7 @@ function LoginForm() {
                 <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-2.5 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
                   <Mail className="mr-3 text-[#8C7A64]" size={18} />
                   <input
+                    suppressHydrationWarning
                     ref={emailInputRef}
                     id="email"
                     type="email"
@@ -241,6 +242,7 @@ function LoginForm() {
                   <Lock className="mr-3 text-[#8C7A64]" size={18} />
 
                   <input
+                    suppressHydrationWarning
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"

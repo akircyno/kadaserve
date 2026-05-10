@@ -2,6 +2,7 @@
 
 import {
   type ChangeEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -99,6 +100,11 @@ type TopRecommendation = {
 type TopRecommendationsPayload = {
   source?: "customer_preferences" | "analytics_items";
   recommendations?: TopRecommendation[];
+  error?: string;
+};
+
+type CustomerOrdersPayload = {
+  orders?: CustomerOrder[];
   error?: string;
 };
 
@@ -652,6 +658,8 @@ export function CustomerDashboard({
   const router = useRouter();
   const { addItem, cartCount, items: cartItems } = useCart();
   const [customerOrders, setCustomerOrders] = useState(orders);
+  const [isOrderSyncing, setIsOrderSyncing] = useState(false);
+  const [lastOrderSyncAt, setLastOrderSyncAt] = useState<Date | null>(null);
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [isSplashVisible, setIsSplashVisible] = useState(false);
   const [isTaglineVisible, setIsTaglineVisible] = useState(false);
@@ -732,6 +740,7 @@ export function CustomerDashboard({
     Map<string, CustomerOrder["status"]> | null
   >(null);
   const feedbackMaybeLaterTimeoutRef = useRef<number | null>(null);
+  const isOrderSyncInFlightRef = useRef(false);
   const isGuest = !isAuthenticated;
 
   const visibleFeedbackItems = selectedFeedbackOrderId
@@ -790,6 +799,36 @@ export function CustomerDashboard({
       orderId,
     ]);
   }
+
+  const syncCustomerOrders = useCallback(async () => {
+    if (!isAuthenticated || isOrderSyncInFlightRef.current) {
+      return;
+    }
+
+    isOrderSyncInFlightRef.current = true;
+    setIsOrderSyncing(true);
+
+    try {
+      const response = await fetch("/api/customer/orders", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const result = (await response.json()) as CustomerOrdersPayload;
+
+      if (!response.ok) {
+        console.warn("[KadaServe Orders] Failed to sync customer orders", result.error);
+        return;
+      }
+
+      setCustomerOrders(result.orders ?? []);
+      setLastOrderSyncAt(new Date());
+    } catch {
+      console.warn("[KadaServe Orders] Customer order sync failed");
+    } finally {
+      isOrderSyncInFlightRef.current = false;
+      setIsOrderSyncing(false);
+    }
+  }, [isAuthenticated]);
   const onboardingCards = [
     {
       title: "Coffee Crafted for You",
@@ -902,7 +941,22 @@ export function CustomerDashboard({
 
   useEffect(() => {
     setCustomerOrders(orders);
+    setLastOrderSyncAt(new Date());
   }, [orders]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void syncCustomerOrders();
+
+    const intervalId = window.setInterval(() => {
+      void syncCustomerOrders();
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isAuthenticated, syncCustomerOrders]);
 
   useEffect(() => {
     if (!quickAddFeedback) {
@@ -1006,7 +1060,7 @@ export function CustomerDashboard({
 
   useEffect(() => {
     const currentOrderStatuses = new Map(
-      orders.map((order) => [order.id, order.status])
+      customerOrders.map((order) => [order.id, order.status])
     );
     const previousOrderStatuses = previousOrderStatusRef.current;
 
@@ -1016,7 +1070,7 @@ export function CustomerDashboard({
       return;
     }
 
-    const newlyEligibleOrder = orders.find((order) => {
+    const newlyEligibleOrder = customerOrders.find((order) => {
       const previousStatus = previousOrderStatuses.get(order.id);
 
       return (
@@ -1031,7 +1085,7 @@ export function CustomerDashboard({
     if (newlyEligibleOrder) {
       openFeedbackPromptForOrder(newlyEligibleOrder.id);
     }
-  }, [feedbackItems, isAuthenticated, orders]);
+  }, [customerOrders, feedbackItems, isAuthenticated]);
 
   useEffect(() => {
     return () => {
@@ -1057,7 +1111,10 @@ export function CustomerDashboard({
   const currentOrders = useMemo(
     () =>
       customerOrders.filter(
-        (order) => !["delivered", "completed", "cancelled"].includes(order.status)
+        (order) =>
+          !["delivered", "completed", "cancelled", "expired"].includes(
+            order.status
+          )
       ),
     [customerOrders]
   );
@@ -1112,6 +1169,14 @@ export function CustomerDashboard({
         };
       })
       .slice(0, 4) ?? [];
+  const orderSyncLabel = isOrderSyncing
+    ? "Syncing order status..."
+    : lastOrderSyncAt
+    ? `Last updated ${lastOrderSyncAt.toLocaleTimeString("en-PH", {
+        hour: "numeric",
+        minute: "2-digit",
+      })}`
+    : "Automatic updates enabled";
   const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
   const hasOrderAttention = currentOrders.some((order) =>
     ["preparing", "ready", "out_for_delivery"].includes(order.status)
@@ -3993,6 +4058,9 @@ export function CustomerDashboard({
                   <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
                     This tracker updates automatically when staff moves your
                     order through the queue. No refresh needed.
+                  </p>
+                  <p className="mt-2 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
+                    {orderSyncLabel}
                   </p>
 
                   <div className="mt-4 rounded-[18px] bg-[#E9F5E7] p-3 font-sans text-sm text-[#2D7A40]">
