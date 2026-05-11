@@ -41,6 +41,8 @@ export default function StaffLayout({
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const isEncodeOrder = pathname.includes("encode-order");
+  const isOrderHistory = pathname.includes("order-history");
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -230,47 +232,53 @@ export default function StaffLayout({
       <div
         className={`min-h-screen transition-all duration-250 ${
           isSidebarCollapsed ? "lg:pl-[70px]" : "lg:pl-[232px]"
-        }`}
+        } ${isEncodeOrder ? "lg:flex lg:h-screen lg:flex-col lg:overflow-hidden" : ""}`}
       >
-        <header className="sticky top-0 z-30 border-b border-[#E7DDCC] bg-white/95 shadow-[0_10px_24px_rgba(104,75,53,0.07)] backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-6">
-            <div className="flex items-center gap-3 min-w-0">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-[#D8C5A8] bg-[linear-gradient(90deg,#FFF8EF_0%,#FFF4E6_55%,#F8E7CC_100%)] shadow-[0_12px_28px_rgba(104,75,53,0.09)] backdrop-blur">
+          <div className="flex min-h-[84px] flex-col items-stretch justify-center gap-3 px-4 py-3 sm:px-5 lg:px-6 2xl:flex-row 2xl:items-center 2xl:justify-between">
+            <div className="flex min-w-0 items-center gap-3 2xl:w-auto">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
                 aria-label="Open staff navigation"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-[#FFF0DA] lg:hidden"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFFCF7]/85 text-[#684B35] shadow-[0_6px_14px_rgba(104,75,53,0.08)] transition hover:bg-[#FFF8EF] lg:hidden"
               >
                 <MenuIcon size={18} />
               </button>
 
-              <div className="min-w-0">
+              <div className="hidden h-12 w-1.5 shrink-0 rounded-full bg-[#0D2E18] shadow-[0_0_0_4px_rgba(13,46,24,0.07)] sm:block" />
+
+              <div className="min-w-0 flex-1 2xl:flex-none">
                 <p className="font-sans text-[11px] font-black uppercase tracking-[0.18em] text-[#684B35]">
                   Staff Command Center
                 </p>
                 <h1 className="truncate font-sans text-[1.45rem] font-black leading-tight text-[#0D2E18] sm:text-[1.65rem]">
-                  {pathname.includes("encode-order")
+                  {isEncodeOrder
                     ? "Encode Order"
-                    : pathname.includes("order-history")
+                    : isOrderHistory
                     ? "Order History"
                     : "Order Queue"}
                 </h1>
                 <p className="mt-0.5 max-w-[42rem] truncate font-sans text-sm font-medium text-[#7D6B55]">
-                  {pathname.includes("encode-order")
+                  {isEncodeOrder
                     ? "Create walk-in pickup or delivery orders"
-                    : pathname.includes("order-history")
+                    : isOrderHistory
                     ? "View past orders, search, and manage historical records"
                     : "Manage and monitor customer orders in real time"}
                 </p>
               </div>
             </div>
 
-            <div className="ml-2 flex shrink-0 items-center justify-end rounded-2xl border border-[#EFE3CF] bg-[#FFF8EF] px-2 py-1 shadow-[0_6px_16px_rgba(104,75,53,0.05)] empty:hidden" id="staff-header-controls" />
+            <div className="flex w-full max-w-full items-center justify-start overflow-x-auto rounded-full border border-[#D8C5A8] bg-[#FFFCF7]/78 px-2 py-1 shadow-[0_8px_18px_rgba(104,75,53,0.06)] empty:hidden sm:justify-end 2xl:ml-auto 2xl:w-auto 2xl:shrink-0" id="staff-header-controls" />
           </div>
         </header>
 
         <main
-          className={`min-w-0 px-4 sm:px-5 lg:px-6 ${pathname.includes("encode-order") ? "py-1 lg:py-1" : "py-4 lg:py-5"}`}
+          className={`min-w-0 px-4 sm:px-5 lg:px-6 ${
+            isEncodeOrder
+              ? "py-0 lg:min-h-0 lg:flex-1 lg:overflow-hidden"
+              : "py-4 lg:py-5"
+          }`}
         >
           {children}
         </main>

@@ -223,6 +223,12 @@ export function StaffEncodeOrder() {
     const cartCount = useMemo(() => {
         return cart.reduce((sum, item) => sum + item.quantity, 0);
     }, [cart]);
+    const cartQuantityByItemId = useMemo(() => {
+        return cart.reduce<Record<string, number>>((items, item) => {
+            items[item.id] = (items[item.id] ?? 0) + item.quantity;
+            return items;
+        }, {});
+    }, [cart]);
     const rawStaffName = staffProfile?.fullName?.trim() || "Chrizelda";
     const normalizedStaffName =
         rawStaffName.replace(/^staff\s+/i, "").trim() || "Chrizelda";
@@ -476,7 +482,7 @@ export function StaffEncodeOrder() {
     }
 
     return (
-        <main className="bg-[#FFF0DA] text-[#0D2E18] lg:h-[calc(100dvh-4.5rem)] lg:overflow-hidden">
+        <main className="min-h-[calc(100dvh-7rem)] bg-[#FFF0DA] text-[#0D2E18] lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
             <EncodeOrderHeaderControls
                 search={search}
                 onSearchChange={setSearch}
@@ -485,36 +491,30 @@ export function StaffEncodeOrder() {
                 menuSyncMeta={menuSyncMeta}
             />
 
-            <section className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-0 lg:grid lg:h-[calc(100dvh-4.5rem)] lg:grid-cols-[minmax(0,1fr)_408px] lg:overflow-hidden">
+            <section className="flex min-h-[calc(100dvh-7rem)] flex-col gap-4 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-0 lg:overflow-hidden xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
                 {/* Products Section */}
                 <div className="min-w-0 flex flex-1 flex-col lg:h-full lg:overflow-hidden">
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-[20px] border border-[#E6D7C0] bg-[#FFF0DA] lg:rounded-none lg:border-0">
                     {/* Categories */}
                     <div className="sticky top-0 z-10 border-b border-[#E6D7C0] bg-[#FFF0DA]/95 px-4 py-3 backdrop-blur sm:px-5 lg:px-6">
-                        <div className="mb-3 grid gap-2 sm:grid-cols-3">
-                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
-                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
-                                    Menu Items
-                                </p>
-                                <p className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                                    {menuItems.length}
-                                </p>
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#E6D7C0] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                                    Menu
+                                </span>
+                                <span className="font-sans text-base font-black text-[#0D2E18]">{menuItems.length}</span>
                             </div>
-                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
-                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
+                            <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#E6D7C0] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
                                     Showing
-                                </p>
-                                <p className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                                    {filteredItems.length}
-                                </p>
+                                </span>
+                                <span className="font-sans text-base font-black text-[#0D2E18]">{filteredItems.length}</span>
                             </div>
-                            <div className="rounded-[14px] border border-[#E6D7C0] bg-white px-4 py-3">
-                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.16em] text-[#8C7A64]">
+                            <div className="inline-flex h-10 min-w-0 max-w-full items-center gap-2 rounded-full border border-[#E6D7C0] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
                                     Category
-                                </p>
-                                <p className="mt-1 truncate font-sans text-lg font-black text-[#0D2E18]">
-                                    {visibleCategoryLabel}
-                                </p>
+                                </span>
+                                <span className="truncate font-sans text-sm font-black text-[#0D2E18]">{visibleCategoryLabel}</span>
                             </div>
                         </div>
 
@@ -524,7 +524,7 @@ export function StaffEncodeOrder() {
                                     key={button.key}
                                     type="button"
                                     onClick={() => setActiveCategory(button.key)}
-                                    className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-4 font-sans text-sm font-bold transition-all duration-200 ${
+                                    className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-4 font-sans text-sm font-bold whitespace-nowrap transition-all duration-200 ${
                                         activeCategory === button.key
                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_4px_12px_rgba(13,46,24,0.15)]"
                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
@@ -538,7 +538,7 @@ export function StaffEncodeOrder() {
                     </div>
 
                     {/* Messages */}
-                    <div className="px-4 py-2 sm:px-5 lg:px-6">
+                    <div className="px-4 pt-2 sm:px-5 lg:px-6">
                         {error && (
                             <div className="mb-3 flex items-start gap-2 rounded-[14px] border border-[#F2C8BD] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-semibold text-[#A6422A] shadow-sm">
                                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -547,8 +547,8 @@ export function StaffEncodeOrder() {
                         )}
 
                         {successMessage && (
-                            <div className="mb-3 flex items-start gap-2 rounded-[14px] border border-[#BFD1B5] bg-white px-4 py-3 font-sans text-sm font-semibold text-[#0D2E18] shadow-[0_2px_8px_rgba(13,46,24,0.08)]">
-                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 fill-[#0F441D] text-white" />
+                            <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-full border border-[#BFD1B5] bg-white px-4 py-2 font-sans text-sm font-semibold text-[#0D2E18] shadow-[0_2px_8px_rgba(13,46,24,0.08)]">
+                                <CheckCircle2 className="h-4 w-4 shrink-0 fill-[#0F441D] text-white" />
                                 <span>{successMessage}</span>
                             </div>
                         )}
@@ -576,18 +576,21 @@ export function StaffEncodeOrder() {
                     {/* Product Grid */}
                     {!isLoadingMenu && filteredItems.length > 0 && (
                         <div className="px-4 py-3 sm:px-5 lg:px-6">
-                            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 min-[1720px]:grid-cols-3">
                                 {filteredItems.map((item) => {
                                     const selectedQuantity = getSelectedQuantity(item.id);
-                                    const selectedLineTotal = selectedQuantity * item.price;
-
+                                    const cartQuantity = cartQuantityByItemId[item.id] ?? 0;
+                                    const isActiveItem = selectedQuantity > 0 || cartQuantity > 0;
                                     return (
                                         <article
                                             key={`${item.category}-${item.id}`}
-                                            className="group grid grid-cols-[92px_minmax(0,1fr)] gap-3 rounded-[16px] border border-[#E6D7C0] bg-white p-3 shadow-[0_4px_14px_rgba(104,75,53,0.06)] transition-all duration-200 hover:border-[#BDAE92] hover:shadow-[0_10px_24px_rgba(104,75,53,0.1)]"
+                                            className={`group grid min-h-[110px] grid-cols-[82px_minmax(0,1fr)] gap-3 overflow-hidden rounded-[18px] border p-3 transition-all duration-200 ${
+                                                isActiveItem
+                                                    ? "border-[#0D2E18] bg-[#FBFFF7] shadow-[0_10px_24px_rgba(13,46,24,0.12)]"
+                                                    : "border-[#E6D7C0] bg-white shadow-[0_4px_14px_rgba(104,75,53,0.06)] hover:border-[#BDAE92] hover:shadow-[0_10px_24px_rgba(104,75,53,0.1)]"
+                                            }`}
                                         >
-                                            {/* Image - Left Side, Compact */}
-                                            <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-[12px] bg-[#F4EEE6]">
+                                            <div className="flex h-[88px] w-[82px] items-center justify-center overflow-hidden rounded-[16px] bg-[#F4EEE6]">
                                                 {item.imageUrl ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
                                                     <img
@@ -600,37 +603,40 @@ export function StaffEncodeOrder() {
                                                         <ShoppingCart size={28} className="text-[#BDAE92]" />
                                                     </div>
                                                 )}
+                                            </div>
 
-                                                {/* Category Badge - Top Left Corner */}
-                                                <div className="absolute left-1.5 top-1.5">
+                                            <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                                                        <h3 className="min-w-0 flex-1 font-sans text-[15px] font-black leading-tight text-[#0D2E18]">
+                                                            {item.name}
+                                                        </h3>
+                                                        <p className="shrink-0 whitespace-nowrap text-right font-sans text-sm font-black text-[#684B35]">
+                                                            {peso(item.price)}
+                                                        </p>
+                                                    </div>
                                                     <span
-                                                        className={`rounded-full px-2 py-0.5 font-sans text-xs font-bold backdrop-blur-sm ${getCategoryBadgeStyle(
+                                                        className={`inline-flex max-w-full rounded-full px-2.5 py-1 font-sans text-[11px] font-black leading-none ${getCategoryBadgeStyle(
                                                             item.category
                                                         )}`}
                                                     >
                                                         {formatCategory(item.category)}
                                                     </span>
-                                                </div>
-                                            </div>
-
-                                            {/* Content - Right Side */}
-                                            <div className="flex min-w-0 flex-1 flex-col gap-2">
-                                                {/* Header */}
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="min-w-0 flex-1">
-                                                        <h3 className="font-sans text-sm font-bold leading-tight text-[#0D2E18]">
-                                                            {item.name}
-                                                        </h3>
-                                                    </div>
-                                                    <p className="flex-shrink-0 font-sans text-base font-bold text-[#684B35]">
-                                                        {peso(item.price)}
-                                                    </p>
+                                                    {cartQuantity > 0 ? (
+                                                        <span className="ml-1.5 inline-flex rounded-full bg-[#0D2E18] px-2.5 py-1 font-sans text-[11px] font-black leading-none text-[#FFF0DA]">
+                                                            {cartQuantity} in cart
+                                                        </span>
+                                                    ) : null}
                                                 </div>
 
-                                                {/* Quantity & Add Button */}
-                                                <div className="mt-auto flex items-center justify-between gap-2">
-                                                    {/* Quantity Controls */}
-                                                    <div className="flex items-center gap-1 rounded-[10px] border border-[#D6C6AC] bg-[#FFF8EF]">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div
+                                                        className={`flex h-9 items-center justify-between rounded-full border px-1 transition-all ${
+                                                            selectedQuantity > 0
+                                                                ? "border-[#0D2E18] bg-white"
+                                                                : "border-[#D6C6AC] bg-[#FFF8EF]"
+                                                        }`}
+                                                    >
                                                         <button
                                                             type="button"
                                                             onClick={() => changeItemQuantity(item.id, -1)}
@@ -654,18 +660,13 @@ export function StaffEncodeOrder() {
                                                         </button>
                                                     </div>
 
-                                                    <p className="hidden font-sans text-xs font-bold text-[#8C7A64] sm:block">
-                                                        {selectedQuantity > 0 ? peso(selectedLineTotal) : "Ready"}
-                                                    </p>
-
-                                                    {/* Add to Cart Button */}
                                                     <button
                                                         type="button"
                                                         onClick={() => openCustomization(item)}
                                                         disabled={selectedQuantity === 0}
-                                                        className="flex-1 rounded-[12px] bg-[#0D2E18] px-3 py-2.5 font-sans text-xs font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-md active:scale-95 disabled:bg-[#EFE3CF] disabled:text-[#8C7A64]"
+                                                        className="h-9 rounded-full bg-[#0D2E18] px-5 font-sans text-xs font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-md active:scale-95 disabled:bg-transparent disabled:px-3 disabled:text-[#8C7A64] disabled:shadow-none"
                                                     >
-                                                        Customize
+                                                        {selectedQuantity > 0 ? "Customize" : "Select qty"}
                                                     </button>
                                                 </div>
                                             </div>
@@ -679,7 +680,7 @@ export function StaffEncodeOrder() {
                 </div>
 
                 {/* Cart Section */}
-                <aside className="flex flex-col border-l border-[#E6D7C0] bg-white lg:sticky lg:top-0 lg:h-full lg:max-h-[calc(100dvh-4.5rem)] lg:self-start lg:overflow-hidden">
+                <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-[20px] border border-[#E6D7C0] bg-white shadow-[0_12px_28px_rgba(104,75,53,0.08)] lg:h-full lg:min-h-0 lg:self-start lg:rounded-none lg:border-y-0 lg:border-r-0 lg:shadow-none">
                     {/* Cart Header */}
                     <div className="shrink-0 border-b border-[#E6D7C0] bg-[#FFF8EF] px-4 py-4">
                         <div className="flex items-start justify-between gap-3">
@@ -694,14 +695,14 @@ export function StaffEncodeOrder() {
                                     Encoded by {staffChipLabel} - {staffRole}
                                 </p>
                             </div>
-                            <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#0D2E18] text-[#FFF0DA] shadow-sm">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA] shadow-sm">
                                 <ReceiptText size={20} />
                             </div>
                         </div>
                     </div>
 
                     {/* Cart Content */}
-                    <div className="min-w-0 flex flex-1 flex-col overflow-hidden">
+                    <div className="min-w-0 flex-1 overflow-y-auto">
                         {/* Order Type */}
                         <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
                             <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
@@ -721,7 +722,7 @@ export function StaffEncodeOrder() {
                                                     setPaymentMethod("cash");
                                                 }
                                             }}
-                                            className={`min-h-20 rounded-[14px] border p-3 text-left font-sans transition-all duration-200 ${
+                                            className={`min-h-20 rounded-[24px] border p-3 text-left font-sans transition-all duration-200 ${
                                                 orderType === type
                                                     ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.16)]"
                                                     : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
@@ -752,7 +753,7 @@ export function StaffEncodeOrder() {
                                     value={walkinName}
                                     onChange={(event) => setWalkinName(event.target.value)}
                                     placeholder={orderType === "pickup" ? "Walk-in customer name" : "Receiver name"}
-                                    className="mt-2 h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                    className="mt-2 h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                 />
                             </label>
                         </div>
@@ -769,7 +770,7 @@ export function StaffEncodeOrder() {
                                         onChange={(event) => setDeliveryAddress(event.target.value)}
                                         placeholder="Full delivery address"
                                         required
-                                        className="h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                        className="h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                     />
                                     <div className="grid grid-cols-2 gap-2">
                                         <input
@@ -778,7 +779,7 @@ export function StaffEncodeOrder() {
                                             onChange={(event) => setDeliveryPhone(event.target.value)}
                                             placeholder="Phone number"
                                             required
-                                            className="h-11 min-w-0 rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                            className="h-11 min-w-0 rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                         />
                                         <input
                                             type="number"
@@ -787,7 +788,7 @@ export function StaffEncodeOrder() {
                                             placeholder="Delivery fee"
                                             min="0"
                                             step="1"
-                                            className="h-11 min-w-0 rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                            className="h-11 min-w-0 rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                         />
                                     </div>
                                     <input
@@ -795,17 +796,17 @@ export function StaffEncodeOrder() {
                                         value={deliveryEmail}
                                         onChange={(event) => setDeliveryEmail(event.target.value)}
                                         placeholder="Email (optional)"
-                                        className="h-11 w-full rounded-[12px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
+                                        className="h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                     />
                                 </div>
                             </div>
                         )}
 
                         {/* Cart Items */}
-                        <div className="min-h-0 flex-1 border-b border-[#E6D7C0]">
+                        <div className="border-b border-[#E6D7C0]">
                             {cart.length === 0 ? (
-                                <div className="flex h-full items-center justify-center px-3 py-3 text-center sm:px-4">
-                                    <div className="rounded-[16px] border border-dashed border-[#D6C6AC] bg-[#FFF8EF] px-4 py-8">
+                                <div className="flex h-full min-h-[220px] items-center justify-center px-3 py-3 text-center sm:px-4">
+                                    <div className="w-full max-w-[260px] rounded-[24px] border border-dashed border-[#D6C6AC] bg-[#FFF8EF] px-4 py-8">
                                         <ShoppingCart className="mx-auto h-6 w-6 text-[#BDAE92]" />
                                         <p className="mt-2 font-sans text-sm font-black text-[#0D2E18]">
                                             Cart is empty
@@ -816,12 +817,12 @@ export function StaffEncodeOrder() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-full overflow-y-auto px-4 py-4">
+                                <div className="max-h-[220px] overflow-y-auto px-4 py-4">
                                     <div className="space-y-2">
                                     {cart.map((item, index) => (
                                         <div
                                             key={`${item.id}-${item.size}-${index}`}
-                                            className="flex gap-3 rounded-[14px] border border-[#E6D7C0] bg-white p-3 transition-all hover:border-[#0D2E18]"
+                                            className="flex gap-3 rounded-[20px] border border-[#E6D7C0] bg-white p-3 transition-all hover:border-[#0D2E18]"
                                         >
                                             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[#E7F4EA]">
                                                 {item.imageUrl ? (
@@ -918,7 +919,7 @@ export function StaffEncodeOrder() {
                                                     key={method}
                                                     type="button"
                                                     onClick={() => setPaymentMethod(method)}
-                                                    className={`rounded-[12px] border px-3 py-3 text-left font-sans transition-all duration-200 ${
+                                                    className={`rounded-[20px] border px-3 py-3 text-left font-sans transition-all duration-200 ${
                                                         paymentMethod === method
                                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-sm"
                                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
@@ -953,7 +954,7 @@ export function StaffEncodeOrder() {
                                                     key={status}
                                                     type="button"
                                                     onClick={() => setPaymentStatus(status)}
-                                                    className={`rounded-[12px] border px-3 py-2.5 font-sans text-sm font-black transition-all duration-200 ${
+                                                    className={`rounded-[20px] border px-3 py-2.5 font-sans text-sm font-black transition-all duration-200 ${
                                                         paymentStatus === status
                                                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-sm"
                                                             : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
@@ -1012,7 +1013,7 @@ export function StaffEncodeOrder() {
                             type="button"
                             onClick={handleSubmitOrderQueue}
                             disabled={!canSubmitOrder}
-                            className="flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#0D2E18] px-4 font-sans text-sm font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:bg-[#DCE8D7] disabled:text-[#75836F]"
+                            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:bg-[#DCE8D7] disabled:text-[#75836F]"
                         >
                             {isSubmitting ? (
                                 <>
@@ -1039,7 +1040,7 @@ export function StaffEncodeOrder() {
                         onClick={closeCustomization}
                     />
 
-                    <section className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[24px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[22px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
+                    <section className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[28px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
                         <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4 sm:px-6">
                             <div>
                                 <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
@@ -1102,7 +1103,7 @@ export function StaffEncodeOrder() {
                                                         key={item.value}
                                                         type="button"
                                                         onClick={() => toggleCustomizationAddon(item.value)}
-                                                        className={`rounded-[14px] border px-4 py-4 text-left font-sans transition ${
+                                                        className={`rounded-[22px] border px-4 py-4 text-left font-sans transition ${
                                                             selected
                                                                 ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
                                                                 : "border-[#D8C8A7] bg-white text-[#684B35]"
@@ -1119,7 +1120,7 @@ export function StaffEncodeOrder() {
                                     </section>
                                 </div>
 
-                                <aside className="flex h-fit flex-col rounded-[18px] border border-[#E1D0B2] bg-white p-5">
+                                <aside className="flex h-fit flex-col rounded-[24px] border border-[#E1D0B2] bg-white p-5">
                                     <div className="space-y-3 border-b border-[#E9DCC1] pb-4">
                                         <div className="flex items-center justify-between gap-3">
                                             <span className="font-sans text-sm font-semibold text-[#6F634E]">Base Price</span>
@@ -1172,7 +1173,7 @@ export function StaffEncodeOrder() {
                                     <button
                                         type="button"
                                         onClick={confirmCustomization}
-                                        className="sticky bottom-0 mt-6 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95"
+                                        className="sticky bottom-0 mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95"
                                     >
                                         <ShoppingCart size={18} />
                                         Add to Cart

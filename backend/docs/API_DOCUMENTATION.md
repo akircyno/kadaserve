@@ -153,6 +153,8 @@ Webhook behavior:
 
 Loads active and recent orders for staff dashboard.
 
+Before returning data, the endpoint marks pending orders older than 45 minutes as `expired`. Those orders are no longer part of the active queue and are returned as final orders for the staff session summary.
+
 ### `POST /api/staff/orders/update-status`
 
 Advances order status.
@@ -173,6 +175,7 @@ Expiry rule:
 - Expired orders use status `expired`, not `cancelled`.
 - Expired orders are treated as final orders and appear in session summary/order history.
 - The update-status API rejects early expiry attempts before the 45-minute limit.
+- Supabase must allow `expired` in `orders_status_check`; apply `backend/seed/order-status-expired.sql` if the database rejects expired status updates.
 
 ### `POST /api/staff/orders/create`
 
@@ -206,6 +209,8 @@ Rules:
 
 Loads historical staff orders.
 
+Before querying history, the endpoint also applies the same 45-minute pending expiry rule so overdue pending orders appear in history as `expired`.
+
 ## Admin
 
 Admin routes support:
@@ -226,3 +231,4 @@ Important SQL files:
 - `backend/seed/paymongo-payments.sql`
 - `backend/seed/admin-orders-view.sql`
 - `backend/seed/store-settings.sql`
+- `backend/seed/order-status-expired.sql`

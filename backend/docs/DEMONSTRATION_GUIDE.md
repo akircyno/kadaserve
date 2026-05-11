@@ -86,7 +86,7 @@ Show:
 
 Talking point:
 
-Order status is modeled as a state machine. Staff can encode walk-in and delivery orders through a controlled form that validates totals, including delivery fee for staff delivery orders. Staff actions move orders through valid transitions, while the queue heatmap turns waiting time into a visual priority signal. Pending orders automatically become `expired` after 45 minutes and move to history, which is different from a manual cancellation. The customer tracker syncs status automatically and payment status remains a separate field so online payment and cash collection are not confused.
+Order status is modeled as a state machine. Staff can encode walk-in and delivery orders through a controlled form that validates totals, including delivery fee for staff delivery orders. Staff actions move orders through valid transitions, while the queue heatmap turns waiting time into a visual priority signal. Pending orders automatically become `expired` after 45 minutes and move to history, which is different from a manual cancellation. Expired orders show an `Auto-expired after 45m` label in session summary and order history so the automated rule is visible during demonstration. The customer tracker syncs status automatically and payment status remains a separate field so online payment and cash collection are not confused.
 
 ### 6. Feedback
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { createClient } from "@/lib/supabase/server";
+import { getPendingExpirySetupMessage } from "@/lib/orders/expire-pending-orders";
 
 type OrderStatus =
   | "pending_payment"
@@ -512,7 +513,7 @@ export async function POST(request: Request) {
 
       if (expireError) {
         return NextResponse.json(
-          { error: expireError.message },
+          { error: getPendingExpirySetupMessage(expireError) ?? expireError.message },
           { status: 500 }
         );
       }

@@ -350,6 +350,8 @@ function formatStatus(status: CustomerOrder["status"]) {
       return "Completed";
     case "cancelled":
       return "Cancelled";
+    case "expired":
+      return "Expired";
     default:
       return status;
   }
@@ -505,13 +507,13 @@ function getActiveOrder(orders: CustomerOrder[]) {
   return (
     orders.find(
       (order) =>
-        !["delivered", "completed", "cancelled"].includes(order.status)
+        !["delivered", "completed", "cancelled", "expired"].includes(order.status)
     ) ?? null
   );
 }
 
 function isFinalOrder(status: CustomerOrder["status"]) {
-  return ["delivered", "completed", "cancelled"].includes(status);
+  return ["delivered", "completed", "cancelled", "expired"].includes(status);
 }
 
 function getOrderStepIndex(status: CustomerOrder["status"]) {
@@ -753,11 +755,19 @@ export function CustomerDashboard({
   const canSubmitFeedback =
     Boolean(selectedFeedbackItem) && overallRating > 0 && !isSubmittingFeedback;
 
-  function getFeedbackItemForOrder(orderId: string) {
-    return feedbackItems.find((item) => item.order_id === orderId) ?? null;
-  }
+  const resetFeedbackForm = useCallback(() => {
+    setTasteRating(0);
+    setStrengthRating(3);
+    setOverallRating(0);
+    setFeedbackComment("");
+    setFeedbackMessage("");
+  }, []);
 
-  function isFeedbackPromptAllowed(orderId: string) {
+  const getFeedbackItemForOrder = useCallback((orderId: string) => {
+    return feedbackItems.find((item) => item.order_id === orderId) ?? null;
+  }, [feedbackItems]);
+
+  const isFeedbackPromptAllowed = useCallback((orderId: string) => {
     const dismissedOrderIds = readStoredOrderIds(
       feedbackDismissedOrdersStorageKey
     );
@@ -770,15 +780,15 @@ export function CustomerDashboard({
     const maybeLaterUntil = Number(maybeLaterOrders[orderId] ?? 0);
 
     return !Number.isFinite(maybeLaterUntil) || maybeLaterUntil <= Date.now();
-  }
+  }, []);
 
-  function hideFeedbackPrompt() {
+  const hideFeedbackPrompt = useCallback(() => {
     setIsFeedbackPromptOpen(false);
     setSelectedFeedbackOrderId(null);
     resetFeedbackForm();
-  }
+  }, [resetFeedbackForm]);
 
-  function openFeedbackPromptForOrder(orderId: string) {
+  const openFeedbackPromptForOrder = useCallback((orderId: string) => {
     const feedbackItem = getFeedbackItemForOrder(orderId);
 
     if (!feedbackItem || !isFeedbackPromptAllowed(orderId)) {
@@ -791,7 +801,7 @@ export function CustomerDashboard({
     setIsFeedbackPromptOpen(true);
 
     return true;
-  }
+  }, [getFeedbackItemForOrder, isFeedbackPromptAllowed, resetFeedbackForm]);
 
   function markFeedbackOrderDismissed(orderId: string) {
     writeStoredOrderIds(feedbackDismissedOrdersStorageKey, [
@@ -1085,7 +1095,13 @@ export function CustomerDashboard({
     if (newlyEligibleOrder) {
       openFeedbackPromptForOrder(newlyEligibleOrder.id);
     }
-  }, [customerOrders, feedbackItems, isAuthenticated]);
+  }, [
+    customerOrders,
+    getFeedbackItemForOrder,
+    isAuthenticated,
+    isFeedbackPromptAllowed,
+    openFeedbackPromptForOrder,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1932,14 +1948,6 @@ export function CustomerDashboard({
       left: onboardingScrollerRef.current.clientWidth * nextStep,
       behavior: "smooth",
     });
-  }
-
-  function resetFeedbackForm() {
-    setTasteRating(0);
-    setStrengthRating(3);
-    setOverallRating(0);
-    setFeedbackComment("");
-    setFeedbackMessage("");
   }
 
   function closeFeedbackPrompt() {

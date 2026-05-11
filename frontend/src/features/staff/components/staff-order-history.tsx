@@ -7,6 +7,8 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
+  RefreshCw,
+  Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -73,6 +75,10 @@ function getStatusStyle(status: OrderStatus) {
     default:
       return "bg-[#F4EEE6] text-[#684B35]";
   }
+}
+
+function getExpiredOrderLabel(status: OrderStatus) {
+  return status === "expired" ? "Auto-expired after 45m" : null;
 }
 
 function getCustomerName(order: StaffOrder) {
@@ -184,6 +190,18 @@ export function StaffOrderHistory() {
     () => orders.reduce((sum, order) => sum + order.total_amount, 0),
     [orders]
   );
+  const completedCount = useMemo(
+    () => orders.filter((order) => order.status === "completed" || order.status === "delivered").length,
+    [orders]
+  );
+  const exceptionCount = useMemo(
+    () => orders.filter((order) => order.status === "cancelled" || order.status === "expired").length,
+    [orders]
+  );
+  const deliveryCount = useMemo(
+    () => orders.filter((order) => order.order_type === "delivery").length,
+    [orders]
+  );
 
   const buildParams = useCallback(
     (nextPage: number, exportCsv = false) => {
@@ -286,42 +304,92 @@ export function StaffOrderHistory() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18] lg:h-[calc(100dvh-4.5rem)] lg:overflow-hidden lg:flex lg:flex-col">
-      <section className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-4">
-            <p className="font-sans text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-              Matching Orders
-            </p>
-            <p className="mt-1 font-sans text-3xl font-bold tabular-nums text-[#0D2E18]">
-              {totalCount}
-            </p>
-          </div>
-          <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-4">
-            <p className="font-sans text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-              Loaded
-            </p>
-            <p className="mt-1 font-sans text-3xl font-bold tabular-nums text-[#0D2E18]">
-              {orders.length}
-            </p>
-          </div>
-          <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-4">
-            <p className="font-sans text-xs uppercase tracking-[0.12em] text-[#8C7A64]">
-              Loaded Total
-            </p>
-            <p className="mt-1 font-sans text-3xl font-bold tabular-nums text-[#684B35]">
-              {peso(visibleTotal)}
-            </p>
+    <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18] lg:flex lg:h-[calc(100dvh-4.5rem)] lg:flex-col lg:overflow-hidden">
+      <section className="flex-1 overflow-y-auto px-1 py-3 sm:px-2 lg:px-0">
+        <div className="sticky top-0 z-20 border-b border-[#E6D7C0] bg-[#FFF0DA]/95 px-4 pb-3 pt-2 backdrop-blur sm:px-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Total Found
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#0D2E18]">
+                  {totalCount}
+                </span>
+              </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Shown
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#0D2E18]">
+                  {orders.length}
+                </span>
+              </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Total
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#684B35]">
+                  {peso(visibleTotal)}
+                </span>
+              </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Done
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#0F441D]">
+                  {completedCount}
+                </span>
+              </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Delivery
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#684B35]">
+                  {deliveryCount}
+                </span>
+              </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)]">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Exceptions
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#A6422A]">
+                  {exceptionCount}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <label className="flex h-11 min-w-[17rem] flex-1 items-center gap-2 rounded-full border border-[#D6C6AC] bg-white px-4 shadow-[0_4px_12px_rgba(104,75,53,0.04)] xl:w-80 xl:flex-none">
+                <Search size={16} className="shrink-0 text-[#8C7A64]" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search order, customer, phone..."
+                  className="min-w-0 flex-1 bg-transparent font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => loadHistory(0, "replace")}
+                disabled={isLoading}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-bold text-[#684B35] transition hover:border-[#0D2E18] disabled:opacity-60"
+              >
+                <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="px-4 pt-4 sm:px-5">
+        <div className="flex flex-wrap items-center gap-2">
           {(["today", "yesterday", "custom", "all"] as const).map((range) => (
             <button
               key={range}
               type="button"
               onClick={() => setDateRange(range)}
-              className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 font-sans text-sm font-bold capitalize transition ${
+              className={`inline-flex h-10 items-center gap-2 rounded-full border px-4 font-sans text-sm font-bold capitalize transition ${
                 dateRange === range
                   ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                   : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
@@ -336,7 +404,7 @@ export function StaffOrderHistory() {
             type="button"
             onClick={handleDownloadCsv}
             disabled={isExporting || orders.length === 0}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#D6C6AC] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#123821] disabled:cursor-not-allowed disabled:border-[#D6C6AC] disabled:bg-[#F7FBF5] disabled:text-[#8D9C87]"
           >
             <Download size={16} />
             {isExporting ? "Exporting..." : "CSV"}
@@ -353,7 +421,7 @@ export function StaffOrderHistory() {
                 type="date"
                 value={customFrom}
                 onChange={(event) => setCustomFrom(event.target.value)}
-                className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
+                className="mt-2 h-11 rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-semibold text-[#0D2E18] outline-none"
               />
             </label>
 
@@ -365,7 +433,7 @@ export function StaffOrderHistory() {
                 type="date"
                 value={customTo}
                 onChange={(event) => setCustomTo(event.target.value)}
-                className="mt-2 h-11 rounded-xl border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm text-[#0D2E18] outline-none"
+                className="mt-2 h-11 rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-semibold text-[#0D2E18] outline-none"
               />
             </label>
           </div>
@@ -377,7 +445,7 @@ export function StaffOrderHistory() {
           </div>
         ) : null}
 
-        <section className="mt-4 overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
+        <section className="mt-4 overflow-hidden rounded-[22px] border border-[#DCCFB8] bg-white shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
           <div className="hidden grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] gap-3 border-b border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35] lg:grid">
             <span>Order ID</span>
             <span>Customer</span>
@@ -406,12 +474,17 @@ export function StaffOrderHistory() {
           ) : null}
 
           {!isLoading
-            ? orders.map((order) => (
+            ? orders.map((order) => {
+                const isSelected = selectedOrder?.id === order.id;
+
+                return (
                 <button
                   key={order.id}
                   type="button"
                   onClick={() => setSelectedOrder(order)}
-                  className="grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition hover:bg-[#FFF8EF] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] lg:items-center"
+                  className={`grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition last:border-b-0 hover:bg-[#FFF8EF] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] lg:items-center ${
+                    isSelected ? "bg-[#FBFFF7] shadow-[inset_4px_0_0_#0D2E18]" : ""
+                  }`}
                 >
                   <div>
                     <p className="font-sans text-sm font-bold tabular-nums text-[#0D2E18]">
@@ -435,13 +508,20 @@ export function StaffOrderHistory() {
                       {getCustomerPhone(order)}
                     </p>
                   </div>
-                  <span
-                    className={`w-fit rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getStatusStyle(
-                      order.status
-                    )}`}
-                  >
-                    {formatStatus(order.status)}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`w-fit rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getStatusStyle(
+                        order.status
+                      )}`}
+                    >
+                      {formatStatus(order.status)}
+                    </span>
+                    {getExpiredOrderLabel(order.status) ? (
+                      <span className="w-fit rounded-full bg-[#FDE8E2] px-2.5 py-1 font-sans text-[11px] font-bold text-[#A6422A]">
+                        {getExpiredOrderLabel(order.status)}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="font-sans text-base font-bold tabular-nums text-[#684B35]">
                     {peso(order.total_amount)}
                   </p>
@@ -454,7 +534,8 @@ export function StaffOrderHistory() {
                     </p>
                   </div>
                 </button>
-              ))
+                );
+              })
             : null}
         </section>
 
@@ -471,6 +552,7 @@ export function StaffOrderHistory() {
             </button>
           </div>
         ) : null}
+        </div>
       </section>
 
       {selectedOrder ? (
@@ -479,27 +561,51 @@ export function StaffOrderHistory() {
             className="fixed inset-0 z-40 bg-[#0D2E18]/35"
             onClick={() => setSelectedOrder(null)}
           />
-          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-lg flex-col bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)]">
-            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
-              <div>
+          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col overflow-hidden bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:rounded-l-[24px]">
+            <div className="border-b border-[#DCCFB8] bg-white px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
                   History Detail
                 </p>
-                <h2 className="mt-1 font-sans text-3xl font-bold text-[#0D2E18]">
+                <h2 className="mt-1 truncate font-sans text-3xl font-black text-[#0D2E18]">
                   {formatOrderCode(selectedOrder.id)}
                 </h2>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1.5 font-sans text-xs font-black ${getStatusStyle(
+                      selectedOrder.status
+                    )}`}
+                  >
+                    {formatStatus(selectedOrder.status)}
+                  </span>
+                  <span
+                    className={`rounded-full px-3 py-1.5 font-sans text-xs font-black ${
+                      selectedOrder.order_type === "delivery"
+                        ? "bg-[#FFF0DA] text-[#684B35]"
+                        : "bg-[#E6F2E8] text-[#0D2E18]"
+                    }`}
+                  >
+                    {selectedOrder.order_type === "delivery" ? "Delivery" : "Pickup"}
+                  </span>
+                  <span className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-black text-[#FFF0DA]">
+                    {peso(getHistoryGrandTotal(selectedOrder))}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
-                className="rounded-full bg-white p-2 text-[#0D2E18]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                aria-label="Close order detail"
               >
                 <X size={20} />
               </button>
+              </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+              <section className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
@@ -542,18 +648,16 @@ export function StaffOrderHistory() {
                     </div>
                   </div>
 
-                  <span
-                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getStatusStyle(
-                      selectedOrder.status
-                    )}`}
-                  >
-                    {formatStatus(selectedOrder.status)}
-                  </span>
+                  {getExpiredOrderLabel(selectedOrder.status) ? (
+                    <p className="w-full rounded-xl border border-[#F2C8BD] bg-[#FFF1EC] px-3 py-2 font-sans text-sm font-semibold text-[#A6422A]">
+                      {getExpiredOrderLabel(selectedOrder.status)}. This order was moved out of the active queue by the 45-minute pending expiry rule.
+                    </p>
+                  ) : null}
                 </div>
               </section>
 
               <section className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                     Payment
                   </p>
@@ -565,7 +669,7 @@ export function StaffOrderHistory() {
                   </p>
                 </div>
 
-                <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+                <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                     Timestamp
                   </p>
@@ -580,7 +684,7 @@ export function StaffOrderHistory() {
                 </div>
               </section>
 
-              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+              <section className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                   Financial Summary
                 </p>
@@ -599,14 +703,14 @@ export function StaffOrderHistory() {
                   </div>
                   <div className="flex justify-between gap-3 border-t border-[#EFE3CF] pt-2">
                     <span className="font-bold text-[#684B35]">Final Total</span>
-                    <span className="font-bold tabular-nums text-[#684B35]">
+                    <span className="text-xl font-black tabular-nums text-[#684B35]">
                       {peso(getHistoryGrandTotal(selectedOrder))}
                     </span>
                   </div>
                 </div>
               </section>
 
-              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+              <section className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                   Order Items
                 </p>
@@ -614,7 +718,7 @@ export function StaffOrderHistory() {
                   {selectedOrder.order_items.map((item) => (
                     <div
                       key={item.id}
-                      className="rounded-xl bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#3C332A]"
+                      className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2 font-sans text-sm text-[#3C332A]"
                     >
                       <div className="flex justify-between gap-3">
                         <p className="font-bold text-[#0D2E18]">
@@ -640,7 +744,7 @@ export function StaffOrderHistory() {
                 </div>
               </section>
 
-              <section className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
+              <section className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                   Special Remarks
                 </p>

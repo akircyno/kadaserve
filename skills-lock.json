@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "skills": {
+    "huashu-design": {
+      "source": "alchaincyf/huashu-design",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "44b5286104811dcbdfd90d63d5f56c32a171371700837d3d697358653f122ca3"
+    },
+    "awesome-claude-skills": {
+      "source": "karanb192/awesome-claude-skills",
+      "sourceType": "github",
+      "sourceCommit": "18f038311f1041c92158357692bf8ddfa8c5da4d",
+      "skillPath": "SKILL.md",
+      "computedHash": "0b5fe63405c95f8181874a8555baa3d77f5c03c81564229a438a7765ca459cd9"
+    }
+  }
+}

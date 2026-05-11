@@ -95,6 +95,7 @@ npm run build
 - Confirm delivery fee input appears only when a delivery order has no calculated delivery fee.
 - Confirm pending orders use a 45-minute expiry limit.
 - Confirm expired orders move to session summary/order history as `expired`, not `cancelled`.
+- Confirm expired orders show the `Auto-expired after 45m` label in session summary and order history.
 
 ## Feedback Flow
 

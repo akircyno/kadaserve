@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  expireOverduePendingOrders,
+  getPendingExpirySetupMessage,
+} from "@/lib/orders/expire-pending-orders";
 
 type AdminOrderRow = {
   id: string;
@@ -73,6 +77,16 @@ export async function GET() {
 
     if (!profile || !["staff", "admin"].includes(profile.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { expiredOrderIds, error: expiryError } =
+      await expireOverduePendingOrders(supabase);
+
+    if (expiryError) {
+      return NextResponse.json(
+        { error: getPendingExpirySetupMessage(expiryError) ?? expiryError.message },
+        { status: 500 }
+      );
     }
 
     const { data: orders, error: ordersError } = await supabase
@@ -199,6 +213,7 @@ export async function GET() {
 
     return NextResponse.json({
       orders: enrichedOrders,
+      expiredPendingCount: expiredOrderIds.length,
       staffProfile: {
         fullName: profile.full_name,
         email: profile.email,

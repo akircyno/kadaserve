@@ -31,8 +31,8 @@ export function EncodeOrderHeaderControls({
     if (!headerControlsElement) return null;
 
     return createPortal(
-        <div className="flex shrink-0 items-center justify-end gap-2">
-            <label className="flex h-9 items-center gap-2 rounded-xl border border-[#E7DDCC] bg-white px-2.5 min-w-[180px] max-w-[280px] sm:min-w-[220px] sm:max-w-[300px]">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto">
+            <label className="flex h-10 min-w-[12rem] flex-1 items-center gap-2 rounded-full border border-[#E7DDCC] bg-white px-3 sm:max-w-sm 2xl:w-72 2xl:flex-none">
                 <Search size={16} className="text-[#8C7A64]" />
                 <input
                     value={search}
@@ -47,7 +47,7 @@ export function EncodeOrderHeaderControls({
                 onClick={onRefresh}
                 disabled={isLoadingMenu}
                 title="Refresh menu"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
             >
                 <RefreshCw
                     size={16}
@@ -55,7 +55,7 @@ export function EncodeOrderHeaderControls({
                 />
             </button>
 
-            <p className="hidden font-sans text-[11px] text-[#8C7A64] whitespace-nowrap sm:block">
+            <p className="hidden whitespace-nowrap font-sans text-[11px] text-[#8C7A64] xl:block">
                 {menuSyncMeta}
             </p>
         </div>,

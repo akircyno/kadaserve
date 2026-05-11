@@ -553,6 +553,10 @@ function getFinalStatusMessage(status: OrderStatus) {
   }
 }
 
+function getExpiredOrderLabel(status: OrderStatus) {
+  return status === "expired" ? "Auto-expired after 45m" : null;
+}
+
 export function StaffDashboard() {
   const router = useRouter();
 
@@ -672,6 +676,7 @@ export function StaffDashboard() {
     staffProfile?.role?.replace("_", " ").replace(/\b\w/g, (letter) =>
       letter.toUpperCase()
     ) || "Staff";
+  const staffChipLabel = `Staff ${staffFirstName}`;
   const queueSummaryCards = [
     {
       label: "Pending",
@@ -739,6 +744,61 @@ export function StaffDashboard() {
           : ""
       }`;
 
+  const loadOrders = useCallback(
+    async ({
+      showLoading = true,
+    }: {
+      showLoading?: boolean;
+    } = {}) => {
+      if (showLoading) {
+        setIsLoading(true);
+        setError("");
+      } else {
+        setIsSyncing(true);
+      }
+
+      try {
+        const response = await fetch("/api/staff/orders/list", {
+          method: "GET",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          setError(result.error || "Failed to load staff orders.");
+          return;
+        }
+
+        startTransition(() => {
+          setOrders(result.orders ?? []);
+          setStaffProfile(result.staffProfile ?? null);
+          setIsBootstrapped(true);
+          setLastSyncedAt(new Date());
+          setSelectedOrder((currentSelectedOrder) => {
+            if (!currentSelectedOrder) {
+              return null;
+            }
+
+            return (
+              (result.orders ?? []).find(
+                (order: StaffOrder) => order.id === currentSelectedOrder.id
+              ) ?? null
+            );
+          });
+        });
+      } catch {
+        setError("Something went wrong while loading orders.");
+      } finally {
+        if (showLoading) {
+          setIsLoading(false);
+        } else {
+          setIsSyncing(false);
+        }
+      }
+    },
+    []
+  );
+
   const headerContainerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -751,13 +811,13 @@ export function StaffDashboard() {
     if (!headerContainerRef.current) return null;
 
     const controls = (
-      <div className="flex w-full items-center gap-3">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto">
         <button
           type="button"
           onClick={() => loadOrders({ showLoading: true })}
           disabled={isLoading}
           title="Force refresh order queue"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#D6C6AC] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
         >
           <RefreshCw
             size={15}
@@ -770,7 +830,7 @@ export function StaffDashboard() {
           </span>
         </button>
 
-        <label className="hidden sm:flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-[#E7DDCC] bg-white px-3">
+        <label className="hidden h-10 min-w-[220px] flex-1 items-center gap-2 rounded-full border border-[#E7DDCC] bg-white px-3 sm:flex sm:max-w-sm 2xl:w-72 2xl:flex-none">
           <Search size={16} className="text-[#8C7A64]" />
           <input
             value={search}
@@ -781,7 +841,7 @@ export function StaffDashboard() {
         </label>
 
         <span
-          className={`hidden sm:inline-flex h-9 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold ${
+          className={`hidden h-10 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold xl:inline-flex ${
             stationStatus === "accepting"
               ? "bg-[#E6F2E8] text-[#0D2E18]"
               : stationStatus === "busy"
@@ -804,7 +864,7 @@ export function StaffDashboard() {
           }
           disabled={isStoreStatusUpdating}
           aria-label="Store status override"
-          className="hidden sm:inline-flex h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-[#FFF0DA] disabled:opacity-60"
+          className="hidden h-10 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-[#FFF0DA] disabled:opacity-60 xl:inline-flex"
         >
           <option value="auto">Auto</option>
           <option value="open">Open</option>
@@ -812,7 +872,7 @@ export function StaffDashboard() {
           <option value="closed">Closed</option>
         </select>
 
-        <p className="hidden sm:block font-sans text-[11px] text-[#8C7A64]">
+        <p className="hidden whitespace-nowrap font-sans text-[11px] text-[#8C7A64] 2xl:block">
           {syncMeta}
         </p>
       </div>
@@ -854,7 +914,7 @@ export function StaffDashboard() {
   useEffect(() => {
     loadOrders({ showLoading: true });
     loadStoreStatus();
-  }, [loadStoreStatus]);
+  }, [loadOrders, loadStoreStatus]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -898,7 +958,7 @@ export function StaffDashboard() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadStoreStatus]);
+  }, [loadOrders, loadStoreStatus]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -906,7 +966,7 @@ export function StaffDashboard() {
     }, 15000);
 
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [loadOrders]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -1041,59 +1101,6 @@ export function StaffDashboard() {
     }
   }
 
-  async function loadOrders({
-    showLoading = true,
-  }: {
-    showLoading?: boolean;
-  } = {}) {
-    if (showLoading) {
-      setIsLoading(true);
-      setError("");
-    } else {
-      setIsSyncing(true);
-    }
-
-    try {
-      const response = await fetch("/api/staff/orders/list", {
-        method: "GET",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setError(result.error || "Failed to load staff orders.");
-        return;
-      }
-
-
-      startTransition(() => {
-        setOrders(result.orders ?? []);
-        setStaffProfile(result.staffProfile ?? null);
-        setIsBootstrapped(true);
-        setLastSyncedAt(new Date());
-        setSelectedOrder((currentSelectedOrder) => {
-          if (!currentSelectedOrder) {
-            return null;
-          }
-
-          return (
-            (result.orders ?? []).find(
-              (order: StaffOrder) => order.id === currentSelectedOrder.id
-            ) ?? null
-          );
-        });
-      });
-    } catch {
-      setError("Something went wrong while loading orders.");
-    } finally {
-      if (showLoading) {
-        setIsLoading(false);
-      } else {
-        setIsSyncing(false);
-      }
-    }
-  }
-
   async function handleAdvance(
     orderId: string,
     expectedStatus: OrderStatus,
@@ -1223,45 +1230,78 @@ export function StaffDashboard() {
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
       <TopbarControlsPortal />
 
-      <section className="px-4 py-4 lg:px-5">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {queueSummaryCards.map((card) => (
-            <div
-              key={card.label}
-              className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white shadow-[0_6px_16px_rgba(104,75,53,0.05)]"
-            >
-              <div className={`h-1.5 ${card.accent}`} />
-              <div className="flex items-end justify-between gap-3 p-3">
-                <div>
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8C7A64]">
-                    {card.label}
-                  </p>
-                  <p className="mt-1 font-sans text-xs text-[#6E5D49]">
-                    {card.helper}
-                  </p>
-                </div>
-                <p className={`font-sans text-3xl font-bold ${card.valueColor}`}>
-                  {card.value}
-                </p>
+      <section className="px-4 py-3 lg:px-5">
+        <div className="rounded-[22px] border border-[#DCCFB8] bg-white/90 p-3 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Active
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#0D2E18]">
+                  {activeOrders.length}
+                </span>
               </div>
+              <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4">
+                <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                  Shown
+                </span>
+                <span className="font-sans text-base font-black tabular-nums text-[#0D2E18]">
+                  {filteredOrders.length}
+                </span>
+              </div>
+              {queueSummaryCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-white px-4"
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${card.accent}`} />
+                  <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#8C7A64]">
+                    {card.label}
+                  </span>
+                  <span className={`font-sans text-base font-black tabular-nums ${card.valueColor}`}>
+                    {card.value}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-10 items-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 font-sans text-xs font-black text-[#684B35]">
+                {staffChipLabel} - {staffRole}
+              </span>
+              {(["all", "pickup", "delivery"] as const).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setOrderFilter(filter)}
+                  className={`h-10 rounded-full border px-4 font-sans text-sm font-black capitalize transition ${
+                    orderFilter === filter
+                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                      : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {error ? (
-          <div className="mt-4 rounded-[16px] bg-[#FFF1EC] px-4 py-3 font-sans text-sm text-[#9C543D]">
+          <div className="mt-3 inline-flex max-w-full rounded-full border border-[#F2C8BD] bg-[#FFF1EC] px-4 py-2 font-sans text-sm font-semibold text-[#9C543D]">
             {error}
           </div>
         ) : null}
 
         {storeStatusError ? (
-          <div className="mt-4 rounded-[16px] bg-[#FFF8EF] px-4 py-3 font-sans text-sm font-semibold text-[#684B35]">
+          <div className="mt-3 inline-flex max-w-full rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 font-sans text-sm font-semibold text-[#684B35]">
             {storeStatusError}
           </div>
         ) : null}
 
         {staffToast ? (
-          <div className="mt-4 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold text-[#0F7A40]">
+          <div className="mt-3 inline-flex max-w-full rounded-full border border-[#BFD9C0] bg-[#E7F4EA] px-4 py-2 font-sans text-sm font-semibold text-[#0F7A40]">
             {staffToast}
           </div>
         ) : null}
@@ -1277,7 +1317,7 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5 xl:items-start">
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 2xl:items-start">
           {boardColumns.map((column, index) => {
             const columnOrders = groupedOrders[column.key] ?? [];
             const isLastColumn = index === boardColumns.length - 1;
@@ -1285,13 +1325,13 @@ export function StaffDashboard() {
             return (
               <section
                 key={column.key}
-                className={`relative rounded-[20px] border p-3 shadow-[0_10px_24px_rgba(104,75,53,0.06)] ${column.header}`}
+                className={`relative rounded-[18px] border p-2.5 shadow-[0_8px_18px_rgba(104,75,53,0.05)] ${column.header}`}
               >
-                <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="mb-2.5 flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`h-2.5 w-2.5 rounded-full ${column.accent}`} />
-                      <h2 className="font-sans text-base font-black text-[#0D2E18]">
+                      <h2 className="font-sans text-sm font-black text-[#0D2E18]">
                         {column.label}
                       </h2>
                     </div>
@@ -1322,7 +1362,7 @@ export function StaffDashboard() {
                   </div>
                 ) : null}
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {columnOrders.length === 0 ? (
                     <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-3 py-5 text-center font-sans text-sm text-[#8C7A64]">
                       No orders here
@@ -1354,22 +1394,25 @@ export function StaffDashboard() {
                       minutesUntilExpiry
                     );
                     const itemQuantity = getOrderItemQuantity(order);
+                    const isSelectedOrder = selectedOrder?.id === order.id;
 
                     return (
                       <article
                         key={order.id}
                         onClick={() => openOrder(order)}
-                        className={`group/order cursor-pointer overflow-hidden rounded-[18px] border transition hover:-translate-y-0.5 hover:border-[#CBB68F] hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)] ${heatmapStyle.card}`}
+                        className={`group/order cursor-pointer overflow-hidden rounded-[16px] border transition hover:-translate-y-0.5 hover:border-[#CBB68F] hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)] ${
+                          isSelectedOrder ? "ring-2 ring-[#0D2E18]/35" : ""
+                        } ${heatmapStyle.card}`}
                       >
                         <div
                           className={`h-1.5 ${
                             heatmapStyle.rail || getQueueAccent(order.status)
                           }`}
                         />
-                        <div className="p-3">
+                        <div className="p-2.5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="font-sans text-[1.2rem] font-black leading-none text-[#0D2E18]">
+                            <p className="font-sans text-[1.08rem] font-black leading-none text-[#0D2E18]">
                               {formatOrderCode(order.id)}
                             </p>
                             <div className="mt-2 flex items-center gap-1.5 font-sans text-xs font-bold text-[#684B35]">
@@ -1394,18 +1437,12 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div
-                          className={`mt-3 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 font-sans text-xs ${heatmapStyle.panel}`}
-                        >
-                          <span className="font-black uppercase tracking-[0.12em] text-[#8C7A64]">
-                            Queue Heat
-                          </span>
-                          <span className="font-black text-[#0D2E18]">
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 font-sans text-xs">
+                          <span
+                            className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 font-black text-[#0D2E18] ${heatmapStyle.panel}`}
+                          >
                             {heatmapStyle.label}
                           </span>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2 font-sans text-xs">
                           <span
                             className={`inline-flex items-center justify-center gap-1 rounded-full border px-2.5 py-1 font-bold ${getQueueAgeStyle(
                               elapsedMinutes
@@ -1459,7 +1496,7 @@ export function StaffDashboard() {
                           </span>
                         </div>
 
-                        <div className={`mt-3 rounded-xl border px-3 py-2 ${heatmapStyle.panel}`}>
+                        <div className={`mt-2 rounded-[14px] border px-3 py-2 ${heatmapStyle.panel}`}>
                           <p className="font-sans text-[11px] font-black uppercase tracking-[0.12em] text-[#8C7A64]">
                             Focus
                           </p>
@@ -1468,7 +1505,7 @@ export function StaffDashboard() {
                           </p>
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between gap-3 font-sans">
+                        <div className="mt-2 flex items-center justify-between gap-3 font-sans">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-[#3C332A]">
                               {items[0] ?? "No item summary"}
@@ -1480,7 +1517,7 @@ export function StaffDashboard() {
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="text-[11px] text-[#9A856C]">Total</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#9A856C]">Total</p>
                             <p className="text-base font-black text-[#684B35]">
                               {peso(order.total_amount)}
                             </p>
@@ -1488,7 +1525,7 @@ export function StaffDashboard() {
                         </div>
 
                         {order.order_type === "delivery" ? (
-                          <div className={`mt-3 grid grid-cols-3 gap-2 rounded-xl border px-3 py-2 font-sans text-xs ${heatmapStyle.panel}`}>
+                          <div className={`mt-2 grid grid-cols-3 gap-2 rounded-[14px] border px-3 py-2 font-sans text-xs ${heatmapStyle.panel}`}>
                             <div>
                               <p className="text-[#8C7A64]">Items</p>
                               <p className="mt-0.5 font-bold text-[#0D2E18]">
@@ -1510,7 +1547,7 @@ export function StaffDashboard() {
                           </div>
                         ) : null}
 
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#EFE3CF] pt-3">
+                        <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#EFE3CF] pt-2.5">
                           <div className="inline-flex items-center gap-1.5 font-sans text-xs font-bold text-[#6E5D49]">
                             {order.order_type === "delivery" ? (
                               <Truck size={14} />
@@ -1545,7 +1582,7 @@ export function StaffDashboard() {
                                 handleAdvance(order.id, order.status);
                               }}
                               disabled={isUpdatingOrder || isExpiredPendingOrder || isExpiringOrder}
-                              className={`rounded-xl px-3 py-2 font-sans text-xs font-black transition ${
+                              className={`rounded-full px-3 py-2 font-sans text-xs font-black transition ${
                                 isExpiredPendingOrder || isExpiringOrder
                                   ? "border border-[#D6C6AC] bg-[#F4EEE6] text-[#8A755D]"
                                   : paymentRequired
@@ -1613,6 +1650,7 @@ export function StaffDashboard() {
 
             {historyOrders.map((order) => {
               const items = formatOrderSummary(order);
+              const expiredOrderLabel = getExpiredOrderLabel(order.status);
 
               return (
                 <article
@@ -1640,6 +1678,12 @@ export function StaffDashboard() {
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {expiredOrderLabel ? (
+                      <span className="inline-flex rounded-full bg-[#FDE8E2] px-2.5 py-1 font-sans text-xs font-semibold text-[#A6422A]">
+                        {expiredOrderLabel}
+                      </span>
+                    ) : null}
+
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${getOrderTypeStyle(
                         order.order_type
@@ -2080,9 +2124,14 @@ export function StaffDashboard() {
                           : getDrawerActionLabel(selectedOrder) ?? "No action needed"}
                       </p>
                     ) : null}
-                    {getFinalStatusMessage(selectedOrder.status) ? (
+                  {getFinalStatusMessage(selectedOrder.status) ? (
                       <p className="mt-1 font-sans text-sm text-[#8C7A64]">
                         {getFinalStatusMessage(selectedOrder.status)}
+                      </p>
+                    ) : null}
+                    {getExpiredOrderLabel(selectedOrder.status) ? (
+                      <p className="mt-1 font-sans text-sm font-semibold text-[#A6422A]">
+                        {getExpiredOrderLabel(selectedOrder.status)}
                       </p>
                     ) : null}
                   </div>
