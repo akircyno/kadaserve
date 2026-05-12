@@ -25,6 +25,21 @@ type MenuFormState = {
   isAvailable: boolean;
 };
 
+type MenuPerformance = {
+  item: string;
+  orders: number;
+  rating: number;
+  revenue: number;
+};
+
+type MenuSignal = {
+  label: string;
+  orders: number;
+  rating: number;
+  revenue: number;
+  tone: "strong" | "steady" | "watch" | "muted";
+};
+
 const emptyMenuForm: MenuFormState = {
   id: null,
   name: "",
@@ -79,6 +94,82 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
+function getMenuSignal(
+  item: AdminMenuItem,
+  performance: MenuPerformance | undefined,
+  maxOrders: number
+): MenuSignal {
+  if (!item.isAvailable) {
+    return {
+      label: "Paused",
+      orders: performance?.orders ?? 0,
+      rating: performance?.rating ?? 0,
+      revenue: performance?.revenue ?? 0,
+      tone: "muted",
+    };
+  }
+
+  const orders = performance?.orders ?? 0;
+  const rating = performance?.rating ?? 0;
+  const revenue = performance?.revenue ?? 0;
+  const orderRatio = maxOrders > 0 ? orders / maxOrders : 0;
+
+  if (orders === 0) {
+    return { label: "Untested", orders, rating, revenue, tone: "watch" };
+  }
+
+  if (orderRatio >= 0.7 || rating >= 4.5) {
+    return { label: "High Signal", orders, rating, revenue, tone: "strong" };
+  }
+
+  if (orderRatio >= 0.3 || rating >= 4) {
+    return { label: "Steady", orders, rating, revenue, tone: "steady" };
+  }
+
+  return { label: "Review", orders, rating, revenue, tone: "watch" };
+}
+
+function SignalChip({ signal }: { signal: MenuSignal }) {
+  const classes = {
+    strong: "bg-[#E6F2E8] text-[#0F441D]",
+    steady: "bg-[#FFF0DA] text-[#684B35]",
+    watch: "bg-[#FFF1EC] text-[#9C543D]",
+    muted: "bg-[#EFE8DC] text-[#7D6B55]",
+  };
+
+  return (
+    <span
+      className={`inline-flex w-fit rounded-full px-3 py-1 font-sans text-xs font-bold ${classes[signal.tone]}`}
+    >
+      {signal.label}
+    </span>
+  );
+}
+
+function IntelligenceCard({
+  detail,
+  label,
+  value,
+}: {
+  detail: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <article className="rounded-[22px] border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
+      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+        {label}
+      </p>
+      <p className="mt-2 font-sans text-2xl font-black leading-tight text-[#0D2E18]">
+        {value}
+      </p>
+      <p className="mt-2 font-sans text-sm leading-relaxed text-[#6D5B48]">
+        {detail}
+      </p>
+    </article>
+  );
+}
+
 function loadImage(imageUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new window.Image();
@@ -126,9 +217,11 @@ async function getCroppedImageFile(imageUrl: string, cropArea: Area) {
 }
 
 export function MenuView({
+  itemPerformance,
   menuItems,
   setMenuItems,
 }: {
+  itemPerformance: MenuPerformance[];
   menuItems: AdminMenuItem[];
   setMenuItems: React.Dispatch<React.SetStateAction<AdminMenuItem[]>>;
 }) {
@@ -145,6 +238,83 @@ export function MenuView({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("all");
+  const performanceByName = useMemo(
+    () =>
+      new Map(
+        itemPerformance.map((item) => [item.item.trim().toLowerCase(), item])
+      ),
+    [itemPerformance]
+  );
+  const maxPerformanceOrders = Math.max(
+    1,
+    ...itemPerformance.map((item) => item.orders)
+  );
+  const menuSignals = useMemo(
+    () =>
+      new Map(
+        menuItems.map((item) => [
+          item.id,
+          getMenuSignal(
+            item,
+            performanceByName.get(item.name.trim().toLowerCase()),
+            maxPerformanceOrders
+          ),
+        ])
+      ),
+    [maxPerformanceOrders, menuItems, performanceByName]
+  );
+  const menuIntelligence = useMemo(() => {
+    const availableItems = menuItems.filter((item) => item.isAvailable);
+    const categoryStats = adminMenuCategories
+      .map((category) => {
+        const categoryItems = menuItems.filter(
+          (item) => item.category === category.value
+        );
+        const signals = categoryItems.map(
+          (item) => menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1)
+        );
+
+        return {
+          label: category.label,
+          available: categoryItems.filter((item) => item.isAvailable).length,
+          orders: signals.reduce((sum, signal) => sum + signal.orders, 0),
+          revenue: signals.reduce((sum, signal) => sum + signal.revenue, 0),
+        };
+      })
+      .sort((first, second) => second.orders - first.orders);
+    const strongestCategory = categoryStats[0];
+    const recommendationCandidate = [...menuItems]
+      .filter((item) => item.isAvailable)
+      .map((item) => ({
+        item,
+        signal: menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1),
+      }))
+      .sort(
+        (first, second) =>
+          second.signal.orders * 2 +
+          second.signal.rating * 10 -
+          (first.signal.orders * 2 + first.signal.rating * 10)
+      )[0];
+    const reviewCandidate = [...menuItems]
+      .filter((item) => item.isAvailable)
+      .map((item) => ({
+        item,
+        signal: menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1),
+      }))
+      .sort(
+        (first, second) =>
+          first.signal.orders - second.signal.orders ||
+          first.signal.rating - second.signal.rating
+      )[0];
+
+    return {
+      availableCount: availableItems.length,
+      categoryCount: categoryStats.filter((category) => category.available > 0).length,
+      recommendationCandidate,
+      reviewCandidate,
+      strongestCategory,
+    };
+  }, [menuItems, menuSignals]);
 
   const filteredMenuItems = useMemo(() => {
     const keyword = menuSearch.trim().toLowerCase();
@@ -373,11 +543,59 @@ export function MenuView({
 
   return (
     <div className="space-y-5">
+      <section className="rounded-[26px] border border-[#D8C8AA] bg-white/88 p-4 shadow-[0_16px_38px_rgba(75,50,24,0.08)]">
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
+              Menu Intelligence
+            </p>
+            <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+              Recommendation, category, review, and coverage
+            </h2>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <IntelligenceCard
+            label="Recommendation Candidate"
+            value={menuIntelligence.recommendationCandidate?.item.name ?? "No item yet"}
+            detail={
+              menuIntelligence.recommendationCandidate
+                ? `${menuIntelligence.recommendationCandidate.signal.orders} orders and ${menuIntelligence.recommendationCandidate.signal.rating.toFixed(1)} rating.`
+                : "Waiting for order data."
+            }
+          />
+          <IntelligenceCard
+            label="Strongest Category"
+            value={menuIntelligence.strongestCategory?.label ?? "No category yet"}
+            detail={
+              menuIntelligence.strongestCategory
+                ? `${menuIntelligence.strongestCategory.orders} orders across ${menuIntelligence.strongestCategory.available} available items.`
+                : "No category demand has been detected yet."
+            }
+          />
+          <IntelligenceCard
+            label="Review Candidate"
+            value={menuIntelligence.reviewCandidate?.item.name ?? "No item yet"}
+            detail={
+              menuIntelligence.reviewCandidate
+                ? `${menuIntelligence.reviewCandidate.signal.orders} orders. ${menuIntelligence.reviewCandidate.signal.rating.toFixed(1)} rating.`
+                : "No available item needs review yet."
+            }
+          />
+          <IntelligenceCard
+            label="Active Coverage"
+            value={`${menuIntelligence.availableCount}/${menuItems.length}`}
+            detail={`${menuIntelligence.categoryCount} categories currently have available items for ordering.`}
+          />
+        </div>
+      </section>
+
       <div className="flex justify-end">
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-[14px] bg-[#0D2E18] px-8 py-3 font-sans text-base font-bold text-[#FFF0DA]"
+          className="rounded-full bg-[#0D2E18] px-8 py-3 font-sans text-base font-bold text-[#FFF0DA]"
         >
           + Add New
         </button>
@@ -427,21 +645,26 @@ export function MenuView({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white">
-        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+      <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-white">
+        <div className="min-w-[940px]">
+        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
           <span>Item</span>
           <span>Category</span>
           <span>Price</span>
           <span>Status</span>
+          <span>Signal</span>
           <span>Action</span>
         </div>
 
         <div className="divide-y divide-[#EFE3CF]">
-          {filteredMenuItems.map((item) => (
-            <div
-              key={item.id}
-              className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
-            >
+          {filteredMenuItems.map((item) => {
+            const signal = menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
+
+            return (
+              <div
+                key={item.id}
+                className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
+              >
               <div className="flex items-center gap-3">
                 <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
                   {item.imageUrl ? (
@@ -469,6 +692,12 @@ export function MenuView({
               >
                 {item.isAvailable ? "Available" : "Not Available"}
               </span>
+              <div>
+                <SignalChip signal={signal} />
+                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
+                  {signal.orders} orders
+                </p>
+              </div>
 
               <div className="flex flex-wrap gap-2">
                 <button
@@ -480,11 +709,13 @@ export function MenuView({
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {filteredMenuItems.length === 0 ? (
             <EmptyState label="No matching menu items" />
           ) : null}
+        </div>
         </div>
       </div>
 

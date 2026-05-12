@@ -11,11 +11,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  InventoryView,
-  type InventoryItem,
-  getInventoryStatus,
-} from "@/features/admin/components/admin-inventory-view";
-import {
   CustomerPreferenceView,
   ItemRankingView,
   SatisfactionView,
@@ -30,7 +25,6 @@ import {
   type PeakHourWindow,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
-import { inventoryItems as initialInventoryItems } from "@/features/admin/data/inventory-items";
 import type {
   StoreOverrideStatus,
   StoreStatusPayload,
@@ -164,7 +158,64 @@ type AdminSearchSuggestion = {
   query: string;
   targetId?: string;
   targetTab?: AdminTab;
+  targetDemandView?: DemandView;
 };
+
+type DemandView = "orders" | "time-series" | "peak-hours";
+type CustomerIntelligenceView =
+  | "customer-pref"
+  | "item-ranking"
+  | "satisfaction"
+  | "feedback";
+
+const demandViews: Array<{
+  key: DemandView;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "orders",
+    label: "Orders",
+    description: "All order records",
+  },
+  {
+    key: "time-series",
+    label: "Time Series",
+    description: "Hourly demand volume",
+  },
+  {
+    key: "peak-hours",
+    label: "Peak Hours",
+    description: "Busiest service windows",
+  },
+];
+
+const customerIntelligenceViews: Array<{
+  key: CustomerIntelligenceView;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "customer-pref",
+    label: "Preferences",
+    description: "Learning signals",
+  },
+  {
+    key: "item-ranking",
+    label: "Ranking",
+    description: "Best item patterns",
+  },
+  {
+    key: "satisfaction",
+    label: "Satisfaction",
+    description: "Rating quality",
+  },
+  {
+    key: "feedback",
+    label: "Feedback",
+    description: "Raw comments",
+  },
+];
 
 type AdminFeedbackRow = {
   id: string;
@@ -212,12 +263,6 @@ type AdminAnalyticsItemRow = {
   avg_rating: number;
   sales_rank: number;
   updated_at: string;
-};
-
-type AdminInventoryPayload = {
-  inventoryItems?: InventoryItem[];
-  item?: InventoryItem;
-  error?: string;
 };
 
 function normalizeSuggestion(value: string) {
@@ -390,10 +435,11 @@ export function AdminDashboard() {
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
+  const [demandView, setDemandView] = useState<DemandView>("orders");
+  const [customerIntelligenceView, setCustomerIntelligenceView] =
+    useState<CustomerIntelligenceView>("customer-pref");
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
-  const [inventoryItems, setInventoryItems] =
-    useState<InventoryItem[]>(initialInventoryItems);
   const [analyticsHourly, setAnalyticsHourly] = useState<AdminAnalyticsHourlyRow[]>(
     []
   );
@@ -402,8 +448,6 @@ export function AdminDashboard() {
   );
   const [analyticsItems, setAnalyticsItems] = useState<AdminAnalyticsItemRow[]>([]);
   const [peakHourWindows, setPeakHourWindows] = useState<PeakHourWindow[]>([]);
-  const [isInventorySaving, setIsInventorySaving] = useState(false);
-  const [inventoryMessage, setInventoryMessage] = useState("");
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
@@ -457,12 +501,12 @@ export function AdminDashboard() {
   const activeHeaderTitle =
     activeTab === "dashboard"
       ? "Dashboard Overview"
-      : activeTab === "customer-pref"
-      ? "Customer Preference"
+      : activeTab === "demand"
+      ? "Demand Intelligence"
+      : activeTab === "customer-intelligence"
+      ? "Customer Intelligence"
       : activeTab === "menu"
       ? "Menu Management"
-      : activeTab === "inventory"
-      ? "Inventory"
       : adminTabs.find((tab) => tab.key === activeTab)?.label ?? "Admin";
 
   useEffect(() => {
@@ -530,28 +574,6 @@ export function AdminDashboard() {
         .includes(keyword)
     );
   }, [activeTab, debouncedSearch, menuItems]);
-  const scopedInventoryItems = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-
-    if (activeTab !== "inventory" || !keyword) {
-      return inventoryItems;
-    }
-
-    return inventoryItems.filter((item) =>
-      [
-        item.name,
-        item.unit,
-        item.supplier,
-        getInventoryStatus(item),
-        item.onHand.toString(),
-        item.minNeed.toString(),
-        item.maxCap.toString(),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword)
-    );
-  }, [activeTab, debouncedSearch, inventoryItems]);
 
   const itemRanking = useMemo(() => {
     const ranking = new Map<
@@ -599,11 +621,12 @@ export function AdminDashboard() {
     analyticsItemRanking.length > 0 ? analyticsItemRanking : itemRanking;
   const scopedItemRanking = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
+    const shouldFilterItems =
+      activeTab === "dashboard" ||
+      (activeTab === "customer-intelligence" &&
+        customerIntelligenceView === "item-ranking");
 
-    if (
-      !keyword ||
-      !["item-ranking", "satisfaction", "dashboard"].includes(activeTab)
-    ) {
+    if (!keyword || !shouldFilterItems) {
       return displayItemRanking;
     }
 
@@ -618,11 +641,15 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, displayItemRanking]);
+  }, [activeTab, customerIntelligenceView, debouncedSearch, displayItemRanking]);
   const scopedFeedbackRows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
+    const shouldFilterFeedback =
+      activeTab === "customer-intelligence" &&
+      (customerIntelligenceView === "satisfaction" ||
+        customerIntelligenceView === "feedback");
 
-    if (activeTab !== "satisfaction" || !keyword) {
+    if (!shouldFilterFeedback || !keyword) {
       return feedbackRows;
     }
 
@@ -642,11 +669,15 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, feedbackRows]);
+  }, [activeTab, customerIntelligenceView, debouncedSearch, feedbackRows]);
   const scopedCustomerPreferenceOrders = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
-    if (activeTab !== "customer-pref" || !keyword) {
+    if (
+      activeTab !== "customer-intelligence" ||
+      customerIntelligenceView !== "customer-pref" ||
+      !keyword
+    ) {
       return orders;
     }
 
@@ -661,7 +692,7 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, orders]);
+  }, [activeTab, customerIntelligenceView, debouncedSearch, orders]);
 
   const weekdayCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -720,12 +751,7 @@ export function AdminDashboard() {
         orders: Number(row.order_count ?? 0),
       }));
   }, [analyticsWeekly]);
-  const weeklyTrendLabel = analyticsWeekly[0]
-    ? formatWeeklyRangeLabel(
-        analyticsWeekly[0].week_start_date,
-        analyticsWeekly[0].week_end_date
-      )
-    : "Weekly Trend";
+  const weeklyTrendLabel = weeklyTrendCounts.at(-1)?.label ?? "Demand Growth";
   const hourlyCounts = useMemo(() => {
     if (analyticsHourlyCounts) {
       return analyticsHourlyCounts;
@@ -745,7 +771,7 @@ export function AdminDashboard() {
   const scopedHourlyCounts = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
-    if (activeTab !== "time-series" || !keyword) {
+    if (activeTab !== "demand" || demandView !== "time-series" || !keyword) {
       return hourlyCounts;
     }
 
@@ -755,11 +781,11 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, hourlyCounts]);
+  }, [activeTab, debouncedSearch, demandView, hourlyCounts]);
   const scopedPeakHourWindows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
-    if (activeTab !== "peak-hours" || !keyword) {
+    if (activeTab !== "demand" || demandView !== "peak-hours" || !keyword) {
       return peakHourWindows;
     }
 
@@ -774,7 +800,7 @@ export function AdminDashboard() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [activeTab, debouncedSearch, peakHourWindows]);
+  }, [activeTab, debouncedSearch, demandView, peakHourWindows]);
 
   const maxHourlyOrders = Math.max(1, ...hourlyCounts.map((item) => item.orders));
   const maxScopedHourlyOrders = Math.max(
@@ -821,10 +847,13 @@ export function AdminDashboard() {
         ["Average Rating", "admin-average-rating"],
         ["Orders - Week", "admin-orders-week"],
         ["Peak Hours", "admin-peak-hours"],
-        ["Weekly Trend", "admin-weekly-trend"],
+        ["Demand Growth", "admin-weekly-trend"],
         ["Top Items", "admin-top-items"],
         ["Satisfaction", "admin-satisfaction"],
         ["Hourly Order Volume", "admin-hourly-order-volume"],
+        ["Admin Snapshot", "admin-decision-support"],
+        ["Demand Signal", "admin-decision-support"],
+        ["Preference Signal", "admin-decision-support"],
       ].forEach(([label, targetId]) =>
         addSuggestion({
           category: "Dashboard",
@@ -847,57 +876,64 @@ export function AdminDashboard() {
           category: "Deep Dive",
           label: `View Order History for ${name}`,
           query: name,
-          targetTab: "orders",
+          targetTab: "demand",
+          targetDemandView: "orders",
         });
       });
-    } else if (activeTab === "orders") {
-      for (const order of orders.slice(0, 18)) {
-        addSuggestion({
-          category: "Orders",
-          label: formatOrderCode(order.id),
-          query: formatOrderCode(order.id),
-        });
-        addSuggestion({
-          category: "Customers",
-          label: getOrderDisplayName(order),
-          query: getOrderDisplayName(order),
-        });
-        addSuggestion({
-          category: "Fulfillment",
-          label: normalizeSuggestion(order.order_type),
-          query: order.order_type,
-        });
-        if (order.delivery_phone) {
+    } else if (activeTab === "demand") {
+      if (demandView === "orders") {
+        for (const order of orders.slice(0, 18)) {
           addSuggestion({
-            category: "Phone",
-            label: order.delivery_phone,
-            query: order.delivery_phone,
+            category: "Orders",
+            label: formatOrderCode(order.id),
+            query: formatOrderCode(order.id),
+          });
+          addSuggestion({
+            category: "Customers",
+            label: getOrderDisplayName(order),
+            query: getOrderDisplayName(order),
+          });
+          addSuggestion({
+            category: "Fulfillment",
+            label: normalizeSuggestion(order.order_type),
+            query: order.order_type,
+          });
+          if (order.delivery_phone) {
+            addSuggestion({
+              category: "Phone",
+              label: order.delivery_phone,
+              query: order.delivery_phone,
+            });
+          }
+          if (order.payment_method) {
+            addSuggestion({
+              category: "Payment",
+              label: normalizeSuggestion(order.payment_method),
+              query: order.payment_method,
+            });
+          }
+          if (order.payment_status) {
+            addSuggestion({
+              category: "Payment",
+              label: normalizeSuggestion(order.payment_status),
+              query: order.payment_status,
+            });
+          }
+          addSuggestion({
+            category: "Status",
+            label: normalizeSuggestion(order.status),
+            query: order.status,
+          });
+          addSuggestion({
+            category: "Prices",
+            label: peso(order.total_amount),
+            query: order.total_amount.toString(),
           });
         }
-        if (order.payment_method) {
-          addSuggestion({
-            category: "Payment",
-            label: normalizeSuggestion(order.payment_method),
-            query: order.payment_method,
-          });
-        }
-        if (order.payment_status) {
-          addSuggestion({
-            category: "Payment",
-            label: normalizeSuggestion(order.payment_status),
-            query: order.payment_status,
-          });
-        }
-        addSuggestion({
-          category: "Status",
-          label: normalizeSuggestion(order.status),
-          query: order.status,
-        });
-        addSuggestion({
-          category: "Prices",
-          label: peso(order.total_amount),
-          query: order.total_amount.toString(),
-        });
+      } else {
+        ["Peak Hours", "Hourly Order Volume", "12AM", "6AM", "12PM", "6PM"].forEach(
+          (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
+        );
       }
     } else if (activeTab === "menu") {
       menuItems.slice(0, 14).forEach((item) => {
@@ -908,37 +944,53 @@ export function AdminDashboard() {
           query: item.category,
         });
       });
-    } else if (activeTab === "inventory") {
-      inventoryItems.slice(0, 14).forEach((item) => {
-        addSuggestion({ category: "Inventory", label: item.name, query: item.name });
-        addSuggestion({
-          category: "Stock Status",
-          label: getInventoryStatus(item),
-          query: getInventoryStatus(item),
+    } else if (activeTab === "customer-intelligence") {
+      if (
+        customerIntelligenceView === "item-ranking" ||
+        customerIntelligenceView === "satisfaction"
+      ) {
+        displayItemRanking.slice(0, 12).forEach((item) =>
+          addSuggestion({ category: "Items", label: item.item, query: item.item })
+        );
+      } else if (customerIntelligenceView === "feedback") {
+        feedbackRows.slice(0, 14).forEach((row) => {
+          if (row.profiles?.full_name) {
+            addSuggestion({
+              category: "Customers",
+              label: row.profiles.full_name,
+              query: row.profiles.full_name,
+            });
+          }
+          if (row.menu_items?.name) {
+            addSuggestion({
+              category: "Feedback Items",
+              label: row.menu_items.name,
+              query: row.menu_items.name,
+            });
+          }
+          if (row.comment) {
+            addSuggestion({
+              category: "Comments",
+              label: row.comment.slice(0, 60),
+              query: row.comment,
+            });
+          }
         });
-      });
-    } else if (activeTab === "item-ranking" || activeTab === "satisfaction") {
-      displayItemRanking.slice(0, 12).forEach((item) =>
-        addSuggestion({ category: "Items", label: item.item, query: item.item })
-      );
-    } else if (activeTab === "peak-hours" || activeTab === "time-series") {
-      ["Peak Hours", "Hourly Order Volume", "12AM", "6AM", "12PM", "6PM"].forEach(
-        (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
-      );
-    } else if (activeTab === "customer-pref") {
-      orders.slice(0, 14).forEach((order) => {
-        addSuggestion({
-          category: "Customers",
-          label: getOrderDisplayName(order),
-          query: getOrderDisplayName(order),
+      } else {
+        orders.slice(0, 14).forEach((order) => {
+          addSuggestion({
+            category: "Customers",
+            label: getOrderDisplayName(order),
+            query: getOrderDisplayName(order),
+          });
+          formatOrderItems(order)
+            .split(",")
+            .map((item) => item.trim())
+            .forEach((item) =>
+              addSuggestion({ category: "Top Badges", label: item, query: item })
+            );
         });
-        formatOrderItems(order)
-          .split(",")
-          .map((item) => item.trim())
-          .forEach((item) =>
-            addSuggestion({ category: "Top Badges", label: item, query: item })
-          );
-      });
+      }
     }
 
     const keyword = search.trim().toLowerCase();
@@ -957,20 +1009,15 @@ export function AdminDashboard() {
       .slice(0, 8);
   }, [
     activeTab,
+    customerIntelligenceView,
     dashboardTotalOrdersLabel,
+    demandView,
     displayItemRanking,
-    inventoryItems,
+    feedbackRows,
     menuItems,
     orders,
     search,
   ]);
-  const inventorySummary = {
-    total: inventoryItems.length,
-    normal: inventoryItems.filter((item) => getInventoryStatus(item) === "Normal").length,
-    low: inventoryItems.filter((item) => getInventoryStatus(item) === "Low Stock").length,
-    critical: inventoryItems.filter((item) => getInventoryStatus(item) === "Critical").length,
-    overstocked: inventoryItems.filter((item) => getInventoryStatus(item) === "Overstocked").length,
-  };
 
   const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
     setStoreStatus(status);
@@ -1028,14 +1075,8 @@ export function AdminDashboard() {
   useEffect(() => {
     const shouldAutoSync =
       activeTab === "dashboard" ||
-      activeTab === "orders" ||
-      activeTab === "time-series" ||
-      activeTab === "peak-hours" ||
-      activeTab === "item-ranking" ||
-      activeTab === "satisfaction" ||
-      activeTab === "customer-pref" ||
-      activeTab === "inventory" ||
-      activeTab === "feedback";
+      activeTab === "demand" ||
+      activeTab === "customer-intelligence";
 
     if (!shouldAutoSync) {
       return;
@@ -1065,7 +1106,6 @@ export function AdminDashboard() {
       const [
         ordersResponse,
         menuResponse,
-        inventoryResponse,
         feedbackResponse,
         analyticsHourlyResponse,
         analyticsWeeklyResponse,
@@ -1074,7 +1114,6 @@ export function AdminDashboard() {
       ] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
-        fetch("/api/admin/inventory", { method: "GET" }),
         fetch("/api/feedback", { method: "GET" }),
         fetch("/api/admin/analytics/hourly", { method: "GET" }),
         fetch("/api/admin/analytics/weekly", { method: "GET" }),
@@ -1084,7 +1123,6 @@ export function AdminDashboard() {
 
       const ordersResult = await ordersResponse.json();
       const menuResult = await menuResponse.json();
-      const inventoryResult = (await inventoryResponse.json()) as AdminInventoryPayload;
       const feedbackResult = await feedbackResponse.json();
       const analyticsHourlyResult = (await analyticsHourlyResponse.json()) as {
         analyticsDate?: string;
@@ -1116,15 +1154,6 @@ export function AdminDashboard() {
 
       setOrders(ordersResult.orders ?? []);
       setMenuItems(menuResult.menuItems ?? []);
-      if (inventoryResponse.ok) {
-        setInventoryItems(inventoryResult.inventoryItems ?? []);
-        setInventoryMessage("");
-      } else {
-        setInventoryMessage(
-          inventoryResult.error ||
-            "Inventory is not set up yet. Run backend/seed/inventory-items.sql in Supabase."
-        );
-      }
       if (feedbackResponse.ok) {
         setFeedbackRows(feedbackResult.feedback ?? []);
       }
@@ -1271,142 +1300,16 @@ export function AdminDashboard() {
     }
   }
 
-  function replaceInventoryItem(savedItem: InventoryItem) {
-    setInventoryItems((currentItems) => {
-      const itemIndex = currentItems.findIndex(
-        (item) =>
-          (savedItem.id && item.id === savedItem.id) ||
-          item.name.toLowerCase() === savedItem.name.toLowerCase()
-      );
-
-      if (itemIndex === -1) {
-        return [savedItem, ...currentItems];
-      }
-
-      return currentItems.map((item, index) =>
-        index === itemIndex ? savedItem : item
-      );
-    });
-  }
-
-  async function saveInventoryItem(item: InventoryItem) {
-    const existingItem = inventoryItems.find(
-      (currentItem) =>
-        currentItem.id === item.id ||
-        currentItem.name.toLowerCase() === item.name.toLowerCase()
-    );
-    const optimisticItem = { ...existingItem, ...item };
-
-    replaceInventoryItem(optimisticItem);
-    setIsInventorySaving(true);
-    setInventoryMessage("Saving inventory to Supabase...");
-
-    try {
-      const response = await fetch("/api/admin/inventory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(optimisticItem),
-      });
-      const result = (await response.json()) as AdminInventoryPayload;
-
-      if (!response.ok || !result.item) {
-        setInventoryMessage(result.error || "Failed to save inventory item.");
-        void loadAdminData({ showLoading: false });
-        return;
-      }
-
-      replaceInventoryItem(result.item);
-      setInventoryMessage("Inventory saved.");
-    } catch {
-      setInventoryMessage("Something went wrong while saving inventory.");
-      void loadAdminData({ showLoading: false });
-    } finally {
-      setIsInventorySaving(false);
-    }
-  }
-
-  async function setInventoryStock(item: InventoryItem, onHand: number) {
-    replaceInventoryItem({ ...item, onHand });
-
-    if (!item.id) {
-      await saveInventoryItem({ ...item, onHand });
-      return;
-    }
-
-    setIsInventorySaving(true);
-    setInventoryMessage("Saving stock level...");
-
-    try {
-      const response = await fetch("/api/admin/inventory", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id: item.id, onHand }),
-      });
-      const result = (await response.json()) as AdminInventoryPayload;
-
-      if (!response.ok || !result.item) {
-        setInventoryMessage(result.error || "Failed to update stock level.");
-        void loadAdminData({ showLoading: false });
-        return;
-      }
-
-      replaceInventoryItem(result.item);
-      setInventoryMessage("Stock level saved.");
-    } catch {
-      setInventoryMessage("Something went wrong while updating stock.");
-      void loadAdminData({ showLoading: false });
-    } finally {
-      setIsInventorySaving(false);
-    }
-  }
-
-  async function addInventoryStock(item: InventoryItem, amount: number) {
-    replaceInventoryItem({ ...item, onHand: item.onHand + amount });
-
-    if (!item.id) {
-      await saveInventoryItem({ ...item, onHand: item.onHand + amount });
-      return;
-    }
-
-    setIsInventorySaving(true);
-    setInventoryMessage("Adding stock delivery...");
-
-    try {
-      const response = await fetch("/api/admin/inventory", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id: item.id, addStock: amount }),
-      });
-      const result = (await response.json()) as AdminInventoryPayload;
-
-      if (!response.ok || !result.item) {
-        setInventoryMessage(result.error || "Failed to add stock.");
-        void loadAdminData({ showLoading: false });
-        return;
-      }
-
-      replaceInventoryItem(result.item);
-      setInventoryMessage("Stock delivery saved.");
-    } catch {
-      setInventoryMessage("Something went wrong while adding stock.");
-      void loadAdminData({ showLoading: false });
-    } finally {
-      setIsInventorySaving(false);
-    }
-  }
-
   function handleSearchSuggestionSelect(suggestion: AdminSearchSuggestion) {
     setSearch(suggestion.query);
     setIsSearchFocused(false);
 
     if (suggestion.targetTab) {
       setActiveTab(suggestion.targetTab);
+    }
+
+    if (suggestion.targetDemandView) {
+      setDemandView(suggestion.targetDemandView);
     }
 
     if (suggestion.targetId) {
@@ -1421,7 +1324,7 @@ export function AdminDashboard() {
   function handleTabSelect(tab: AdminTab) {
     setActiveTab(tab);
 
-    if (tab === "feedback" || tab === "inventory") {
+    if (tab === "customer-intelligence") {
       void loadAdminData({ showLoading: false });
     }
 
@@ -1443,39 +1346,53 @@ export function AdminDashboard() {
 
       <div
         className={`min-h-screen transition-all duration-300 lg:grid ${isSidebarOpen
-          ? "lg:grid-cols-[190px_minmax(0,1fr)]"
-          : "lg:grid-cols-[76px_minmax(0,1fr)]"
+          ? "lg:grid-cols-[238px_minmax(0,1fr)]"
+          : "lg:grid-cols-[88px_minmax(0,1fr)]"
           }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[220px] flex-col overflow-hidden rounded-r-[26px] bg-[#0D2E18] text-[#FFF0DA] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[238px] flex-col overflow-hidden bg-[#0D2E18] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
             }`}
         >
           <div
-            className={`flex items-center gap-3 pt-9 ${isSidebarOpen ? "justify-between px-7" : "justify-center px-3"
+            className={`flex items-center gap-3 pt-7 ${isSidebarOpen ? "justify-between px-5" : "justify-center px-3"
               }`}
           >
-            <p
-              className={`font-sans font-semibold leading-none tracking-[-0.04em] transition-all ${isSidebarOpen ? "text-[2rem]" : "text-[1.35rem]"
-                }`}
-            >
-              {isSidebarOpen ? "KadaServe" : "KS"}
-            </p>
+            <div className={`flex items-center gap-3 ${isSidebarOpen ? "" : "justify-center"}`}>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-[#FFF0DA]/18 bg-[#FFF0DA]/12 font-sans text-sm font-black text-[#FFF8EF]">
+                KS
+              </div>
+              {isSidebarOpen ? (
+                <div>
+                  <p className="font-sans text-[1.65rem] font-black leading-none text-[#FFF8EF]">
+                    KadaServe
+                  </p>
+                  <p className="mt-1 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/78">
+                    Admin Panel
+                  </p>
+                </div>
+              ) : null}
+            </div>
 
             <button
               type="button"
               onClick={() => setIsSidebarOpen((current) => !current)}
               aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/18"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#FFF0DA]/12 bg-[#FFF0DA]/8 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/16"
             >
               {isSidebarOpen ? <X size={20} /> : <MenuIcon size={20} />}
             </button>
           </div>
 
           <nav
-            className={`mt-24 space-y-1 ${isSidebarOpen ? "pl-4 pr-0" : "px-3"
+            className={`mt-12 space-y-2 ${isSidebarOpen ? "px-4" : "px-3"
               }`}
           >
+            {isSidebarOpen ? (
+              <p className="px-3 pb-2 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/68">
+                Navigation
+              </p>
+            ) : null}
             {adminTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -1487,10 +1404,8 @@ export function AdminDashboard() {
                   onClick={() => handleTabSelect(tab.key)}
                   title={tab.label}
                   className={`flex w-full items-center gap-3 px-4 py-2.5 text-left font-sans text-sm font-semibold leading-tight transition ${isActive
-                    ? isSidebarOpen
-                      ? "relative -mr-5 rounded-l-[14px] rounded-r-none bg-[#FFF0DA] text-[#0D2E18] after:absolute after:bottom-0 after:right-[-20px] after:top-0 after:w-5 after:bg-[#FFF0DA]"
-                      : "justify-center rounded-[16px] bg-[#FFF0DA] text-[#0D2E18]"
-                    : "rounded-[14px] text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
+                    ? "rounded-[18px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_14px_34px_rgba(0,0,0,0.2)]"
+                    : "rounded-[18px] text-[#FFF0DA]/82 hover:bg-[#FFF0DA]/10 hover:text-[#FFF8EF]"
                     }`}
                 >
                   <Icon size={20} className="shrink-0" />
@@ -1510,7 +1425,7 @@ export function AdminDashboard() {
               onClick={handleLogout}
               disabled={isLoggingOut}
               title="Logout"
-              className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
+              className={`flex w-full items-center gap-3 rounded-[18px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/12 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
                 }`}
             >
               <LogOut size={20} className="shrink-0" />
@@ -1519,9 +1434,9 @@ export function AdminDashboard() {
           </div>
         </aside>
 
-        <section className="min-w-0">
-          <header className="border-b border-[#DCCFB8] bg-white/88">
-            <div className="grid gap-3 px-5 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
+        <section className="min-w-0 bg-[#FFF0DA]">
+          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-[#FFFCF7]/96 text-[#0D2E18] shadow-[0_12px_30px_rgba(104,75,53,0.08)] backdrop-blur">
+            <div className="grid gap-3 px-5 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -1532,11 +1447,11 @@ export function AdminDashboard() {
                   <MenuIcon size={20} />
                 </button>
                 <div>
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
                     Admin Dashboard
                   </p>
                   <div className="mt-1 flex items-center gap-2">
-                    <h1 className="font-sans text-2xl font-bold leading-none text-[#0D2E18]">
+                    <h1 className="font-sans text-2xl font-black leading-none text-[#0D2E18]">
                       {activeHeaderTitle}
                     </h1>
                     <button
@@ -1557,7 +1472,7 @@ export function AdminDashboard() {
 
               <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
                 <div className="relative w-full max-w-[260px]">
-                  <label className="flex h-10 items-center gap-2 rounded-[14px] bg-[#FFF0DA] px-3 shadow-[inset_0_0_0_1px_rgba(216,200,167,0.42)]">
+                  <label className="flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
                     <Search size={15} className="text-[#8C7A64]" />
                     <input
                       value={search}
@@ -1645,13 +1560,13 @@ export function AdminDashboard() {
               </div>
             </div>
             {storeStatusError ? (
-              <p className="border-t border-[#F0DDC0] bg-[#FFF8EF] px-7 py-2 font-sans text-xs font-semibold text-[#9C543D]">
+              <p className="border-t border-[#FFF0DA]/10 bg-[#FFF1EC] px-7 py-2 font-sans text-xs font-semibold text-[#9C543D]">
                 {storeStatusError}
               </p>
             ) : null}
           </header>
 
-          <div className="px-5 py-4 xl:px-6">
+          <div className="px-5 py-5 xl:px-6">
             {error ? (
               <div className="mb-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
                 {error}
@@ -1661,6 +1576,7 @@ export function AdminDashboard() {
             {activeTab === "dashboard" ? (
               <DashboardView
                 averageOrderValue={dashboardMetrics.averageOrderValue}
+                feedbackCount={feedbackRows.length}
                 hourlyDateLabel={analyticsHourlyDateLabel}
                 hourlyCounts={hourlyCounts}
                 itemRanking={displayItemRanking}
@@ -1679,64 +1595,147 @@ export function AdminDashboard() {
               />
             ) : null}
 
-            {activeTab === "orders" ? (
-              <OrdersView
-                filteredOrders={filteredOrders}
-                onOpenOrder={setSelectedOrder}
-              />
+            {activeTab === "demand" ? (
+              <div className="space-y-4">
+                <section className="rounded-[22px] border border-[#D8C8AA] bg-white/92 px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
+                        Demand Workspace
+                      </p>
+                      <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
+                        Orders, volume trends, and peak windows
+                      </h2>
+                    </div>
+
+                    <div className="grid gap-2 rounded-[999px] border border-[#D8C8AA] bg-[#FFF8EF] p-1 sm:grid-cols-3">
+                      {demandViews.map((view) => {
+                        const isActive = demandView === view.key;
+
+                        return (
+                          <button
+                            key={view.key}
+                            type="button"
+                            onClick={() => setDemandView(view.key)}
+                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition sm:min-w-[130px] ${
+                              isActive
+                                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                                : "text-[#684B35] hover:bg-white"
+                            }`}
+                          >
+                            <span className="block leading-tight">{view.label}</span>
+                            <span
+                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${
+                                isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
+                              }`}
+                            >
+                              {view.description}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+
+                {demandView === "orders" ? (
+                  <OrdersView
+                    filteredOrders={filteredOrders}
+                    onOpenOrder={setSelectedOrder}
+                  />
+                ) : null}
+
+                {demandView === "time-series" ? (
+                  <TimeSeriesView
+                    dateLabel={analyticsHourlyDateLabel}
+                    hourlyCounts={scopedHourlyCounts}
+                    maxHourlyOrders={maxScopedHourlyOrders}
+                  />
+                ) : null}
+
+                {demandView === "peak-hours" ? (
+                  <PeakHoursView peakHourWindows={scopedPeakHourWindows} />
+                ) : null}
+              </div>
             ) : null}
 
-            {activeTab === "time-series" ? (
-              <TimeSeriesView
-                dateLabel={analyticsHourlyDateLabel}
-                hourlyCounts={scopedHourlyCounts}
-                maxHourlyOrders={maxScopedHourlyOrders}
-              />
-            ) : null}
+            {activeTab === "customer-intelligence" ? (
+              <div className="space-y-4">
+                <section className="rounded-[22px] border border-[#D8C8AA] bg-white/92 px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
+                  <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+                    <div>
+                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
+                        Customer Intelligence
+                      </p>
+                      <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
+                        Preference signals, rankings, ratings, and feedback
+                      </h2>
+                    </div>
 
-            {activeTab === "peak-hours" ? (
-              <PeakHoursView peakHourWindows={scopedPeakHourWindows} />
-            ) : null}
+                    <div className="grid gap-2 rounded-[28px] border border-[#D8C8AA] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:grid-cols-4">
+                      {customerIntelligenceViews.map((view) => {
+                        const isActive = customerIntelligenceView === view.key;
 
-            {activeTab === "item-ranking" ? (
-              <ItemRankingView
-                itemRanking={scopedItemRanking}
-                maxItemOrders={maxScopedItemOrders}
-              />
-            ) : null}
+                        return (
+                          <button
+                            key={view.key}
+                            type="button"
+                            onClick={() => setCustomerIntelligenceView(view.key)}
+                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[124px] ${
+                              isActive
+                                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                                : "text-[#684B35] hover:bg-white"
+                            }`}
+                          >
+                            <span className="block leading-tight">{view.label}</span>
+                            <span
+                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${
+                                isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
+                              }`}
+                            >
+                              {view.description}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
 
-            {activeTab === "satisfaction" ? (
-              <SatisfactionView feedbackRows={scopedFeedbackRows} />
-            ) : null}
+                {customerIntelligenceView === "customer-pref" ? (
+                  <CustomerPreferenceView
+                    feedbackRows={feedbackRows}
+                    globalAnalyticsItems={analyticsItems}
+                    menuItems={menuItems}
+                    orders={scopedCustomerPreferenceOrders}
+                  />
+                ) : null}
 
-            {activeTab === "customer-pref" ? (
-              <CustomerPreferenceView
-                feedbackRows={feedbackRows}
-                globalAnalyticsItems={analyticsItems}
-                menuItems={menuItems}
-                orders={scopedCustomerPreferenceOrders}
-              />
-            ) : null}
+                {customerIntelligenceView === "item-ranking" ? (
+                  <ItemRankingView
+                    itemRanking={scopedItemRanking}
+                    maxItemOrders={maxScopedItemOrders}
+                  />
+                ) : null}
 
-            {activeTab === "feedback" ? (
-              <FeedbackManagementView feedbackRows={feedbackRows} />
+                {customerIntelligenceView === "satisfaction" ? (
+                  <SatisfactionView feedbackRows={scopedFeedbackRows} />
+                ) : null}
+
+                {customerIntelligenceView === "feedback" ? (
+                  <FeedbackManagementView feedbackRows={scopedFeedbackRows} />
+                ) : null}
+              </div>
             ) : null}
 
             {activeTab === "menu" ? (
-              <MenuView menuItems={scopedMenuItems} setMenuItems={setMenuItems} />
-            ) : null}
-
-            {activeTab === "inventory" ? (
-              <InventoryView
-                inventoryItems={scopedInventoryItems}
-                inventorySummary={inventorySummary}
-                onSetStock={setInventoryStock}
-                onAddStock={addInventoryStock}
-                onSaveItem={saveInventoryItem}
-                isInventorySaving={isInventorySaving}
-                inventoryMessage={inventoryMessage}
+              <MenuView
+                itemPerformance={displayItemRanking}
+                menuItems={scopedMenuItems}
+                setMenuItems={setMenuItems}
               />
             ) : null}
+
           </div>
         </section>
       </div>

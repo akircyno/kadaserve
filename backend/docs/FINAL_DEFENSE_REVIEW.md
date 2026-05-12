@@ -1,6 +1,6 @@
 # Final Defense Review
 
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 
 ## System Summary
 
@@ -60,11 +60,11 @@ The final defense should position it as a Computer Science project because the s
 
 ### Admin
 
-- Menu management.
-- Inventory management.
-- Analytics dashboards.
-- Customer preference analytics.
-- Time and item analytics.
+- Menu Intelligence with recommendation candidates, category demand signals, review candidates, active coverage, and per-item performance labels.
+- Analytics dashboard with a decision-support snapshot for demand, growth, preference, and satisfaction signals.
+- Demand module that combines order records, hourly demand trends, and peak-hour detection.
+- Customer Intelligence module that combines preference signals, item ranking, satisfaction quality, and feedback review.
+- The admin experience emphasizes Computer Science-related analytics, recommendation signals, and decision support instead of stock-management workflows.
 
 ### Payment
 

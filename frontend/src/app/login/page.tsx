@@ -145,7 +145,7 @@ function LoginForm() {
             <ul className="space-y-3 font-sans text-sm text-[#FFF0DA]/78">
               {[
                 "Live Order Tracking",
-                "Smart Inventory Insights",
+                "Preference-Based Insights",
                 "Seamless Staff Management",
               ].map((item) => (
                 <li key={item} className="flex items-center gap-3">

@@ -216,7 +216,6 @@ Before querying history, the endpoint also applies the same 45-minute pending ex
 Admin routes support:
 
 - menu management
-- inventory
 - analytics
 - customer preference analytics
 - item ranking

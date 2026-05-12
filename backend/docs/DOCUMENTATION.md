@@ -52,6 +52,19 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Staff shared header was polished again with a warmer cafe-gradient surface, a small title accent marker, a softer mobile menu button, and a responsive controls tray that can move to its own row on smaller screens.
 - Staff shared header was tuned for laptop widths by keeping the title and command controls in a clean two-row layout until very wide screens, preventing search/status controls from crowding or overlapping the page title.
 - Frontend hook warnings were cleaned up by stabilizing the staff order loader and customer feedback prompt helpers, keeping lint clean while preserving auto-sync and feedback behavior.
+- Added `frontend/codex.md` as the frontend working guide for future Codex sessions, including the KadaServe stack, cafe color palette, UI/engineering rules, and the `Build -> Test -> Approve -> Next Feature` one-feature-at-a-time workflow.
+- Admin Feature 1 removed the stock-management module from the active code and admin panel flow so future work can focus on analytics, preference learning, menu intelligence, and demand intelligence.
+- Admin Feature 2 merged `All Orders`, `Time Series`, and `Peak Hours` into one `Demand` admin module with internal views, reducing sidebar clutter while keeping demand records, hourly volume, and peak-window detection together.
+- Admin Feature 3 merged `Item Ranking`, `Satisfaction`, `Customer Pref`, and `Feedback` into one `Customer Intelligence` admin module with internal views for preference signals, item ranking, satisfaction quality, and raw feedback review.
+- Admin Feature 4 upgraded the admin dashboard with a `Decision Support Snapshot` that computes demand, growth, preference, and satisfaction signals from existing order, analytics, ranking, and feedback data.
+- Admin Feature 5 upgraded the `Menu` module into `Menu Intelligence` by computing recommendation candidates, strongest category, review candidates, active coverage, and per-item performance signals from order ranking, rating, revenue, availability, and category demand.
+- Admin UI copy was trimmed to remove developer-style explanatory text from the Dashboard, Demand, Customer Intelligence, and Menu Intelligence headers so the admin panel reads like a ready-to-demonstrate system.
+- Admin visual design pass 1 restyled the admin shell and dashboard using the provided dark dashboard reference as inspiration: stronger deep-green sidebar, dark top command bar, warm content canvas, raised KPI cards, dark snapshot band, and cleaner dashboard chart panels.
+- Admin visual design pass 2 corrected the admin header/dashboard back to a warm light theme and replaced the old weekly trend bars with a `Demand Growth` line/area chart inspired by the provided graph reference, using existing weekly analytics data.
+- Admin `Demand Growth` chart was improved with a smoother line, selected-range summary, hover/focus point details, active guide line, stronger point state, and safer axis labels that do not clip on wide labels.
+- Admin dashboard lower cards were balanced: `Orders - Week`, `Hourly Order Volume`, `Top Items`, and `Satisfaction` now use equal card rows, tighter inner spacing, compact chart/list surfaces, and wrapped hourly mini-bars to avoid oversized widths.
+- Admin `Demand Growth` now supports quick selected ranges (`Last 4`, `Last 8`, `All`), and the `Peak Hours` card was tightened with a strongest-slot summary and compact heatmap cells to better match the balanced dashboard card system.
+- Admin dashboard `Demand Growth` and `Peak Hours` cards now use equal-width, equal-height grid columns with a slightly more compact growth chart so the top analytics row aligns cleanly.
 
 ## Current Payment Behavior
 

@@ -52,7 +52,7 @@ const systemFlow = [
   { label: "Order", detail: "Pickup, delivery, or walk-in data is captured", icon: Coffee },
   { label: "Staff Processing", detail: "Queue moves one clear status at a time", icon: ClipboardList },
   { label: "Admin Analytics", detail: "Trends, peaks, rankings, and scores update", icon: BarChart3 },
-  { label: "Smarter Decisions", detail: "Menu, staffing, and inventory become easier to plan", icon: Brain },
+  { label: "Smarter Decisions", detail: "Menu, demand, and preferences become easier to analyze", icon: Brain },
 ];
 
 const roleCards = [
