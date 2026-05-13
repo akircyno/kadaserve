@@ -83,15 +83,15 @@ export async function POST(request: Request) {
       redirectTo: `${siteOrigin}/auth/callback?next=/reset-password`,
     });
 
-    return NextResponse.json({
-      success: true,
-      message:
-        "If this email is registered, we sent a password reset link to it.",
-    });
-  } catch {
-    return NextResponse.json(
-      { error: "Unable to send password reset instructions right now." },
-      { status: 500 }
-    );
+      return NextResponse.json({
+        success: true,
+        message:
+          "If this email is registered, we sent a password reset link to it.",
+      });
+    } catch {
+      return NextResponse.json(
+        { error: "Unable to send password reset instructions right now." },
+        { status: 500 }
+      );
+    }
   }
-}

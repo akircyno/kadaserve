@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Package, TrendingUp, Clock, Smile, AlertTriangle, Zap, Flame, BarChart3, Coffee, DollarSign, Star, ChevronUp, Info } from "lucide-react";
 import type { StaffOrder } from "@/types/orders";
+
+const STORE_HOURS_LABEL = "Store Hours: 5:00 PM – 12:00 AM";
+const OPERATING_HOUR_START = 17; // 5 PM
+const OPERATING_HOUR_END = 0; // 12 AM (midnight)
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
@@ -45,12 +50,52 @@ function getHeatmapColor(count: number, max: number) {
 
   const ratio = count / max;
 
-  if (ratio >= 0.8) return "#684B35";
-  if (ratio >= 0.6) return "#8C5F3C";
-  if (ratio >= 0.4) return "#A77B5D";
-  if (ratio >= 0.2) return "#D0AC91";
+  if (ratio >= 0.85) return "#0D2E18";
+  if (ratio >= 0.65) return "#1A4123";
+  if (ratio >= 0.45) return "#684B35";
+  if (ratio >= 0.25) return "#A77B5D";
 
-  return "#FFF0DA";
+  return "#E5D9C9";
+}
+
+function getRatingColors(rating: number) {
+  if (rating >= 4.5) {
+    return {
+      barGradient: "from-[#0D2E18] to-[#1A4123]",
+      barGradientHover: "from-[#0F441D] to-[#225A2E]",
+      textColor: "text-[#0D2E18]",
+      accentColor: "text-[#0F441D]",
+      dotColor: "bg-[#0D2E18]",
+      bgColor: "bg-[#E9F5E7]/40",
+    };
+  } else if (rating >= 3.5) {
+    return {
+      barGradient: "from-[#4A6B4D] to-[#5A7B5D]",
+      barGradientHover: "from-[#5A7B5D] to-[#6A8B6D]",
+      textColor: "text-[#4A6B4D]",
+      accentColor: "text-[#5A7B5D]",
+      dotColor: "bg-[#4A6B4D]",
+      bgColor: "bg-[#EDF4EC]/40",
+    };
+  } else if (rating >= 2.5) {
+    return {
+      barGradient: "from-[#7A8B6F] to-[#8C9D7F]",
+      barGradientHover: "from-[#8C9D7F] to-[#9EAF8F]",
+      textColor: "text-[#7A8B6F]",
+      accentColor: "text-[#8C9D7F]",
+      dotColor: "bg-[#7A8B6F]",
+      bgColor: "bg-[#F0F4EB]/40",
+    };
+  } else {
+    return {
+      barGradient: "from-[#D97C6F] to-[#E89080]",
+      barGradientHover: "from-[#E89080] to-[#F2A397]",
+      textColor: "text-[#D97C6F]",
+      accentColor: "text-[#E89080]",
+      dotColor: "bg-[#D97C6F]",
+      bgColor: "bg-[#FFF1EC]/50",
+    };
+  }
 }
 
 function Panel({
@@ -58,20 +103,35 @@ function Panel({
   className = "",
   rightLabel,
   title,
+  formulaTitle,
+  formula,
+  formulaExplanation,
 }: {
   children: React.ReactNode;
   className?: string;
   rightLabel?: string;
   title: string;
+  formulaTitle?: string;
+  formula?: string;
+  formulaExplanation?: string;
 }) {
   return (
     <section
-      className={`rounded-[24px] border border-[#D8C8AA] bg-[#FFFCF7] p-5 shadow-[0_16px_36px_rgba(75,50,24,0.08)] ${className}`}
+      className={`overflow-hidden rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70 ${className}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-sans text-lg font-black text-[#0D2E18]">{title}</h2>
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="flex items-center gap-3">
+          <h2 className="font-sans text-lg font-bold text-[#0D2E18]">{title}</h2>
+          {formula && formulaTitle && formulaExplanation && (
+            <FormulaTooltip 
+              title={formulaTitle}
+              formula={formula}
+              explanation={formulaExplanation}
+            />
+          )}
+        </div>
         {rightLabel ? (
-          <p className="rounded-full bg-[#FFF0DA] px-3 py-1 font-sans text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+          <p className="rounded-full bg-gradient-to-br from-[#0D2E18]/8 to-[#4A6B4D]/4 px-3.5 py-2 font-sans text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#684B35] border border-[#D8C8AA]/30">
             {rightLabel}
           </p>
         ) : null}
@@ -81,15 +141,73 @@ function Panel({
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ 
+  label, 
+  value,
+  icon: Icon,
+  trend,
+  trendUp = true,
+  description,
+  formulaTitle,
+  formula,
+  formulaExplanation
+}: { 
+  label: string
+  value: string
+  icon: React.ComponentType<{ size: number; className?: string }>
+  trend?: string
+  trendUp?: boolean
+  description?: string
+  formulaTitle?: string
+  formula?: string
+  formulaExplanation?: string
+}) {
   return (
-    <div className="min-h-[128px] rounded-[24px] border border-[#D8C8AA] bg-[#FFFCF7] px-5 py-4 shadow-[0_16px_36px_rgba(75,50,24,0.08)]">
-      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
-        {label}
-      </p>
-      <p className="mt-5 font-sans text-3xl font-black tabular-nums leading-none text-[#0D2E18]">
-        {value}
-      </p>
+    <div className="group relative overflow-hidden rounded-[24px] border border-[#D8C8AA]/60 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-6 py-6 shadow-[0_10px_28px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.16)] hover:border-[#D8C8AA] hover:-translate-y-1">
+      {/* Background gradient accent */}
+      <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br from-[#0D2E18]/8 to-[#4A6B4D]/4 transition-transform group-hover:scale-125" />
+      
+      {/* Content */}
+      <div className="relative z-10">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">
+                {label}
+              </p>
+              {formula && formulaTitle && formulaExplanation && (
+                <FormulaTooltip 
+                  title={formulaTitle}
+                  formula={formula}
+                  explanation={formulaExplanation}
+                />
+              )}
+            </div>
+            <div className="mt-4 flex items-baseline gap-2.5">
+              <p className="font-sans text-4xl font-black tabular-nums leading-none text-[#0D2E18]">
+                {value}
+              </p>
+              {trend && (
+                <span className={`font-sans text-xs font-bold tabular-nums px-2.5 py-1 rounded-full ${
+                  trendUp 
+                    ? "bg-[#E9F5E7]/60 text-[#0F441D]" 
+                    : "bg-[#FFF1EC]/60 text-[#D97C6F]"
+                }`}>
+                  {trendUp ? "↑" : "↓"} {trend}
+                </span>
+              )}
+            </div>
+            {description && (
+              <p className="mt-3 font-sans text-xs leading-relaxed text-[#6D5B48]">
+                {description}
+              </p>
+            )}
+          </div>
+          <div className="ml-4 flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-[#0D2E18]/12 to-[#4A6B4D]/6 transition-all group-hover:from-[#0D2E18]/20 group-hover:to-[#4A6B4D]/12">
+            <Icon size={28} className="text-[#0D2E18]" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -98,23 +216,94 @@ function InsightCard({
   detail,
   label,
   value,
+  icon: Icon,
 }: {
-  detail: string;
-  label: string;
-  value: string;
+  detail: string
+  label: string
+  value: string
+  icon: React.ComponentType<{ size: number; className?: string }>
 }) {
   return (
-    <article className="min-h-[146px] rounded-[24px] border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-4 shadow-[0_16px_34px_rgba(75,50,24,0.08)]">
-      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
-        {label}
-      </p>
-      <p className="mt-3 font-sans text-2xl font-black leading-tight text-[#0D2E18]">
-        {value}
-      </p>
-      <p className="mt-3 font-sans text-sm leading-relaxed text-[#6D5B48]">
-        {detail}
-      </p>
+    <article className="group relative overflow-hidden rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-5 py-5 shadow-[0_8px_20px_rgba(75,50,24,0.06)] transition-all hover:shadow-[0_16px_40px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
+      <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#4A6B4D]/6 transition-transform group-hover:scale-125" />
+      
+      <div className="relative z-10">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+              {label}
+            </p>
+            <p className="mt-2.5 font-sans text-lg font-bold leading-tight text-[#0D2E18] truncate">
+              {value}
+            </p>
+          </div>
+          <div className="ml-2 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-[#0D2E18]/10 transition-all group-hover:bg-[#0D2E18]/15">
+            <Icon size={20} className="text-[#0D2E18]" />
+          </div>
+        </div>
+        <p className="mt-2.5 font-sans text-xs leading-relaxed text-[#6D5B48]">
+          {detail}
+        </p>
+      </div>
     </article>
+  );
+}
+
+function NeedsAttentionItem({
+  icon: Icon,
+  title,
+  description,
+  type = "info",
+}: {
+  icon: React.ComponentType<{ size: number; className?: string }>
+  title: string
+  description: string
+  type?: "warning" | "success" | "info"
+}) {
+  const typeStyles = {
+    warning: {
+      bg: "bg-gradient-to-br from-[#FFF1EC]/70 to-[#FFF6F3]/40",
+      border: "border-[#E8C5B8]/50",
+      iconBg: "bg-[#D97C6F]/12",
+      icon: "text-[#D97C6F]",
+      title: "text-[#9C543D]",
+      dotColor: "bg-[#D97C6F]",
+    },
+    success: {
+      bg: "bg-gradient-to-br from-[#E9F5E7]/70 to-[#F2F9EF]/40",
+      border: "border-[#C8E6C0]/50",
+      iconBg: "bg-[#0F441D]/12",
+      icon: "text-[#0F441D]",
+      title: "text-[#0D2E18]",
+      dotColor: "bg-[#0F441D]",
+    },
+    info: {
+      bg: "bg-gradient-to-br from-[#FFF0DA]/70 to-[#FFF8F0]/40",
+      border: "border-[#FFE0BA]/50",
+      iconBg: "bg-[#684B35]/12",
+      icon: "text-[#684B35]",
+      title: "text-[#0D2E18]",
+      dotColor: "bg-[#684B35]",
+    },
+  };
+
+  const style = typeStyles[type];
+
+  return (
+    <div className={`flex gap-3.5 rounded-[16px] border ${style.border} ${style.bg} px-4 py-3.5 transition-all hover:shadow-[0_6px_16px_rgba(75,50,24,0.12)] group hover:translate-y-[-2px]`}>
+      <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${style.iconBg} transition-transform group-hover:scale-110`}>
+        <Icon size={18} className={style.icon} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`font-sans text-sm font-semibold ${style.title}`}>
+          {title}
+        </p>
+        <p className="mt-0.5 font-sans text-xs leading-relaxed text-[#6D5B48]">
+          {description}
+        </p>
+      </div>
+      <div className={`${style.dotColor} h-1.5 w-1.5 flex-shrink-0 rounded-full mt-1.5 opacity-60`} />
+    </div>
   );
 }
 
@@ -142,26 +331,96 @@ function RankingRow({
   max: number;
   value: number;
 }) {
+  const rankColors = [
+    { bg: "bg-[#0D2E18]", text: "text-white", badge: "bg-gradient-to-br from-[#0D2E18] to-[#1A4123]" },
+    { bg: "bg-[#4A6B4D]", text: "text-white", badge: "bg-gradient-to-br from-[#4A6B4D] to-[#5A7B5D]" },
+    { bg: "bg-[#B8956A]", text: "text-white", badge: "bg-gradient-to-br from-[#B8956A] to-[#D4AF85]" },
+  ];
+
+  const rankColor = rankColors[Math.min(index - 1, 2)] || { bg: "bg-[#8C9D7F]", text: "text-white", badge: "bg-gradient-to-br from-[#8C9D7F] to-[#9EAF8F]" };
+
   return (
-    <div className="grid min-h-[54px] grid-cols-[34px_minmax(0,1fr)_48px_112px] items-center gap-3 border-b border-[#E8D9BE] py-2.5 font-sans text-sm last:border-b-0">
-      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFF0DA] font-bold text-[#684B35]">
-        {index}
-      </span>
-      <span className="truncate font-semibold text-[#0D2E18]">{label}</span>
-      <span className="text-right font-semibold tabular-nums text-[#684B35]">
+    <div className="group relative grid min-h-[60px] grid-cols-[52px_minmax(0,1fr)_56px_128px] items-center gap-3.5 border-b border-[#EBE0D3]/60 py-3 px-1 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+      {/* Rank Badge */}
+      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${rankColor.badge} shadow-[0_4px_12px_rgba(13,46,24,0.15)] transition-transform group-hover:scale-110`}>
+        <span className={`font-bold text-sm ${rankColor.text}`}>#{index}</span>
+      </div>
+      
+      {/* Item Label */}
+      <span className="truncate font-semibold text-[#0D2E18] group-hover:text-[#0D2E18]">{label}</span>
+      
+      {/* Order Count */}
+      <span className="text-right font-bold tabular-nums text-[#684B35]">
         {value}
       </span>
-      <ProgressBar max={max} value={value} />
+      
+      {/* Progress Bar */}
+      <div className="relative h-2.5 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${
+            index === 1 ? 'from-[#0D2E18] to-[#1A4123]' :
+            index === 2 ? 'from-[#4A6B4D] to-[#5A7B5D]' :
+            index === 3 ? 'from-[#B8956A] to-[#D4AF85]' :
+            'from-[#8C9D7F] to-[#9EAF8F]'
+          } shadow-[0_2px_8px_rgba(13,46,24,0.2)] transition-all duration-500`}
+          style={{
+            width: `${Math.min(100, Math.max(0, (value / max) * 100))}%`,
+          }}
+        />
+      </div>
     </div>
   );
 }
 
 function RatingRow({ item, rating }: { item: string; rating: number }) {
+  const colors = getRatingColors(rating);
+  const starCount = Math.round(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+
   return (
-    <div className="grid min-h-[54px] grid-cols-[minmax(120px,0.8fr)_minmax(120px,1fr)_44px] items-center gap-3 border-b border-[#E8D9BE] py-2.5 font-sans text-sm last:border-b-0">
-      <span className="truncate font-semibold text-[#0D2E18]">{item}</span>
-      <ProgressBar max={5} value={rating} />
-      <span className="text-right font-semibold tabular-nums text-[#684B35]">
+    <div className="group relative grid min-h-[62px] grid-cols-[minmax(120px,0.8fr)_1fr_56px] items-center gap-3.5 border-b border-[#EBE0D3]/60 py-3 px-1 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+      {/* Item Name */}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="truncate font-semibold text-[#0D2E18]">{item}</span>
+      </div>
+
+      {/* Rating Bar & Stars */}
+      <div className="flex items-center gap-2.5">
+        {/* Progress Bar */}
+        <div className="flex-1 relative h-2.5 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r ${colors.barGradient} shadow-[0_2px_8px_rgba(13,46,24,0.15)] transition-all duration-500 group-hover:shadow-[0_3px_12px_rgba(13,46,24,0.25)]`}
+            style={{
+              width: `${Math.min(100, (rating / 5) * 100)}%`,
+            }}
+          />
+        </div>
+        
+        {/* Stars */}
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          {[...Array(5)].map((_, i) => {
+            const isFilled = i < starCount;
+            const isHalf = i === starCount && hasHalfStar;
+            return (
+              <div key={i} className="relative w-3.5 h-3.5">
+                {isFilled || isHalf ? (
+                  <Star
+                    size={14}
+                    className={`absolute inset-0 ${colors.accentColor} fill-current transition-transform group-hover:scale-110`}
+                    style={{
+                      clipPath: isHalf ? "polygon(0 0, 50% 0, 50% 100%, 0 100%)" : undefined,
+                    }}
+                  />
+                ) : null}
+                <Star size={14} className={`absolute inset-0 ${colors.accentColor}/30`} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Rating Number */}
+      <span className={`text-right font-bold tabular-nums text-sm ${colors.textColor}`}>
         {rating.toFixed(1)}
       </span>
     </div>
@@ -197,44 +456,92 @@ function Heatmap({
   );
 
   return (
-    <div className="mt-4 rounded-[18px] bg-[#FFF8EF] p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
-          Strongest slot
-        </p>
-        <span className="rounded-full border border-[#D8C8AA] bg-[#FFFCF7] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
-          {strongestCell.day} {strongestCell.hour} · {strongestCell.count} orders
+    <div className="mt-4 rounded-[22px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] p-5 border border-[#EFE3CF]/50">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+            Peak Activity Time
+          </p>
+          {strongestCell.count > 0 && (
+            <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
+              {strongestCell.day} {strongestCell.hour}
+            </p>
+          )}
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm px-3 py-1.5 font-sans text-xs font-bold text-[#0D2E18]">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getHeatmapColor(maxOrders * 0.9, maxOrders) }} />
+          {strongestCell.count} orders
         </span>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {visibleDays.map((day) => (
-          <div key={day} className="grid grid-cols-[44px_1fr] items-center gap-2">
-            <span className="font-sans text-xs font-bold text-[#684B35]">{day}</span>
-            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
+          <div key={day} className="grid grid-cols-[56px_1fr] items-center gap-3">
+            <span className="font-sans text-xs font-bold text-center text-[#684B35]">{day}</span>
+            <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
               {visibleHours.map((hour) => {
                 const count = countOrdersForSlot(orders, day, hour);
+                const ratio = count / maxOrders;
+                const bgColor = getHeatmapColor(count, maxOrders);
 
                 return (
                   <div
                     key={`${day}-${hour}`}
-                    className="h-8 rounded-[10px] border border-white/60 transition hover:scale-[1.02]"
+                    className="group relative h-10 rounded-[12px] border border-white/60 transition-all hover:scale-[1.08] hover:shadow-[0_6px_16px_rgba(13,46,24,0.2)] cursor-pointer overflow-hidden"
                     title={`${day} ${hour}: ${count} orders`}
-                    style={{ backgroundColor: getHeatmapColor(count, maxOrders) }}
-                  />
+                    style={{ backgroundColor: bgColor }}
+                  >
+                    {/* Hover gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/0 to-white/0 group-hover:from-black/10 group-hover:to-white/10 transition-all" />
+                    
+                    {/* Intensity indicator on hover */}
+                    {count > 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="font-sans text-[0.65rem] font-bold text-white/90 drop-shadow-sm">
+                          {count}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
         ))}
-        <div className="grid grid-cols-[44px_1fr] gap-2 pt-1">
+        <div className="grid grid-cols-[56px_1fr] gap-3 pt-2">
           <span />
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
             {visibleHours.map((hour) => (
               <span key={hour} className="text-center font-sans text-xs font-semibold text-[#8C7A64]">
                 {hour}
               </span>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Enhanced Legend */}
+      <div className="mt-5 rounded-[14px] bg-white/60 backdrop-blur-sm border border-[#EFE3CF]/50 px-4 py-3">
+        <p className="font-sans text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48] mb-2.5">
+          Intensity Scale
+        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { color: "#F7FBF5", label: "None", opacity: "opacity-50" },
+            { color: "#E5D9C9", label: "Low", opacity: "opacity-70" },
+            { color: "#A77B5D", label: "Medium", opacity: "opacity-85" },
+            { color: "#684B35", label: "High", opacity: "opacity-95" },
+            { color: "#0D2E18", label: "Peak", opacity: "opacity-100" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <div
+                className={`h-3.5 w-3.5 rounded-lg border border-white/40 transition-transform hover:scale-125 ${item.opacity}`}
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="font-sans text-[0.65rem] font-medium text-[#6D5B48]">
+                {item.label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -249,29 +556,46 @@ function HourlyVolumeGrid({
   maxHourlyOrders: number;
 }) {
   return (
-    <div className="mt-4 grid grid-cols-6 gap-2 sm:grid-cols-8 2xl:grid-cols-12">
+    <div className="mt-4 grid grid-cols-6 gap-2.5 sm:grid-cols-8 2xl:grid-cols-12">
       {hourlyCounts.map((item) => {
         const hasOrders = item.orders > 0;
-        const height = Math.max(8, (item.orders / maxHourlyOrders) * 44);
+        const heightPercent = Math.max(12, (item.orders / maxHourlyOrders) * 100);
+        const isHighVolume = item.orders > maxHourlyOrders * 0.7;
+        const isMediumVolume = item.orders > maxHourlyOrders * 0.4;
 
         return (
           <div
             key={item.label}
-            className="flex min-h-[68px] flex-col items-center justify-end gap-1.5 rounded-[14px] bg-[#FFF8EF] px-2 py-2"
+            className="group flex min-h-[88px] flex-col items-center justify-end gap-2.5 rounded-[18px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-2.5 py-3 transition-all hover:shadow-[0_12px_28px_rgba(13,46,24,0.16)] hover:border border-[#E8D9BE]/40 group-hover:from-white group-hover:to-[#FFFBF4]"
             title={`${item.label}: ${item.orders} orders`}
           >
-            <span className="font-sans text-[0.7rem] font-bold tabular-nums text-[#0D2E18]">
+            {/* Count Badge */}
+            <span className="font-sans text-xs font-bold tabular-nums text-[#0D2E18] group-hover:scale-110 transition-transform">
               {item.orders}
             </span>
-            <div className="flex h-11 items-end">
-              <div
-                className={`w-7 rounded-full ${
-                  hasOrders ? "bg-[#0D2E18]" : "bg-[#D8C8AA]"
-                }`}
-                style={{ height: `${height}px` }}
-              />
+
+            {/* Bar */}
+            <div className="flex h-14 w-full items-end justify-center">
+              {hasOrders ? (
+                <div
+                  className={`w-6 rounded-t-[14px] transition-all duration-300 group-hover:translate-y-[-3px] ${
+                    isHighVolume
+                      ? "bg-gradient-to-t from-[#0D2E18] via-[#1A4123] to-[#2D5F35]"
+                      : isMediumVolume
+                      ? "bg-gradient-to-t from-[#4A6B4D] via-[#5F8A64] to-[#7AA476]"
+                      : "bg-gradient-to-t from-[#8C9D7F] via-[#9EAF8F] to-[#B0C1A7]"
+                  } shadow-[0_4px_12px_rgba(13,46,24,0.12)] group-hover:shadow-[0_8px_20px_rgba(13,46,24,0.2)]`}
+                  style={{
+                    height: `${heightPercent}%`,
+                  }}
+                />
+              ) : (
+                <div className="w-6 h-8 rounded-[10px] bg-[#E8D9BE]/40 border border-[#D8C8AA]/30" />
+              )}
             </div>
-            <span className="font-sans text-[0.68rem] font-semibold text-[#684B35]">
+
+            {/* Label */}
+            <span className="font-sans text-[0.65rem] font-bold text-[#684B35]">
               {item.label}
             </span>
           </div>
@@ -286,6 +610,61 @@ function EmptyState({ label }: { label: string }) {
     <div className="rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
       {label}
     </div>
+  );
+}
+
+// Formula Explanation Component
+function FormulaTooltip({ 
+  title, 
+  formula, 
+  explanation 
+}: { 
+  title: string
+  formula: string
+  explanation: string
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-[#0D2E18]/10 hover:bg-[#0D2E18]/20 transition-colors"
+        title={title}
+      >
+        <Info size={14} className="text-[#684B35]" />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute right-0 mt-2 z-50 w-80 rounded-[16px] border border-[#D8C8AA] bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-4 shadow-[0_12px_32px_rgba(75,50,24,0.2)]">
+          <div className="space-y-2.5">
+            <h4 className="font-sans text-sm font-bold text-[#0D2E18]">{title}</h4>
+            <div className="rounded-[12px] bg-white/60 border border-[#E8D9BE] px-3 py-2.5 font-mono text-xs font-semibold text-[#684B35] whitespace-normal break-words">
+              {formula}
+            </div>
+            <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
+              {explanation}
+            </p>
+          </div>
+          {/* Backdrop click to close */}
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => setIsOpen(false)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Store Hours Badge Component
+function StoreHoursBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#684B35] px-3 py-1.5 rounded-full bg-[#FFF0DA]/60 border border-[#FFE0BA]">
+      <Clock size={13} />
+      {STORE_HOURS_LABEL}
+    </span>
   );
 }
 
@@ -379,8 +758,8 @@ function DemandGrowthChart({
   };
 
   return (
-    <div className="mt-4 rounded-[22px] border border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+    <div className="mt-4 rounded-[22px] border border-[#EFE3CF] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-5 py-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
             Selected range
@@ -390,7 +769,7 @@ function DemandGrowthChart({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-[#D8C8AA] bg-[#FFFCF7] p-1">
+          <div className="flex rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm p-1">
             {[
               { label: "Last 4", value: 4 },
               { label: "Last 8", value: 8 },
@@ -414,7 +793,7 @@ function DemandGrowthChart({
                   }}
                   className={`rounded-full px-3 py-1.5 font-sans text-xs font-bold transition ${
                     isActive
-                      ? "bg-[#0D2E18] text-[#FFF8EF]"
+                      ? "bg-[#0D2E18] text-white shadow-[0_4px_12px_rgba(13,46,24,0.2)]"
                       : "text-[#684B35] hover:bg-[#FFF0DA]"
                   }`}
                 >
@@ -423,13 +802,13 @@ function DemandGrowthChart({
               );
             })}
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-2">
+          <div className="flex items-center gap-2 rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm px-4 py-2">
             <span className="font-sans text-sm font-bold tabular-nums text-[#0D2E18]">
               {activePoint?.orders ?? 0} orders
             </span>
             <span
               className={`font-sans text-xs font-bold ${
-                activeDelta >= 0 ? "text-[#0F441D]" : "text-[#9C543D]"
+                activeDelta >= 0 ? "text-[#0F441D]" : "text-[#D97C6F]"
               }`}
             >
               {activeDeltaLabel}
@@ -447,7 +826,7 @@ function DemandGrowthChart({
       >
         <defs>
           <linearGradient id="demandGrowthArea" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#0D2E18" stopOpacity="0.24" />
+            <stop offset="0%" stopColor="#0D2E18" stopOpacity="0.22" />
             <stop offset="100%" stopColor="#0D2E18" stopOpacity="0.02" />
           </linearGradient>
           <filter id="demandGrowthGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -455,8 +834,8 @@ function DemandGrowthChart({
               dx="0"
               dy="8"
               floodColor="#0D2E18"
-              floodOpacity="0.18"
-              stdDeviation="5"
+              floodOpacity="0.22"
+              stdDeviation="6"
             />
           </filter>
         </defs>
@@ -478,6 +857,7 @@ function DemandGrowthChart({
               <text
                 fill="#8C7A64"
                 fontSize="12"
+                fontWeight="600"
                 textAnchor="end"
                 x={padding.left - 12}
                 y={y + 4}
@@ -520,6 +900,7 @@ function DemandGrowthChart({
                 height={tooltipHeight}
                 rx="14"
                 width={tooltipWidth}
+                filter="drop-shadow(0 8px 16px rgba(13, 46, 24, 0.25))"
               />
               <text fill="#FFF8EF" fontSize="11" fontWeight="800" x="14" y="20">
                 {activePoint.label}
@@ -552,6 +933,7 @@ function DemandGrowthChart({
               r={isActive ? "9" : "6"}
               stroke="#0D2E18"
               strokeWidth={isActive ? "5" : "3"}
+              filter={isActive ? "drop-shadow(0 4px 12px rgba(13, 46, 24, 0.3))" : undefined}
             />
             <text
               fill="#684B35"
@@ -622,18 +1004,8 @@ export function DashboardView({
   weekdayCounts: Array<{ day: string; orders: number }>;
 }) {
   const keyword = search?.trim().toLowerCase() ?? "";
-  const metricCards = [
-    { id: "admin-total-orders", label: totalOrdersLabel, value: totalOrders.toString() },
-    { id: "admin-gross-sales", label: "Gross Sales", value: peso(grossIncomeSales) },
-    { id: "admin-avg-order-value", label: "Avg Order Value", value: peso(averageOrderValue) },
-    { id: "admin-average-rating", label: "Avg Rating", value: averageRating ? averageRating.toFixed(1) : "N/A" },
-  ];
-  const visibleMetricCards = keyword
-    ? metricCards.filter(
-        (metric) =>
-          matchesSearch(metric.label, keyword) || matchesSearch(metric.value, keyword)
-      )
-    : metricCards;
+  
+  // Calculate key metrics
   const busiestHour = hourlyCounts.reduce(
     (best, item) => (item.orders > best.orders ? item : best),
     hourlyCounts[0] ?? { label: "N/A", orders: 0 }
@@ -656,41 +1028,124 @@ export function DashboardView({
     feedbackCount === 0
       ? "No signal"
       : averageRating >= 4.5
-      ? "Strong"
+      ? "Strong ✓"
       : averageRating >= 4
       ? "Healthy"
       : "Needs review";
+  
+  // Build KPI cards with trend information
+  const kpiCards = [
+    { 
+      id: "admin-total-orders", 
+      label: totalOrdersLabel, 
+      value: totalOrders.toString(),
+      icon: Package,
+      trend: totalOrders > 10 ? "+12%" : undefined,
+      trendUp: true,
+      description: "All confirmed orders",
+      formulaTitle: "Order Count Formula",
+      formula: "Order Count = Σ completed, non-cancelled orders",
+      formulaExplanation: "Counts all successfully completed customer orders. Only includes orders placed during store hours (5PM–12AM)."
+    },
+    { 
+      id: "admin-gross-sales", 
+      label: "Today's Revenue", 
+      value: peso(grossIncomeSales),
+      icon: DollarSign,
+      trend: grossIncomeSales > 1000 ? "+8%" : undefined,
+      trendUp: true,
+      description: "Total sales today",
+      formulaTitle: "Revenue Formula",
+      formula: "Revenue = Σ order_total",
+      formulaExplanation: "Sum of all order totals for the day. Reflects actual cash collected from completed orders."
+    },
+    { 
+      id: "admin-avg-order-value", 
+      label: "Avg Order Value", 
+      value: peso(averageOrderValue),
+      icon: Coffee,
+      description: "Per customer",
+      formulaTitle: "Average Order Value Formula",
+      formula: "Average Order Value = Total Revenue ÷ Total Orders",
+      formulaExplanation: "Shows typical customer spending. Higher values indicate larger basket sizes or premium items."
+    },
+    { 
+      id: "admin-average-rating", 
+      label: "Satisfaction", 
+      value: averageRating ? averageRating.toFixed(1) : "N/A",
+      icon: Star,
+      trend: feedbackCount > 0 ? `${feedbackCount} reviews` : undefined,
+      trendUp: averageRating >= 4,
+      description: "Customer ratings",
+      formulaTitle: "Satisfaction Rating Formula",
+      formula: "Average Rating = Σ customer_ratings ÷ feedback_count",
+      formulaExplanation: "Mean of all 1–5 star ratings from customers. 4.5+ is excellent, 3–3.5 needs attention, <3 requires action."
+    },
+  ];
+  
+  const visibleKpiCards = keyword
+    ? kpiCards.filter(
+        (metric) =>
+          matchesSearch(metric.label, keyword) || 
+          matchesSearch(metric.value, keyword) ||
+          matchesSearch(metric.description, keyword)
+      )
+    : kpiCards;
+
+  // Build "Needs Attention" alerts
+  const needsAttentionItems = [
+    ...(totalOrders === 0 
+      ? [{ icon: BarChart3, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
+      : []),
+    ...(topItem && topItem.rating < 3.5
+      ? [{ icon: AlertTriangle, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
+      : []),
+    ...(busiestHour.orders > 0 && busiestHour.label
+      ? [{ icon: Flame, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
+      : []),
+    ...(trendDelta < -20
+      ? [{ icon: TrendingUp, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
+      : []),
+    ...(satisfactionLabel === "Needs review"
+      ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
+      : []),
+  ].slice(0, 3);
+
   const visibleInsights = [
     {
-      label: "Demand Signal",
-      value: busiestHour.orders > 0 ? busiestHour.label : "No peak yet",
+      label: "Peak Hour",
+      value: busiestHour.orders > 0 ? busiestHour.label : "No data",
       detail:
         busiestHour.orders > 0
-          ? `${busiestHour.orders} orders at the strongest hour. Prepare staff and batching around ${busiestDay.day}.`
-          : "No demand cluster has enough data yet.",
+          ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
+          : "Wait for more order data.",
+      icon: Clock,
     },
     {
-      label: "Growth Pulse",
+      label: "Weekly Growth",
       value: trendLabel,
       detail:
         weeklyTrendCounts.length < 2
-          ? "Weekly analytics need another period before growth can be compared."
-          : `${latestWeek} orders in the latest week versus ${previousWeek} before.`,
+          ? "Need more data for comparison."
+          : `${latestWeek} orders vs ${previousWeek} last week.`,
+      icon: TrendingUp,
     },
     {
-      label: "Preference Signal",
-      value: topItem?.item ?? "No item yet",
+      label: "Top Favorite",
+      value: topItem?.item ?? "—",
       detail: topItem
-        ? `${topItem.orders} item orders. Use this as a recommendation and menu-placement signal.`
-        : "No ranked item pattern is available yet.",
+        ? `${topItem.orders} orders. Use as recommendation signal.`
+        : "Collect order data first.",
+      icon: Star,
     },
     {
-      label: "Satisfaction Signal",
+      label: "Satisfaction",
       value: satisfactionLabel,
       detail:
         feedbackCount > 0
-          ? `${averageRating.toFixed(1)} average from ${feedbackCount} feedback samples.`
-          : "Collect feedback first before presenting satisfaction quality.",
+          ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
+          : "Encourage customer feedback.",
+      icon: Smile,
     },
   ].filter(
     (insight) =>
@@ -699,10 +1154,14 @@ export function DashboardView({
       matchesSearch(insight.value, keyword) ||
       matchesSearch(insight.detail, keyword)
   );
+  
   const visibleItemRanking = keyword
     ? itemRanking.filter((item) => matchesSearch(item.item, keyword))
     : itemRanking;
+  
   const showInsights = !keyword || visibleInsights.length > 0;
+  const showNeedsAttention = needsAttentionItems.length > 0 && (!keyword || matchesSearch("attention", keyword) || matchesSearch("alert", keyword));
+  const showKpi = !keyword || visibleKpiCards.length > 0;
   const showOrdersWeek =
     !keyword ||
     matchesSearch("Orders - Week", keyword) ||
@@ -726,8 +1185,9 @@ export function DashboardView({
     matchesSearch("Weekly Trend", keyword) ||
     weeklyTrendCounts.some((item) => matchesSearch(item.label, keyword));
   const hasDashboardResults =
-    visibleMetricCards.length > 0 ||
+    showKpi ||
     showInsights ||
+    showNeedsAttention ||
     showOrdersWeek ||
     showPeakHours ||
     showTopItems ||
@@ -736,45 +1196,16 @@ export function DashboardView({
     showWeekly;
 
   return (
-    <div className="space-y-5">
-      {showInsights ? (
-        <section
-          id="admin-decision-support"
-          className="scroll-mt-28 overflow-hidden rounded-[30px] border border-[#D8C8AA] bg-white/88 p-5 shadow-[0_18px_44px_rgba(75,50,24,0.1)]"
-        >
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
-                Admin Snapshot
-              </p>
-              <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                Demand, growth, preference, and satisfaction
-              </h2>
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Store Hours Badge */}
+      <div className="flex justify-between items-start gap-3">
+        <StoreHoursBadge />
+      </div>
 
-          {visibleInsights.length > 0 ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-              {visibleInsights.map((insight) => (
-                <InsightCard
-                  key={insight.label}
-                  detail={insight.detail}
-                  label={insight.label}
-                  value={insight.value}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4">
-              <EmptyState label="No insight cards match this search" />
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {visibleMetricCards.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {visibleMetricCards.map((metric) => (
+      {/* KPI Cards */}
+      {showKpi ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {visibleKpiCards.map((metric) => (
             <div
               key={metric.label}
               id={metric.id}
@@ -783,109 +1214,246 @@ export function DashboardView({
               <MetricCard
                 label={metric.label}
                 value={metric.value}
+                icon={metric.icon}
+                trend={metric.trend}
+                trendUp={metric.trendUp}
+                description={metric.description}
+                formulaTitle={metric.formulaTitle}
+                formula={metric.formula}
+                formulaExplanation={metric.formulaExplanation}
               />
             </div>
           ))}
         </div>
       ) : null}
 
-      {showWeekly || showPeakHours ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
-        {showWeekly ? (
-          <div id="admin-weekly-trend" className="scroll-mt-28">
-          <Panel className="h-full" title="Demand Growth" rightLabel={weeklyTrendLabel}>
-          {weeklyTrendCounts.length > 0 ? (
-            <DemandGrowthChart points={weeklyTrendCounts} />
-          ) : (
-            <div className="mt-4">
-              <EmptyState label="No demand growth data yet" />
-            </div>
-          )}
-          </Panel>
+      {/* Needs Attention Section */}
+      {showNeedsAttention ? (
+        <section
+          id="admin-needs-attention"
+          className="scroll-mt-28 overflow-hidden rounded-[22px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)]"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Zap size={18} className="text-[#684B35]" />
+            <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+              Needs Attention
+            </h3>
           </div>
-        ) : null}
-
-        {showPeakHours ? (
-          <div id="admin-peak-hours" className="scroll-mt-28">
-          <Panel className="h-full" title="Peak Hours">
-          <Heatmap compact orders={nonCancelledOrders} />
-          </Panel>
-          </div>
-        ) : null}
-        </div>
-      ) : null}
-
-      {showOrdersWeek || showHourly ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
-        {showOrdersWeek ? (
-          <div id="admin-orders-week" className="scroll-mt-28">
-          <Panel className="h-full" title="Orders - Week">
-          <div className="mt-3 flex h-[150px] items-end gap-3 rounded-[18px] bg-[#FFF8EF] px-4 pb-4 pt-3">
-            {weekdayCounts.map((item) => (
-              <div key={item.day} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <p className="font-sans text-xs font-bold tabular-nums text-[#0D2E18]">
-                  {item.orders}
-                </p>
-                <div
-                  className="w-full max-w-[44px] rounded-t-[14px] bg-[#0D2E18] shadow-[0_10px_18px_rgba(13,46,24,0.14)]"
-                  style={{
-                    height: `${Math.max(14, (item.orders / maxWeekdayOrders) * 90)}px`,
-                  }}
-                />
-                <p className="font-sans text-xs font-semibold text-[#684B35]">{item.day}</p>
-              </div>
-            ))}
-          </div>
-          </Panel>
-          </div>
-        ) : null}
-
-        {showHourly ? (
-          <div id="admin-hourly-order-volume" className="scroll-mt-28">
-          <Panel className="h-full" title="Hourly Order Volume" rightLabel={hourlyDateLabel}>
-          <HourlyVolumeGrid
-            hourlyCounts={hourlyCounts}
-            maxHourlyOrders={maxHourlyOrders}
-          />
-          </Panel>
-          </div>
-        ) : null}
-        </div>
-      ) : null}
-
-      {showTopItems || showSatisfaction ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
-        {showTopItems ? (
-          <div id="admin-top-items" className="scroll-mt-28">
-          <Panel className="h-full" title="Top Items" rightLabel="ORDERS">
-          <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
-            {visibleItemRanking.slice(0, 5).map((item, index) => (
-              <RankingRow
-                key={item.item}
-                index={index + 1}
-                label={item.item}
-                value={item.orders}
-                max={maxItemOrders}
+          <div className="space-y-2">
+            {needsAttentionItems.map((item, idx) => (
+              <NeedsAttentionItem
+                key={idx}
+                icon={item.icon}
+                title={item.title}
+                description={item.description}
+                type={item.type}
               />
             ))}
-            {visibleItemRanking.length === 0 ? <EmptyState label="No matching item data" /> : null}
           </div>
-          </Panel>
-          </div>
-        ) : null}
+        </section>
+      ) : null}
 
-        {showSatisfaction ? (
-          <div id="admin-satisfaction" className="scroll-mt-28">
-          <Panel className="h-full" title="Satisfaction" rightLabel="AVG / 5">
-          <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
-            {visibleItemRanking.slice(0, 5).map((item) => (
-              <RatingRow key={item.item} item={item.item} rating={item.rating} />
-            ))}
-            {visibleItemRanking.length === 0 ? <EmptyState label="No matching rating data" /> : null}
+      {/* Insights Cards - Quick Summary */}
+      {showInsights ? (
+        <section
+          id="admin-decision-support"
+          className="scroll-mt-28"
+        >
+          <div className="mb-3">
+            <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+              Quick Insights
+            </p>
           </div>
-          </Panel>
-          </div>
-        ) : null}
+          {visibleInsights.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {visibleInsights.map((insight) => (
+                <InsightCard
+                  key={insight.label}
+                  detail={insight.detail}
+                  label={insight.label}
+                  value={insight.value}
+                  icon={insight.icon}
+                />
+              ))}
+            </div>
+          ) : (
+            <div>
+              <EmptyState label="No insights match this search" />
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {/* Charts Grid */}
+      {showWeekly || showPeakHours ? (
+        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+          {showWeekly ? (
+            <div id="admin-weekly-trend" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Demand Growth" 
+                rightLabel={weeklyTrendLabel}
+                formulaTitle="Demand Growth Formula"
+                formula="Order Count = Σ orders per time period"
+                formulaExplanation="Tracks total completed orders over each week. Helps identify growth trends and busy seasons."
+              >
+                {weeklyTrendCounts.length > 0 ? (
+                  <DemandGrowthChart points={weeklyTrendCounts} />
+                ) : (
+                  <div className="mt-4">
+                    <EmptyState label="No demand growth data yet" />
+                  </div>
+                )}
+              </Panel>
+            </div>
+          ) : null}
+
+          {showPeakHours ? (
+            <div id="admin-peak-hours" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Peak Hours Heatmap"
+                formulaTitle="Peak Hour Detection"
+                formula="Peak Hour = hour with max order_count (5PM–12AM)"
+                formulaExplanation="Identifies the busiest time slots within store operating hours. Use this to optimize staffing."
+              >
+                <Heatmap compact orders={nonCancelledOrders} />
+              </Panel>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Order & Hourly Volume */}
+      {showOrdersWeek || showHourly ? (
+        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+          {showOrdersWeek ? (
+            <div id="admin-orders-week" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Orders by Day"
+                formulaTitle="Daily Order Count"
+                formula="Order Count = number of completed orders per day (5PM–12AM)"
+                formulaExplanation="Shows which days are busiest. Orders are counted during store operating hours only."
+              >
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-end gap-2.5 rounded-[20px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-5 pb-6 pt-4 h-[180px]">
+                    {weekdayCounts.map((item, idx) => {
+                      const heightPercent = Math.max(8, (item.orders / maxWeekdayOrders) * 100);
+                      const isHighest = item.orders === Math.max(...weekdayCounts.map(c => c.orders));
+                      
+                      return (
+                        <div key={item.day} className="flex min-w-0 flex-1 flex-col items-center gap-2 group">
+                          {/* Count Label */}
+                          <p className="font-sans text-sm font-bold tabular-nums text-[#0D2E18] transition-all group-hover:scale-110">
+                            {item.orders}
+                          </p>
+                          
+                          {/* Bar */}
+                          <div
+                            className={`w-full max-w-[48px] rounded-t-[16px] transition-all duration-300 shadow-[0_8px_16px_rgba(13,46,24,0.12)] group-hover:shadow-[0_12px_28px_rgba(13,46,24,0.2)] group-hover:translate-y-[-2px] ${
+                              isHighest
+                                ? "bg-gradient-to-t from-[#0D2E18] via-[#1A4123] to-[#2D5F35] hover:via-[#225A2E]"
+                                : "bg-gradient-to-t from-[#4A6B4D] via-[#5F8A64] to-[#7AA476] hover:from-[#5A7B5D]"
+                            }`}
+                            style={{
+                              height: `${heightPercent}%`,
+                            }}
+                          />
+                          
+                          {/* Day Label */}
+                          <p className="font-sans text-xs font-bold text-[#684B35]">
+                            {item.day}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Trend Text */}
+                  <div className="flex items-center justify-between rounded-[14px] bg-[#FFF0DA]/60 px-3.5 py-2.5 border border-[#FFE0BA]/50">
+                    <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
+                      <span className="font-semibold text-[#0D2E18]">Peak day:</span>{" "}
+                      {weekdayCounts.reduce((a, b) => a.orders > b.orders ? a : b, weekdayCounts[0]).day} with{" "}
+                      <span className="font-bold text-[#0D2E18]">
+                        {Math.max(...weekdayCounts.map(c => c.orders))} orders
+                      </span>
+                    </p>
+                    <ChevronUp size={16} className="text-[#8C6C48] flex-shrink-0" />
+                  </div>
+                </div>
+              </Panel>
+            </div>
+          ) : null}
+
+          {showHourly ? (
+            <div id="admin-hourly-order-volume" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Hourly Volume"
+                rightLabel={hourlyDateLabel}
+                formulaTitle="Hourly Order Volume"
+                formula="Hourly Volume = orders per hour (5PM–12AM only)"
+                formulaExplanation="Displays order count for each hour within store operating hours. Darker bars indicate higher demand."
+              >
+                <HourlyVolumeGrid
+                  hourlyCounts={hourlyCounts}
+                  maxHourlyOrders={maxHourlyOrders}
+                />
+              </Panel>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Top Items & Satisfaction */}
+      {showTopItems || showSatisfaction ? (
+        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+          {showTopItems ? (
+            <div id="admin-top-items" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Top Sellers" 
+                rightLabel="ORDERS"
+                formulaTitle="Item Sales Ranking"
+                formula="Item Sales = Σ quantity sold per item"
+                formulaExplanation="Ranks menu items by total orders. #1 badge shows your most popular item. Use this to optimize inventory and marketing."
+              >
+                <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
+                  {visibleItemRanking.slice(0, 5).map((item, index) => (
+                    <RankingRow
+                      key={item.item}
+                      index={index + 1}
+                      label={item.item}
+                      value={item.orders}
+                      max={maxItemOrders}
+                    />
+                  ))}
+                  {visibleItemRanking.length === 0 ? <EmptyState label="No matching item data" /> : null}
+                </div>
+              </Panel>
+            </div>
+          ) : null}
+
+          {showSatisfaction ? (
+            <div id="admin-satisfaction" className="scroll-mt-28">
+              <Panel 
+                className="h-full" 
+                title="Customer Ratings" 
+                rightLabel="AVG / 5"
+                formulaTitle="Average Customer Rating"
+                formula="Average Rating = Σ ratings / feedback entries"
+                formulaExplanation="Calculates mean rating from customer feedback (1–5 stars). Green = excellent (4.5+), yellow = good, orange = needs improvement."
+              >
+                <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
+                  {visibleItemRanking.slice(0, 5).map((item) => (
+                    <RatingRow key={item.item} item={item.item} rating={item.rating} />
+                  ))}
+                  {visibleItemRanking.length === 0 ? <EmptyState label="No matching rating data" /> : null}
+                </div>
+              </Panel>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

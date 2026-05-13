@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   getAdminOrderTotals,
@@ -411,18 +411,77 @@ export function OrdersView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="hidden sm:block" />
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="flex rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-1">
+      {/* Controls Section */}
+      <div className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">
+                Order Records
+              </p>
+              <p className="mt-1.5 font-sans text-sm text-[#6D5B48]">
+                {getAdminReportRangeLabel(timeFilter)} · Showing {visibleTotals.totalOrders} orders · {peso(visibleTotals.totalRevenue)}
+              </p>
+            </div>
+            
+            {/* Export Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsExportOpen((current) => !current)}
+                disabled={isExportingReport}
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#0D2E18] to-[#1A4123] px-5 py-2.5 font-sans text-sm font-bold text-white transition hover:shadow-[0_8px_20px_rgba(13,46,24,0.2)] hover:from-[#0F441D] hover:to-[#225A2E]"
+              >
+                {isExportingReport ? (
+                  <LoadingSpinner label="Generating report" />
+                ) : (
+                  <Download size={16} />
+                )}
+                {isExportingReport ? "Generating..." : "Export"}
+              </button>
+
+              {isExportOpen ? (
+                <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-[16px] border border-[#D8C8AA] bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-2 shadow-[0_18px_45px_rgba(42,29,12,0.14)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportingReport(true);
+                      openPdfReport(visibleOrders, timeFilter);
+                      setIsExportOpen(false);
+                      window.setTimeout(() => setIsExportingReport(false), 450);
+                    }}
+                    className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                  >
+                    Download PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportingReport(true);
+                      downloadCsv(visibleOrders, timeFilter);
+                      setIsExportOpen(false);
+                      window.setTimeout(() => setIsExportingReport(false), 450);
+                    }}
+                    className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                  >
+                    Download CSV
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Time Period Filter */}
+          <div className="flex flex-wrap gap-2 rounded-full border border-[#D8C8AA]/40 bg-white/50 backdrop-blur-sm p-1.5">
             {timeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setTimeFilter(option.value)}
-                className={`rounded-full px-4 py-2 font-sans text-sm font-bold transition ${
+                className={`rounded-full px-4 py-2 font-sans text-sm font-semibold transition ${
                   timeFilter === option.value
-                    ? "bg-[#0D2E18] text-[#FFF0DA]"
+                    ? "bg-gradient-to-br from-[#0D2E18] to-[#1A4123] text-white shadow-[0_4px_12px_rgba(13,46,24,0.15)]"
                     : "text-[#684B35] hover:bg-white"
                 }`}
               >
@@ -431,207 +490,74 @@ export function OrdersView({
             ))}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportOpen((current) => !current)}
-              disabled={isExportingReport}
-              className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-5 py-3 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#143D23]"
-            >
-              {isExportingReport ? (
-                <LoadingSpinner label="Generating report" />
-              ) : (
-                <Download size={16} />
-              )}
-              {isExportingReport ? "Generating..." : "Export Data"}
-              <ChevronDown size={16} />
-            </button>
-
-            {isExportOpen ? (
-              <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-white p-2 shadow-[0_18px_45px_rgba(42,29,12,0.14)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportingReport(true);
-                    openPdfReport(visibleOrders, timeFilter);
-                    setIsExportOpen(false);
-                    window.setTimeout(() => setIsExportingReport(false), 450);
-                  }}
-                  className="w-full rounded-[12px] px-3 py-2 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
-                >
-                  Download as PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportingReport(true);
-                    downloadCsv(visibleOrders, timeFilter);
-                    setIsExportOpen(false);
-                    window.setTimeout(() => setIsExportingReport(false), 450);
-                  }}
-                  className="w-full rounded-[12px] px-3 py-2 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
-                >
-                  Download as CSV
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[18px] border border-[#DCCFB8] bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EFE3CF] pb-3">
-          <div>
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Reporting Hub
-            </p>
-            <p className="mt-1 font-sans text-sm text-[#0D2E18]">
-              {getAdminReportRangeLabel(timeFilter)}
-              <span className="px-2 text-[#B89C73]">/</span>
-              {visibleTotals.totalOrders} orders
-              <span className="px-2 text-[#B89C73]">/</span>
-              {peso(visibleTotals.totalRevenue)}
-            </p>
-            <p className="hidden">
-              {getAdminReportRangeLabel(timeFilter)} · {visibleTotals.totalOrders} orders ·{" "}
-              {peso(visibleTotals.totalRevenue)}
-            </p>
-          </div>
-          <span className="rounded-full bg-[#E7F4EA] px-4 py-2 font-sans text-sm font-bold text-[#0D2E18]">
-            {visibleTotals.totalOrders} shown
-          </span>
-        </div>
-
-        <div className="grid gap-3 pt-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Status
-            </span>
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "all" | OrderStatus)
-              }
-              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Type
-            </span>
-            <select
-              value={typeFilter}
-              onChange={(event) =>
-                setTypeFilter(event.target.value as "all" | StaffOrder["order_type"])
-              }
-              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
-            >
-              {typeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Payment
-            </span>
-            <select
-              value={paymentFilter}
-              onChange={(event) =>
-                setPaymentFilter(
-                  event.target.value as "all" | "paid" | "unpaid" | "cash" | "gcash"
-                )
-              }
-              className="mt-2 h-11 w-full rounded-[14px] border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none"
-            >
-              {paymentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="hidden gap-4 overflow-x-auto pt-3">
-          <div className="min-w-max">
-          <p className="mb-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Status
-          </p>
-          <div className="flex gap-2">
-            {statusOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setStatusFilter(option.value)}
-                className={`rounded-full border px-3 py-1.5 font-sans text-xs font-semibold transition ${
-                  statusFilter === option.value
-                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                    : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
-                }`}
+          {/* Filter Dropdowns */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+                Filter by Status
+              </span>
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as "all" | OrderStatus)
+                }
+                className="mt-2 h-10 w-full rounded-[12px] border border-[#D8C8AA]/60 bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          </div>
-
-          <div className="min-w-max">
-            <p className="mb-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Type
-            </p>
-            <div className="flex gap-2">
-              {typeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setTypeFilter(option.value)}
-                  className={`rounded-full border px-3 py-1.5 font-sans text-xs font-semibold transition ${
-                    typeFilter === option.value
-                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                      : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="min-w-max">
-            <p className="mb-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              Payment
-            </p>
-            <div className="flex gap-2">
-              {paymentOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setPaymentFilter(option.value)}
-                  className={`rounded-full border px-3 py-1.5 font-sans text-xs font-semibold transition ${
-                    paymentFilter === option.value
-                      ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                      : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            
+            <label className="block">
+              <span className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+                Filter by Type
+              </span>
+              <select
+                value={typeFilter}
+                onChange={(event) =>
+                  setTypeFilter(event.target.value as "all" | StaffOrder["order_type"])
+                }
+                className="mt-2 h-10 w-full rounded-[12px] border border-[#D8C8AA]/60 bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+              >
+                {typeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            
+            <label className="block">
+              <span className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+                Filter by Payment
+              </span>
+              <select
+                value={paymentFilter}
+                onChange={(event) =>
+                  setPaymentFilter(
+                    event.target.value as "all" | "paid" | "unpaid" | "cash" | "gcash"
+                  )
+                }
+                className="mt-2 h-10 w-full rounded-[12px] border border-[#D8C8AA]/60 bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+              >
+                {paymentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[18px] border border-[#DCCFB8] bg-white">
-        <div className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF]/50 px-5 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+      {/* Data Table Card */}
+      <div className="overflow-hidden rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF3E6] shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+        {/* Table Header */}
+        <div className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#E8D9BE]/60 bg-gradient-to-r from-white/40 to-white/20 px-6 py-4 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
           <span>Order ID</span>
           <span>Customer / Items</span>
           <span>Encoded By</span>
@@ -643,31 +569,38 @@ export function OrdersView({
           <span>Action</span>
         </div>
 
-        <div className="divide-y divide-[#EFE3CF]">
-          {visibleOrders.map((order) => (
+        {/* Table Rows */}
+        <div className="divide-y divide-[#E8D9BE]/40">
+          {visibleOrders.map((order, idx) => (
             <div
               key={order.id}
-              className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 px-5 py-4 font-sans text-sm text-[#0D2E18] transition hover:bg-[#FFF8EF]/70"
+              className={`group grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 px-6 py-4 font-sans text-sm transition hover:bg-white/40 ${
+                idx % 2 === 0 ? "bg-white/30" : ""
+              }`}
             >
-              <span className="font-bold">{formatOrderCode(order.id)}</span>
-              <div>
-                <p className="font-semibold text-[#0D2E18]">
+              <span className="font-bold text-[#0D2E18]">{formatOrderCode(order.id)}</span>
+              
+              <div className="min-w-0">
+                <p className="font-semibold text-[#0D2E18] truncate">
                   {getOrderDisplayName(order)}
                 </p>
-                <p className="mt-1 line-clamp-2 font-normal text-[#8C7A64]">
+                <p className="mt-0.5 line-clamp-2 font-normal text-xs text-[#8C7A64]">
                   {formatOrderItems(order) || "No items"}
                 </p>
               </div>
-              <span className="font-semibold text-[#684B35]">
+              
+              <span className="font-semibold text-[#684B35] text-xs">
                 {getEncodedByName(order)}
               </span>
+              
               <span
-                className={`w-fit rounded-full px-3 py-1 text-xs font-bold uppercase ${getOrderTypeStyle(
+                className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase ${getOrderTypeStyle(
                   order.order_type
                 )}`}
               >
                 {formatOrderTypeLabel(order.order_type)}
               </span>
+              
               <div className="flex flex-wrap gap-2">
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-bold ${getPaymentStyle(
@@ -684,27 +617,34 @@ export function OrdersView({
                   {formatPaymentStatus(order.payment_status)}
                 </span>
               </div>
+              
               <span
-                className={`w-fit rounded-full px-3 py-1 text-xs font-bold uppercase ${getStatusStyle(
+                className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase ${getStatusStyle(
                   order.status
                 )}`}
               >
                 {formatStatus(order.status)}
               </span>
-              <span className="font-semibold">{peso(order.total_amount)}</span>
-              <span>{formatTime(order.ordered_at)}</span>
+              
+              <span className="font-semibold text-[#0D2E18]">{peso(order.total_amount)}</span>
+              
+              <span className="text-[#8C7A64]">{formatTime(order.ordered_at)}</span>
+              
               <button
                 type="button"
                 onClick={() => onOpenOrder(order)}
                 aria-label={`View ${formatOrderCode(order.id)}`}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#0D2E18]/8 hover:text-[#0D2E18] group-hover:bg-[#FFF0DA]/60"
               >
                 <ChevronRight size={18} />
               </button>
             </div>
           ))}
+          
           {visibleOrders.length === 0 ? (
-            <EmptyState label="No orders found" />
+            <div className="px-6 py-8">
+              <EmptyState label="No orders found matching your filters" />
+            </div>
           ) : null}
         </div>
       </div>

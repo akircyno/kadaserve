@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Search,
   X,
+  Coffee,
+  Clock,
 } from "lucide-react";
 import {
   CustomerPreferenceView,
@@ -43,6 +45,13 @@ import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const hourNumbers = Array.from({ length: 24 }, (_, hour) => hour);
+
+function getTimeOfDay() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Morning";
+  if (hour < 18) return "Afternoon";
+  return "Evening";
+}
 
 function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
@@ -1435,9 +1444,10 @@ export function AdminDashboard() {
         </aside>
 
         <section className="min-w-0 bg-[#FFF0DA]">
-          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-[#FFFCF7]/96 text-[#0D2E18] shadow-[0_12px_30px_rgba(104,75,53,0.08)] backdrop-blur">
-            <div className="grid gap-3 px-5 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
-              <div className="flex items-center gap-3">
+          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_8px_24px_rgba(104,75,53,0.06)] backdrop-blur">
+            <div className="grid gap-4 px-5 py-5 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
+              {/* LEFT: Header Title & Description */}
+              <div className="flex items-center gap-4">
                 <button
                   type="button"
                   onClick={() => setIsSidebarOpen(true)}
@@ -1447,29 +1457,41 @@ export function AdminDashboard() {
                   <MenuIcon size={20} />
                 </button>
                 <div>
-                  <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
-                    Admin Dashboard
-                  </p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <h1 className="font-sans text-2xl font-black leading-none text-[#0D2E18]">
-                      {activeHeaderTitle}
-                    </h1>
-                    <button
-                      type="button"
-                      onClick={() => void handleRefreshAnalytics()}
-                      disabled={isLoading}
-                      aria-label="Refresh analytics"
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
-                    >
-                      <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
-                      <span className="hidden sm:inline">Refresh Analytics</span>
-                    </button>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <h1 className="font-sans text-2xl font-black leading-none text-[#0D2E18]">
+                        {activeTab === "dashboard" 
+                          ? `Good ${getTimeOfDay()}, Admin` 
+                          : activeHeaderTitle}
+                      </h1>
+                      {activeTab === "dashboard" && (
+                        <Coffee size={24} className="text-[#8C6C48]" />
+                      )}
+                    </div>
+                    {activeTab === "dashboard" && (
+                      <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
+                        KadaServe's live café performance today
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="hidden xl:block" />
+              {/* CENTER: Refresh Button */}
+              <div className="hidden xl:block">
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshAnalytics()}
+                  disabled={isLoading}
+                  aria-label="Refresh analytics"
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-4 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
+                >
+                  <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+                  Refresh Analytics
+                </button>
+              </div>
 
+              {/* RIGHT: Status, Search, Sync Info */}
               <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
                 <div className="relative w-full max-w-[260px]">
                   <label className="flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
@@ -1481,7 +1503,7 @@ export function AdminDashboard() {
                       onBlur={() => {
                         window.setTimeout(() => setIsSearchFocused(false), 140);
                       }}
-                      placeholder="Search records..."
+                      placeholder="Search..."
                       className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
                     />
                   </label>
@@ -1513,9 +1535,10 @@ export function AdminDashboard() {
                   ) : null}
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Store Status */}
+                <div className="flex items-center gap-2.5">
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold ${
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold transition ${
                       storeStatus?.effectiveStatus === "open"
                         ? "bg-[#E9F5E7] text-[#0D2E18]"
                         : storeStatus?.effectiveStatus === "busy"
@@ -1524,7 +1547,7 @@ export function AdminDashboard() {
                     }`}
                   >
                     <span
-                      className={`h-2 w-2 rounded-full ${
+                      className={`h-2.5 w-2.5 rounded-full animate-pulse ${
                         storeStatus?.effectiveStatus === "open"
                           ? "bg-[#0F441D]"
                           : storeStatus?.effectiveStatus === "busy"
@@ -1597,43 +1620,49 @@ export function AdminDashboard() {
 
             {activeTab === "demand" ? (
               <div className="space-y-4">
-                <section className="rounded-[22px] border border-[#D8C8AA] bg-white/92 px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                {/* Modern Demand Intelligence Header */}
+                <section className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70">
+                  <div className="space-y-4">
+                    {/* Title and Description */}
                     <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
-                        Demand Workspace
+                      <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">
+                        Demand Intelligence
                       </p>
-                      <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                        Orders, volume trends, and peak windows
+                      <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
+                        Monitor orders, sales trends, and customer demand
                       </h2>
+                      <p className="mt-2 font-sans text-sm text-[#6D5B48]">
+                        Real-time insights into order patterns and peak hours during store operating hours (5PM–12AM)
+                      </p>
                     </div>
 
-                    <div className="grid gap-2 rounded-[999px] border border-[#D8C8AA] bg-[#FFF8EF] p-1 sm:grid-cols-3">
-                      {demandViews.map((view) => {
-                        const isActive = demandView === view.key;
-
-                        return (
-                          <button
-                            key={view.key}
-                            type="button"
-                            onClick={() => setDemandView(view.key)}
-                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition sm:min-w-[130px] ${
-                              isActive
-                                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
-                                : "text-[#684B35] hover:bg-white"
-                            }`}
-                          >
-                            <span className="block leading-tight">{view.label}</span>
-                            <span
-                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${
-                                isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
+                    {/* Tab Controls - Modern Segmented */}
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex gap-2 rounded-full border border-[#D8C8AA]/60 bg-white/40 backdrop-blur-sm p-1.5">
+                        {demandViews.map((view) => {
+                          const isActive = demandView === view.key;
+                          return (
+                            <button
+                              key={view.key}
+                              type="button"
+                              onClick={() => setDemandView(view.key)}
+                              className={`rounded-full px-5 py-2.5 font-sans text-sm font-bold transition ${
+                                isActive
+                                  ? "bg-gradient-to-br from-[#0D2E18] to-[#1A4123] text-white shadow-[0_6px_16px_rgba(13,46,24,0.2)]"
+                                  : "text-[#684B35] hover:bg-white/60"
                               }`}
                             >
-                              {view.description}
-                            </span>
-                          </button>
-                        );
-                      })}
+                              {view.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Store Hours Badge */}
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#684B35] px-4 py-2 rounded-full bg-[#FFF0DA]/60 border border-[#FFE0BA]">
+                        <Clock size={13} />
+                        Store Hours: 5PM–12AM
+                      </span>
                     </div>
                   </div>
                 </section>
