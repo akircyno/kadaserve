@@ -339,8 +339,8 @@ export function getRecommendationsForCustomer({
           index === 0 ? "Top Seller" : "Popular Now",
           index === 0 ? "top_seller" : "popularity",
           index === 0
-            ? "Global most ordered item from Admin Item Ranking."
-            : "Global popular item from Admin Item Ranking.",
+            ? "Highest global order volume from Admin Item Ranking."
+            : "Popular item from global demand ranking.",
           globalStats.popularity.get(itemKey(item)) ?? 0
         )
       );
@@ -393,7 +393,7 @@ export function getRecommendationsForCustomer({
           scoredItems[0].item,
           "Best for You",
           "preference",
-          "Top-N result based on frequency, recency, and feedback rating.",
+          "Based on this customer's order frequency, recent orders, and feedback ratings.",
           scoredItems[0].score
         )
       : null
@@ -411,8 +411,8 @@ export function getRecommendationsForCustomer({
         index === 0 ? "Top Seller" : "Popular Now",
         index === 0 ? "top_seller" : "popularity",
         index === 0
-          ? "Global most ordered item from Admin Item Ranking."
-          : "Global popular item from Admin Item Ranking.",
+          ? "Highest global order volume from Admin Item Ranking."
+          : "Popular item from global demand ranking.",
         globalStats.popularity.get(itemKey(item)) ?? 0
       )
     );

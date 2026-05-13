@@ -221,6 +221,30 @@ Admin routes support:
 - item ranking
 - peak hour analysis
 
+### `POST /api/admin/analytics/customer-preferences`
+
+Regenerates customer preference rows from completed/delivered orders and feedback.
+
+Preference logic:
+
+- Counts ordered quantity per customer and menu item.
+- Normalizes frequency within each customer's own order history.
+- Computes recency with a 30-day decay curve.
+- Averages only submitted rating fields, so missing taste/strength/overall values are not treated as zero.
+- Matches feedback to a specific order item when `order_item_id` is available.
+- Stores a 0-1 preference score using 50% frequency, 30% recency, and 20% feedback.
+
+### `GET /api/customer/recommendations`
+
+Returns the signed-in customer's top recommendation cards.
+
+Behavior:
+
+- Uses the shared recommendation engine instead of trusting only persisted preference rows.
+- Preference recommendations are based on the customer's completed/delivered order frequency, recent orders, and feedback ratings.
+- Top-seller and popularity fallbacks are based on Admin Item Ranking/global demand.
+- The customer UI and admin Customer Intelligence view use matching recommendation labels and reasons.
+
 ## Database Scripts
 
 Important SQL files:

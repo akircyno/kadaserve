@@ -11,6 +11,9 @@ import {
   X,
   Coffee,
   Clock,
+  CircleAlert,
+  MessageSquareText,
+  Star,
 } from "lucide-react";
 import {
   CustomerPreferenceView,
@@ -333,61 +336,126 @@ function FeedbackManagementView({
     (first, second) =>
       new Date(second.created_at).getTime() - new Date(first.created_at).getTime()
   );
+  const reviewItems = itemSummaries.filter((item) => item.average < 3);
+  const strongestItem = itemSummaries[0];
+  const weakestItem = [...itemSummaries].sort(
+    (first, second) => first.average - second.average
+  )[0];
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Responses
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {feedbackRows.length}
-          </p>
-        </div>
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Overall Avg
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {average ? average.toFixed(1) : "N/A"}
-          </p>
-        </div>
-        <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            Rated Items
-          </p>
-          <p className="mt-3 font-sans text-3xl font-black text-[#0D2E18]">
-            {itemSummaries.length}
-          </p>
-        </div>
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-4">
+        {[
+          {
+            icon: MessageSquareText,
+            label: "Responses",
+            value: String(feedbackRows.length),
+            detail: `${sortedFeedbackRows.length} shown`,
+          },
+          {
+            icon: Star,
+            label: "Overall Avg",
+            value: average ? average.toFixed(1) : "N/A",
+            detail: "All feedback",
+          },
+          {
+            icon: Coffee,
+            label: "Strongest Item",
+            value: strongestItem?.item ?? "None",
+            detail: strongestItem
+              ? `${strongestItem.average.toFixed(1)} avg rating`
+              : "No rated item",
+          },
+          {
+            icon: CircleAlert,
+            label: "Needs Review",
+            value: String(reviewItems.length),
+            detail: weakestItem
+              ? `${weakestItem.item} at ${weakestItem.average.toFixed(1)}`
+              : "No weak signal",
+          },
+        ].map((card) => {
+          const Icon = card.icon;
+
+          return (
+            <div
+              key={card.label}
+              className="rounded-[18px] border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                  {card.label}
+                </p>
+                <Icon size={16} className="text-[#7D6B55]" />
+              </div>
+              <p className="mt-3 truncate font-sans text-2xl font-black text-[#0D2E18]">
+                {card.value}
+              </p>
+              <p className="mt-1 truncate font-sans text-xs font-semibold text-[#8C7A64]">
+                {card.detail}
+              </p>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-          <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-            Item Averages
-          </h2>
-          <div className="mt-4 space-y-3">
+      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <section className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-sans text-lg font-black text-[#0D2E18]">
+              Item Feedback Map
+            </h2>
+            <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+              Avg / 5
+            </span>
+          </div>
+          <div className="mt-4 space-y-2">
             {itemSummaries.map((item) => (
               <div
                 key={item.item}
-                className="grid grid-cols-[1fr_64px_64px] gap-3 rounded-[14px] bg-[#FFF8EF] px-3 py-2 font-sans text-sm"
+                className="rounded-[16px] border border-[#EFE3CF] bg-white px-3 py-3"
               >
-                <span className="font-bold text-[#0D2E18]">{item.item}</span>
-                <span>{item.count}</span>
-                <span>{item.average.toFixed(1)}</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-sans text-sm font-bold text-[#0D2E18]">
+                    {item.item}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-black ${
+                      item.average >= 4
+                        ? "bg-[#E6F2E8] text-[#0F441D]"
+                        : item.average >= 3
+                        ? "bg-[#FFF0DA] text-[#684B35]"
+                        : "bg-[#FFF1EC] text-[#C55432]"
+                    }`}
+                  >
+                    {item.average.toFixed(1)}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF]">
+                  <div
+                    className="h-full rounded-full bg-[#0D2E18]"
+                    style={{ width: `${Math.min(100, (item.average / 5) * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-2 font-sans text-xs font-semibold text-[#8C7A64]">
+                  {item.count} responses
+                </p>
               </div>
             ))}
+            {itemSummaries.length === 0 ? (
+              <div className="rounded-[14px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
+                No item averages yet
+              </div>
+            ) : null}
           </div>
         </section>
 
-        <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+        <section className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-sans text-xl font-bold text-[#0D2E18]">
-              All Responses
+            <h2 className="font-sans text-lg font-black text-[#0D2E18]">
+              Feedback Stream
             </h2>
-            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+            <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
               {sortedFeedbackRows.length} shown
             </span>
           </div>
@@ -395,7 +463,7 @@ function FeedbackManagementView({
             {sortedFeedbackRows.map((row) => (
               <article
                 key={row.id}
-                className="rounded-[14px] border border-[#EFE3CF] bg-[#FFF8EF] p-3"
+                className="rounded-[18px] border border-[#EFE3CF] bg-white p-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -409,7 +477,7 @@ function FeedbackManagementView({
                       - {formatFeedbackDateTime(row.created_at)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-[#E7F4EA] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
+                  <span className="rounded-full bg-[#E6F2E8] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
                     {Number(row.overall_rating).toFixed(1)} / 5
                   </span>
                 </div>
@@ -1470,7 +1538,7 @@ export function AdminDashboard() {
                     </div>
                     {activeTab === "dashboard" && (
                       <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
-                        KadaServe's live café performance today
+                        KadaServe&apos;s live café performance today
                       </p>
                     )}
                   </div>
@@ -1620,25 +1688,19 @@ export function AdminDashboard() {
 
             {activeTab === "demand" ? (
               <div className="space-y-4">
-                {/* Modern Demand Intelligence Header */}
-                <section className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70">
-                  <div className="space-y-4">
-                    {/* Title and Description */}
+                <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-5 py-4 shadow-[0_14px_34px_rgba(75,50,24,0.08)] sm:px-6">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div>
-                      <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">
+                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                         Demand Intelligence
                       </p>
                       <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
-                        Monitor orders, sales trends, and customer demand
+                        Orders, time series, and peak windows
                       </h2>
-                      <p className="mt-2 font-sans text-sm text-[#6D5B48]">
-                        Real-time insights into order patterns and peak hours during store operating hours (5PM–12AM)
-                      </p>
                     </div>
 
-                    {/* Tab Controls - Modern Segmented */}
-                    <div className="flex items-center justify-between pt-2">
-                      <div className="flex gap-2 rounded-full border border-[#D8C8AA]/60 bg-white/40 backdrop-blur-sm p-1.5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="grid gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-3">
                         {demandViews.map((view) => {
                           const isActive = demandView === view.key;
                           return (
@@ -1646,10 +1708,10 @@ export function AdminDashboard() {
                               key={view.key}
                               type="button"
                               onClick={() => setDemandView(view.key)}
-                              className={`rounded-full px-5 py-2.5 font-sans text-sm font-bold transition ${
+                              className={`rounded-full px-4 py-2.5 text-center font-sans text-sm font-bold transition xl:min-w-[118px] ${
                                 isActive
-                                  ? "bg-gradient-to-br from-[#0D2E18] to-[#1A4123] text-white shadow-[0_6px_16px_rgba(13,46,24,0.2)]"
-                                  : "text-[#684B35] hover:bg-white/60"
+                                  ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                                  : "text-[#684B35] hover:bg-white"
                               }`}
                             >
                               {view.label}
@@ -1657,11 +1719,10 @@ export function AdminDashboard() {
                           );
                         })}
                       </div>
-                      
-                      {/* Store Hours Badge */}
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#684B35] px-4 py-2 rounded-full bg-[#FFF0DA]/60 border border-[#FFE0BA]">
+
+                      <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[#DCCFB8] bg-white px-4 py-2.5 font-sans text-xs font-bold text-[#684B35]">
                         <Clock size={13} />
-                        Store Hours: 5PM–12AM
+                        5PM-12AM
                       </span>
                     </div>
                   </div>
@@ -1690,18 +1751,29 @@ export function AdminDashboard() {
 
             {activeTab === "customer-intelligence" ? (
               <div className="space-y-4">
-                <section className="rounded-[22px] border border-[#D8C8AA] bg-white/92 px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
+                <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
                   <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
                     <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
+                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
                         Customer Intelligence
                       </p>
-                      <h2 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                        Preference signals, rankings, ratings, and feedback
+                      <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                        Preference, recommendation, and satisfaction signals
                       </h2>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+                          {orders.filter((order) => order.customer_id).length} customer orders
+                        </span>
+                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+                          {feedbackRows.length} feedback samples
+                        </span>
+                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
+                          {displayItemRanking.length} ranked items
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="grid gap-2 rounded-[28px] border border-[#D8C8AA] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:grid-cols-4">
                       {customerIntelligenceViews.map((view) => {
                         const isActive = customerIntelligenceView === view.key;
 
@@ -1710,7 +1782,7 @@ export function AdminDashboard() {
                             key={view.key}
                             type="button"
                             onClick={() => setCustomerIntelligenceView(view.key)}
-                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[124px] ${
+                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[132px] ${
                               isActive
                                 ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
                                 : "text-[#684B35] hover:bg-white"

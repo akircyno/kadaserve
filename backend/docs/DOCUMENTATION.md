@@ -1,6 +1,6 @@
 # KadaServe Documentation
 
-Last updated: 2026-05-12
+Last updated: 2026-05-14
 
 ## Project Focus
 
@@ -65,6 +65,16 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Admin dashboard lower cards were balanced: `Orders - Week`, `Hourly Order Volume`, `Top Items`, and `Satisfaction` now use equal card rows, tighter inner spacing, compact chart/list surfaces, and wrapped hourly mini-bars to avoid oversized widths.
 - Admin `Demand Growth` now supports quick selected ranges (`Last 4`, `Last 8`, `All`), and the `Peak Hours` card was tightened with a strongest-slot summary and compact heatmap cells to better match the balanced dashboard card system.
 - Admin dashboard `Demand Growth` and `Peak Hours` cards now use equal-width, equal-height grid columns with a slightly more compact growth chart so the top analytics row aligns cleanly.
+- Admin dashboard top analytics row was tightened again after visual review: the `Demand Growth` chart now uses a shorter SVG, smaller range controls, tighter tooltip spacing, and the `Peak Hours Heatmap` uses smaller cells plus a compact inline intensity legend. The top row no longer forces both cards to stretch to the tallest card, preventing empty space under `Demand Growth`.
+- Admin dashboard lower analytics rows were compacted after visual review: `Orders by Day` now uses a shorter chart surface, `Hourly Volume` uses denser mini-bars, and `Top Sellers`/`Customer Ratings` use tighter row spacing so the cards feel balanced on laptop-sized screens.
+- Admin dashboard analytics cards were normalized into paired heights for `Demand Growth`/`Peak Hours`, `Orders by Day`/`Hourly Volume`, and `Top Sellers`/`Customer Ratings`, with chart colors corrected back to the KadaServe deep green, coffee brown, cream, and tan palette.
+- Admin `Demand` module was polished with Huashu Design direction: the module header now uses compact segmented views, the order ledger has real demand summary cards, filters are cleaner, `expired` is available as a status filter, the order table is denser and more scannable, and the time-series/peak-hour views use the KadaServe palette without tutorial-style copy.
+- Admin `Time Series` inside the Demand module was upgraded into a stronger hourly demand profile with KPI cards, a hoverable full-day demand curve, service-window totals, a compact 24-hour volume scan, ranked top hours, and a denser hourly breakdown table.
+- Admin `Time Series` paired analytics cards were balanced so the demand curve and 24-hour scan use equal-width columns and matched card heights on laptop-sized admin screens.
+- Admin `Demand` orders view was refined with Huashu Design direction: a compact demand ledger header, local order search, action/status summary chips, cleaner range/status/type/payment controls, responsive mobile order cards, and a denser desktop order ledger with status dots for faster scanning.
+- Customer preference generation logic was corrected for the intelligent-system flow: item frequency now uses ordered quantity, frequency is normalized per customer, recency uses a 30-day decay curve, feedback ignores missing rating fields instead of treating them as zero, item-level feedback is matched through `order_item_id` when available, and the final score stays on a 0-1 scale using 50% frequency, 30% recency, and 20% feedback.
+- Customer recommendation cards now use the same live recommendation engine as the admin Customer Intelligence profile before falling back to saved analytics rows, preventing stale `customer_preferences` rows from showing a different `Best for You` item than the admin panel. Recommendation cards also show the basis text for preference, top-seller, and popularity picks.
+- Admin Customer Intelligence was redesigned as a cohesive decision-support module: the header now summarizes customer orders, feedback samples, and ranked items; Preferences shows profile-level Top-N recommendation reasoning; Ranking highlights leader, ranked demand, and review candidates; Satisfaction uses a rating quality map; and Feedback uses a compact feedback stream with item-level averages.
 
 ## Current Payment Behavior
 

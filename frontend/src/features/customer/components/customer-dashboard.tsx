@@ -40,6 +40,7 @@ import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/clie
 import {
   getRecommendationsForCustomer,
   type RecommendationFeedback,
+  type RecommendationGlobalRankItem,
   type RecommendationMenuItem,
   type RecommendationOrder,
 } from "@/lib/recommendations";
@@ -72,6 +73,7 @@ type CustomerDashboardProps = {
   }>;
   globalRecommendationOrders?: RecommendationOrder[];
   globalRecommendationFeedback?: RecommendationFeedback[];
+  globalRecommendationRanking?: RecommendationGlobalRankItem[];
   initialSection?: Section;
   shouldShowEntrySplash?: boolean;
   customerProfile?: {
@@ -398,15 +400,15 @@ function getMenuImage(item: CustomerMenuItem) {
 function getRecommendationDisplayMeta(recommendation: MenuRecommendationCard) {
   if (recommendation.basis === "preference") {
     return {
-      label: "Recommended for You",
-      tag: "PREFERENCE",
+      label: "Best for You",
+      tag: "PREFERENCE SCORE",
     };
   }
 
   if (recommendation.basis === "top_seller") {
     return {
       label: "Top Seller",
-      tag: "POPULARITY",
+      tag: "GLOBAL RANK",
     };
   }
 
@@ -649,6 +651,7 @@ export function CustomerDashboard({
   preferenceSignals = [],
   globalRecommendationOrders = [],
   globalRecommendationFeedback = [],
+  globalRecommendationRanking = [],
   initialSection = "home",
   shouldShowEntrySplash = false,
   customerProfile,
@@ -1278,6 +1281,7 @@ export function CustomerDashboard({
       menuItems: recommendationMenuItems,
       orders: [...globalRecommendationOrders, ...recommendationOrders],
       feedback: [...globalRecommendationFeedback, ...recommendationFeedback],
+      globalRanking: globalRecommendationRanking,
     });
   }, [
     customerOrders,
@@ -1285,6 +1289,7 @@ export function CustomerDashboard({
     displayProfileName,
     globalRecommendationFeedback,
     globalRecommendationOrders,
+    globalRecommendationRanking,
     preferenceSignals,
     uniqueMenuItems,
   ]);
@@ -1318,14 +1323,14 @@ export function CustomerDashboard({
     };
   });
   const visibleRecommendedItems =
-    persistedRecommendedItems.length > 0
-      ? persistedRecommendedItems
-      : isAuthenticated
-      ? []
-      : recommendedItems;
+    recommendedItems.length > 0 ? recommendedItems : persistedRecommendedItems;
   const isColdStartRecommendation =
-    recommendationSource === "analytics_items" ||
-    (!recommendationSource && recommendationProfile.isNewCustomer);
+    !visibleRecommendedItems.some(
+      (recommendation) => recommendation.basis === "preference"
+    ) &&
+    (recommendationSource === "analytics_items" ||
+      !recommendationSource ||
+      recommendationProfile.isNewCustomer);
   const displayRecommendedItems = dedupeRecommendationItems(
     visibleRecommendedItems
   ).map((recommendation) => ({
@@ -2385,7 +2390,7 @@ export function CustomerDashboard({
                     ref={recommendationScrollerRef}
                     className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    {displayRecommendedItems.map(({ item, displayMeta }) => {
+                    {displayRecommendedItems.map(({ item, displayMeta, reason }) => {
                       const menuImage = getMenuImage(item);
 
                       return (
@@ -2432,6 +2437,9 @@ export function CustomerDashboard({
                               <h3 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
                                 {item.name}
                               </h3>
+                              <p className="mt-1 line-clamp-2 font-sans text-[11px] font-semibold leading-snug text-[#684B35]">
+                                {reason}
+                              </p>
                             </div>
 
                             <div className="mt-auto flex items-center gap-2 pt-4">

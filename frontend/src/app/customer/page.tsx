@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { CustomerDashboard } from "@/features/customer/components/customer-dashboard";
 import type {
   RecommendationFeedback,
+  RecommendationGlobalRankItem,
   RecommendationOrder,
 } from "@/lib/recommendations";
 import {
@@ -118,6 +119,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
   let globalRecommendationOrders: RecommendationOrder[] = [];
   let globalRecommendationFeedback: RecommendationFeedback[] = [];
+  let globalRecommendationRanking: RecommendationGlobalRankItem[] = [];
   const initialTopRecommendations: InitialTopRecommendation[] = [];
   let initialRecommendationSource: "customer_preferences" | "analytics_items" =
     "analytics_items";
@@ -362,6 +364,12 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     )
     .returns<AnalyticsItemRow[]>();
   const sortedAnalyticsRows = sortAnalyticsItemsByGlobalRanking(analyticsRows ?? []);
+  globalRecommendationRanking = sortedAnalyticsRows.map((row, index) => ({
+    id: getAnalyticsItemId(row),
+    name: row.item_name ?? "",
+    orderCount: Number(row.order_count ?? row.quantity_sold ?? 0),
+    rank: index + 1,
+  }));
   const analyticsItemIds = sortedAnalyticsRows
     .map(getAnalyticsItemId)
     .filter((id): id is string => Boolean(id));
@@ -404,6 +412,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       preferenceSignals={preferenceSignals}
       globalRecommendationOrders={globalRecommendationOrders}
       globalRecommendationFeedback={globalRecommendationFeedback}
+      globalRecommendationRanking={globalRecommendationRanking}
       initialSection={initialSection}
       shouldShowEntrySplash={shouldShowEntrySplash}
       customerProfile={customerProfile}

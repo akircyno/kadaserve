@@ -5,9 +5,6 @@ import { Package, TrendingUp, Clock, Smile, AlertTriangle, Zap, Flame, BarChart3
 import type { StaffOrder } from "@/types/orders";
 
 const STORE_HOURS_LABEL = "Store Hours: 5:00 PM – 12:00 AM";
-const OPERATING_HOUR_START = 17; // 5 PM
-const OPERATING_HOUR_END = 0; // 12 AM (midnight)
-
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
 
@@ -46,53 +43,49 @@ function countOrdersForSlot(orders: StaffOrder[], day: string, hourLabel: string
 }
 
 function getHeatmapColor(count: number, max: number) {
-  if (count === 0) return "#F7FBF5";
+  if (count === 0) return "#F4FAF1";
 
   const ratio = count / max;
 
-  if (ratio >= 0.85) return "#0D2E18";
-  if (ratio >= 0.65) return "#1A4123";
-  if (ratio >= 0.45) return "#684B35";
-  if (ratio >= 0.25) return "#A77B5D";
+  if (ratio >= 0.85) return "#0B3B1D";
+  if (ratio >= 0.65) return "#21633A";
+  if (ratio >= 0.45) return "#8A5B3A";
+  if (ratio >= 0.25) return "#C78A53";
 
-  return "#E5D9C9";
+  return "#EAD7B8";
 }
 
 function getRatingColors(rating: number) {
   if (rating >= 4.5) {
     return {
-      barGradient: "from-[#0D2E18] to-[#1A4123]",
-      barGradientHover: "from-[#0F441D] to-[#225A2E]",
+      barGradient: "from-[#0D2E18] via-[#0F441D] to-[#2E6A3A]",
+      barGradientHover: "from-[#0F441D] to-[#2E6A3A]",
       textColor: "text-[#0D2E18]",
-      accentColor: "text-[#0F441D]",
       dotColor: "bg-[#0D2E18]",
       bgColor: "bg-[#E9F5E7]/40",
     };
   } else if (rating >= 3.5) {
     return {
-      barGradient: "from-[#4A6B4D] to-[#5A7B5D]",
-      barGradientHover: "from-[#5A7B5D] to-[#6A8B6D]",
-      textColor: "text-[#4A6B4D]",
-      accentColor: "text-[#5A7B5D]",
+      barGradient: "from-[#0F441D] via-[#4A6B4D] to-[#7D6B55]",
+      barGradientHover: "from-[#0F441D] to-[#4A6B4D]",
+      textColor: "text-[#0F441D]",
       dotColor: "bg-[#4A6B4D]",
       bgColor: "bg-[#EDF4EC]/40",
     };
   } else if (rating >= 2.5) {
     return {
-      barGradient: "from-[#7A8B6F] to-[#8C9D7F]",
-      barGradientHover: "from-[#8C9D7F] to-[#9EAF8F]",
-      textColor: "text-[#7A8B6F]",
-      accentColor: "text-[#8C9D7F]",
-      dotColor: "bg-[#7A8B6F]",
-      bgColor: "bg-[#F0F4EB]/40",
+      barGradient: "from-[#684B35] via-[#7D6B55] to-[#8C7A64]",
+      barGradientHover: "from-[#684B35] to-[#8C7A64]",
+      textColor: "text-[#684B35]",
+      dotColor: "bg-[#684B35]",
+      bgColor: "bg-[#FFF0DA]/50",
     };
   } else {
     return {
-      barGradient: "from-[#D97C6F] to-[#E89080]",
-      barGradientHover: "from-[#E89080] to-[#F2A397]",
-      textColor: "text-[#D97C6F]",
-      accentColor: "text-[#E89080]",
-      dotColor: "bg-[#D97C6F]",
+      barGradient: "from-[#9C543D] via-[#C55432] to-[#DCCFB8]",
+      barGradientHover: "from-[#9C543D] to-[#C55432]",
+      textColor: "text-[#9C543D]",
+      dotColor: "bg-[#9C543D]",
       bgColor: "bg-[#FFF1EC]/50",
     };
   }
@@ -117,7 +110,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70 ${className}`}
+      className={`overflow-hidden rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70 ${className}`}
     >
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-3">
@@ -307,19 +300,6 @@ function NeedsAttentionItem({
   );
 }
 
-function ProgressBar({ max, value }: { max: number; value: number }) {
-  const width = Math.min(100, Math.max(0, (value / max) * 100));
-
-  return (
-    <div className="h-3 overflow-hidden rounded-full border border-[#DCCFB8] bg-[#FFF8EF]">
-      <div
-        className="h-full rounded-full bg-[#0D2E18]"
-        style={{ width: `${width}%` }}
-      />
-    </div>
-  );
-}
-
 function RankingRow({
   index,
   label,
@@ -332,18 +312,18 @@ function RankingRow({
   value: number;
 }) {
   const rankColors = [
-    { bg: "bg-[#0D2E18]", text: "text-white", badge: "bg-gradient-to-br from-[#0D2E18] to-[#1A4123]" },
-    { bg: "bg-[#4A6B4D]", text: "text-white", badge: "bg-gradient-to-br from-[#4A6B4D] to-[#5A7B5D]" },
-    { bg: "bg-[#B8956A]", text: "text-white", badge: "bg-gradient-to-br from-[#B8956A] to-[#D4AF85]" },
+    { text: "text-white", badge: "bg-gradient-to-br from-[#0D2E18] to-[#0F441D]", bar: "from-[#0D2E18] via-[#0F441D] to-[#2E6A3A]" },
+    { text: "text-white", badge: "bg-gradient-to-br from-[#0F441D] to-[#4A6B4D]", bar: "from-[#0F441D] via-[#4A6B4D] to-[#7D6B55]" },
+    { text: "text-white", badge: "bg-gradient-to-br from-[#684B35] to-[#7D6B55]", bar: "from-[#684B35] via-[#7D6B55] to-[#8C7A64]" },
   ];
 
-  const rankColor = rankColors[Math.min(index - 1, 2)] || { bg: "bg-[#8C9D7F]", text: "text-white", badge: "bg-gradient-to-br from-[#8C9D7F] to-[#9EAF8F]" };
+  const rankColor = rankColors[Math.min(index - 1, 2)] || { text: "text-white", badge: "bg-gradient-to-br from-[#7D6B55] to-[#8C7A64]", bar: "from-[#7D6B55] via-[#8C7A64] to-[#DCCFB8]" };
 
   return (
-    <div className="group relative grid min-h-[60px] grid-cols-[52px_minmax(0,1fr)_56px_128px] items-center gap-3.5 border-b border-[#EBE0D3]/60 py-3 px-1 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+    <div className="group relative grid min-h-[46px] grid-cols-[40px_minmax(0,1fr)_40px_110px] items-center gap-3 border-b border-[#EBE0D3]/60 px-1 py-2 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
       {/* Rank Badge */}
-      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${rankColor.badge} shadow-[0_4px_12px_rgba(13,46,24,0.15)] transition-transform group-hover:scale-110`}>
-        <span className={`font-bold text-sm ${rankColor.text}`}>#{index}</span>
+      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl ${rankColor.badge} shadow-[0_4px_12px_rgba(13,46,24,0.15)] transition-transform group-hover:scale-110`}>
+        <span className={`text-xs font-bold ${rankColor.text}`}>#{index}</span>
       </div>
       
       {/* Item Label */}
@@ -355,14 +335,9 @@ function RankingRow({
       </span>
       
       {/* Progress Bar */}
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+      <div className="relative h-2 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
         <div
-          className={`h-full rounded-full bg-gradient-to-r ${
-            index === 1 ? 'from-[#0D2E18] to-[#1A4123]' :
-            index === 2 ? 'from-[#4A6B4D] to-[#5A7B5D]' :
-            index === 3 ? 'from-[#B8956A] to-[#D4AF85]' :
-            'from-[#8C9D7F] to-[#9EAF8F]'
-          } shadow-[0_2px_8px_rgba(13,46,24,0.2)] transition-all duration-500`}
+          className={`h-full rounded-full bg-gradient-to-r ${rankColor.bar} shadow-[0_2px_8px_rgba(13,46,24,0.2)] transition-all duration-500`}
           style={{
             width: `${Math.min(100, Math.max(0, (value / max) * 100))}%`,
           }}
@@ -374,11 +349,11 @@ function RankingRow({
 
 function RatingRow({ item, rating }: { item: string; rating: number }) {
   const colors = getRatingColors(rating);
-  const starCount = Math.round(rating);
+  const starCount = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
 
   return (
-    <div className="group relative grid min-h-[62px] grid-cols-[minmax(120px,0.8fr)_1fr_56px] items-center gap-3.5 border-b border-[#EBE0D3]/60 py-3 px-1 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+    <div className="group relative grid min-h-[46px] grid-cols-[minmax(130px,0.8fr)_1fr_48px] items-center gap-3 border-b border-[#EBE0D3]/60 px-1 py-2 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
       {/* Item Name */}
       <div className="flex items-center gap-2 min-w-0">
         <span className="truncate font-semibold text-[#0D2E18]">{item}</span>
@@ -387,7 +362,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
       {/* Rating Bar & Stars */}
       <div className="flex items-center gap-2.5">
         {/* Progress Bar */}
-        <div className="flex-1 relative h-2.5 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+        <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
           <div
             className={`h-full rounded-full bg-gradient-to-r ${colors.barGradient} shadow-[0_2px_8px_rgba(13,46,24,0.15)] transition-all duration-500 group-hover:shadow-[0_3px_12px_rgba(13,46,24,0.25)]`}
             style={{
@@ -402,17 +377,17 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
             const isFilled = i < starCount;
             const isHalf = i === starCount && hasHalfStar;
             return (
-              <div key={i} className="relative w-3.5 h-3.5">
+              <div key={i} className="relative h-3 w-3">
                 {isFilled || isHalf ? (
                   <Star
-                    size={14}
-                    className={`absolute inset-0 ${colors.accentColor} fill-current transition-transform group-hover:scale-110`}
+                    size={12}
+                    className="absolute inset-0 fill-current text-[#0F441D] transition-transform group-hover:scale-110"
                     style={{
                       clipPath: isHalf ? "polygon(0 0, 50% 0, 50% 100%, 0 100%)" : undefined,
                     }}
                   />
                 ) : null}
-                <Star size={14} className={`absolute inset-0 ${colors.accentColor}/30`} />
+                <Star size={12} className="absolute inset-0 text-[#DCCFB8]" />
               </div>
             );
           })}
@@ -420,7 +395,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
       </div>
 
       {/* Rating Number */}
-      <span className={`text-right font-bold tabular-nums text-sm ${colors.textColor}`}>
+      <span className={`text-right text-xs font-bold tabular-nums ${colors.textColor}`}>
         {rating.toFixed(1)}
       </span>
     </div>
@@ -456,37 +431,36 @@ function Heatmap({
   );
 
   return (
-    <div className="mt-4 rounded-[22px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] p-5 border border-[#EFE3CF]/50">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div className="mt-3 rounded-[20px] border border-[#EFE3CF]/50 bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] p-3">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+          <p className="font-sans text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
             Peak Activity Time
           </p>
           {strongestCell.count > 0 && (
-            <p className="mt-1 font-sans text-sm font-bold text-[#0D2E18]">
+            <p className="mt-0.5 font-sans text-sm font-bold text-[#0D2E18]">
               {strongestCell.day} {strongestCell.hour}
             </p>
           )}
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm px-3 py-1.5 font-sans text-xs font-bold text-[#0D2E18]">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getHeatmapColor(maxOrders * 0.9, maxOrders) }} />
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D8C8AA] bg-white/70 px-2.5 py-1 font-sans text-[0.7rem] font-bold text-[#0D2E18]">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getHeatmapColor(maxOrders * 0.9, maxOrders) }} />
           {strongestCell.count} orders
         </span>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {visibleDays.map((day) => (
-          <div key={day} className="grid grid-cols-[56px_1fr] items-center gap-3">
-            <span className="font-sans text-xs font-bold text-center text-[#684B35]">{day}</span>
-            <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
+          <div key={day} className="grid grid-cols-[42px_1fr] items-center gap-2">
+            <span className="text-center font-sans text-[0.68rem] font-bold text-[#684B35]">{day}</span>
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
               {visibleHours.map((hour) => {
                 const count = countOrdersForSlot(orders, day, hour);
-                const ratio = count / maxOrders;
                 const bgColor = getHeatmapColor(count, maxOrders);
 
                 return (
                   <div
                     key={`${day}-${hour}`}
-                    className="group relative h-10 rounded-[12px] border border-white/60 transition-all hover:scale-[1.08] hover:shadow-[0_6px_16px_rgba(13,46,24,0.2)] cursor-pointer overflow-hidden"
+                    className="group relative h-6 rounded-[10px] border border-white/60 transition-all hover:scale-[1.04] hover:shadow-[0_6px_16px_rgba(13,46,24,0.16)] cursor-pointer overflow-hidden"
                     title={`${day} ${hour}: ${count} orders`}
                     style={{ backgroundColor: bgColor }}
                   >
@@ -507,11 +481,11 @@ function Heatmap({
             </div>
           </div>
         ))}
-        <div className="grid grid-cols-[56px_1fr] gap-3 pt-2">
+        <div className="grid grid-cols-[42px_1fr] gap-2 pt-0.5">
           <span />
-          <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleHours.length}, minmax(0, 1fr))` }}>
             {visibleHours.map((hour) => (
-              <span key={hour} className="text-center font-sans text-xs font-semibold text-[#8C7A64]">
+              <span key={hour} className="text-center font-sans text-[0.68rem] font-semibold text-[#8C7A64]">
                 {hour}
               </span>
             ))}
@@ -519,12 +493,11 @@ function Heatmap({
         </div>
       </div>
 
-      {/* Enhanced Legend */}
-      <div className="mt-5 rounded-[14px] bg-white/60 backdrop-blur-sm border border-[#EFE3CF]/50 px-4 py-3">
-        <p className="font-sans text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48] mb-2.5">
-          Intensity Scale
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#EFE3CF]/50 bg-white/55 px-3 py-1.5">
+        <p className="font-sans text-[0.62rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+          Intensity
         </p>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           {[
             { color: "#F7FBF5", label: "None", opacity: "opacity-50" },
             { color: "#E5D9C9", label: "Low", opacity: "opacity-70" },
@@ -532,12 +505,12 @@ function Heatmap({
             { color: "#684B35", label: "High", opacity: "opacity-95" },
             { color: "#0D2E18", label: "Peak", opacity: "opacity-100" },
           ].map((item) => (
-            <div key={item.label} className="flex items-center gap-1.5">
+            <div key={item.label} className="flex items-center gap-1">
               <div
-                className={`h-3.5 w-3.5 rounded-lg border border-white/40 transition-transform hover:scale-125 ${item.opacity}`}
+                className={`h-3 w-3 rounded-full border border-white/40 transition-transform hover:scale-125 ${item.opacity}`}
                 style={{ backgroundColor: item.color }}
               />
-              <span className="font-sans text-[0.65rem] font-medium text-[#6D5B48]">
+              <span className="font-sans text-[0.58rem] font-medium text-[#6D5B48]">
                 {item.label}
               </span>
             </div>
@@ -556,7 +529,7 @@ function HourlyVolumeGrid({
   maxHourlyOrders: number;
 }) {
   return (
-    <div className="mt-4 grid grid-cols-6 gap-2.5 sm:grid-cols-8 2xl:grid-cols-12">
+    <div className="mt-3 grid grid-cols-6 gap-2 sm:grid-cols-8 2xl:grid-cols-12">
       {hourlyCounts.map((item) => {
         const hasOrders = item.orders > 0;
         const heightPercent = Math.max(12, (item.orders / maxHourlyOrders) * 100);
@@ -566,36 +539,36 @@ function HourlyVolumeGrid({
         return (
           <div
             key={item.label}
-            className="group flex min-h-[88px] flex-col items-center justify-end gap-2.5 rounded-[18px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-2.5 py-3 transition-all hover:shadow-[0_12px_28px_rgba(13,46,24,0.16)] hover:border border-[#E8D9BE]/40 group-hover:from-white group-hover:to-[#FFFBF4]"
+            className="group flex min-h-[64px] flex-col items-center justify-end gap-1.5 rounded-[16px] border border-[#E8D9BE]/30 bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-2 py-2 transition-all hover:border-[#D8C8AA] hover:from-white hover:to-[#FFFBF4] hover:shadow-[0_10px_22px_rgba(13,46,24,0.14)]"
             title={`${item.label}: ${item.orders} orders`}
           >
             {/* Count Badge */}
-            <span className="font-sans text-xs font-bold tabular-nums text-[#0D2E18] group-hover:scale-110 transition-transform">
+            <span className="font-sans text-[0.7rem] font-bold tabular-nums text-[#0D2E18] transition-transform group-hover:scale-110">
               {item.orders}
             </span>
 
             {/* Bar */}
-            <div className="flex h-14 w-full items-end justify-center">
+            <div className="flex h-8 w-full items-end justify-center">
               {hasOrders ? (
                 <div
-                  className={`w-6 rounded-t-[14px] transition-all duration-300 group-hover:translate-y-[-3px] ${
+                  className={`w-5 rounded-t-[12px] transition-all duration-300 group-hover:translate-y-[-2px] ${
                     isHighVolume
-                      ? "bg-gradient-to-t from-[#0D2E18] via-[#1A4123] to-[#2D5F35]"
+                      ? "bg-gradient-to-t from-[#0D2E18] via-[#0F441D] to-[#2E6A3A]"
                       : isMediumVolume
-                      ? "bg-gradient-to-t from-[#4A6B4D] via-[#5F8A64] to-[#7AA476]"
-                      : "bg-gradient-to-t from-[#8C9D7F] via-[#9EAF8F] to-[#B0C1A7]"
+                      ? "bg-gradient-to-t from-[#0F441D] via-[#4A6B4D] to-[#7D6B55]"
+                      : "bg-gradient-to-t from-[#684B35] via-[#7D6B55] to-[#DCCFB8]"
                   } shadow-[0_4px_12px_rgba(13,46,24,0.12)] group-hover:shadow-[0_8px_20px_rgba(13,46,24,0.2)]`}
                   style={{
                     height: `${heightPercent}%`,
                   }}
                 />
               ) : (
-                <div className="w-6 h-8 rounded-[10px] bg-[#E8D9BE]/40 border border-[#D8C8AA]/30" />
+                <div className="h-6 w-5 rounded-[9px] border border-[#DCCFB8] bg-gradient-to-t from-[#DCCFB8] to-[#FFF0DA]" />
               )}
             </div>
 
             {/* Label */}
-            <span className="font-sans text-[0.65rem] font-bold text-[#684B35]">
+            <span className="font-sans text-[0.6rem] font-bold text-[#684B35]">
               {item.label}
             </span>
           </div>
@@ -607,7 +580,7 @@ function HourlyVolumeGrid({
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
+    <div className="w-full rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
       {label}
     </div>
   );
@@ -683,8 +656,8 @@ function DemandGrowthChart({
     return points.slice(-rangeSize);
   }, [points, rangeSize]);
   const chartWidth = 860;
-  const chartHeight = 232;
-  const padding = { bottom: 40, left: 50, right: 46, top: 58 };
+  const chartHeight = 188;
+  const padding = { bottom: 30, left: 44, right: 40, top: 54 };
   const innerWidth = chartWidth - padding.left - padding.right;
   const innerHeight = chartHeight - padding.top - padding.bottom;
   const maxOrders = Math.max(1, ...visiblePoints.map((point) => point.orders));
@@ -723,14 +696,14 @@ function DemandGrowthChart({
       ? `+${activeDelta} vs previous`
       : `${activeDelta} vs previous`;
   const tooltipWidth = 168;
-  const tooltipHeight = 50;
+  const tooltipHeight = 44;
   const tooltipX = activePoint
     ? Math.min(
         Math.max(activePoint.x - tooltipWidth / 2, padding.left),
         chartWidth - padding.right - tooltipWidth
       )
     : padding.left;
-  const tooltipY = padding.top - tooltipHeight - 12;
+  const tooltipY = padding.top - tooltipHeight - 4;
   const linePath = coordinates
     .map((point, index) => {
       if (index === 0) return `M ${point.x} ${point.y}`;
@@ -758,18 +731,18 @@ function DemandGrowthChart({
   };
 
   return (
-    <div className="mt-4 rounded-[22px] border border-[#EFE3CF] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-5 py-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div className="mt-3 rounded-[20px] border border-[#EFE3CF] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-3.5 py-3">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2.5">
         <div>
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+          <p className="font-sans text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
             Selected range
           </p>
-          <p className="mt-1 font-sans text-base font-black text-[#0D2E18]">
+          <p className="mt-0.5 font-sans text-sm font-black text-[#0D2E18]">
             {activePoint?.label ?? "No range"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm p-1">
+          <div className="flex rounded-full border border-[#D8C8AA] bg-white/70 p-0.5">
             {[
               { label: "Last 4", value: 4 },
               { label: "Last 8", value: 8 },
@@ -791,7 +764,7 @@ function DemandGrowthChart({
                     setRangeSize(nextRange);
                     setActiveIndex(Math.max(0, nextPointCount - 1));
                   }}
-                  className={`rounded-full px-3 py-1.5 font-sans text-xs font-bold transition ${
+                  className={`rounded-full px-2.5 py-1 font-sans text-[0.7rem] font-bold transition ${
                     isActive
                       ? "bg-[#0D2E18] text-white shadow-[0_4px_12px_rgba(13,46,24,0.2)]"
                       : "text-[#684B35] hover:bg-[#FFF0DA]"
@@ -802,12 +775,12 @@ function DemandGrowthChart({
               );
             })}
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-[#D8C8AA] bg-white/70 backdrop-blur-sm px-4 py-2">
-            <span className="font-sans text-sm font-bold tabular-nums text-[#0D2E18]">
+          <div className="flex items-center gap-1.5 rounded-full border border-[#D8C8AA] bg-white/70 px-3 py-1.5">
+            <span className="font-sans text-xs font-bold tabular-nums text-[#0D2E18]">
               {activePoint?.orders ?? 0} orders
             </span>
             <span
-              className={`font-sans text-xs font-bold ${
+              className={`font-sans text-[0.65rem] font-bold ${
                 activeDelta >= 0 ? "text-[#0F441D]" : "text-[#D97C6F]"
               }`}
             >
@@ -817,7 +790,7 @@ function DemandGrowthChart({
         </div>
       </div>
 
-      <div className="overflow-hidden">
+      <div className="overflow-hidden pt-1">
       <svg
         aria-label="Demand growth line chart"
         className="h-auto w-full"
@@ -902,10 +875,10 @@ function DemandGrowthChart({
                 width={tooltipWidth}
                 filter="drop-shadow(0 8px 16px rgba(13, 46, 24, 0.25))"
               />
-              <text fill="#FFF8EF" fontSize="11" fontWeight="800" x="14" y="20">
+              <text fill="#FFF8EF" fontSize="10.5" fontWeight="800" x="14" y="17">
                 {activePoint.label}
               </text>
-              <text fill="#E8D9BE" fontSize="11" fontWeight="700" x="14" y="36">
+              <text fill="#E8D9BE" fontSize="10.5" fontWeight="700" x="14" y="32">
                 {activePoint.orders} orders - {activeDeltaLabel}
               </text>
             </g>
@@ -930,9 +903,9 @@ function DemandGrowthChart({
               cx={point.x}
               cy={point.y}
               fill="#FFF8EF"
-              r={isActive ? "9" : "6"}
+              r={isActive ? "8" : "5.5"}
               stroke="#0D2E18"
-              strokeWidth={isActive ? "5" : "3"}
+              strokeWidth={isActive ? "4.5" : "3"}
               filter={isActive ? "drop-shadow(0 4px 12px rgba(13, 46, 24, 0.3))" : undefined}
             />
             <text
@@ -1286,9 +1259,9 @@ export function DashboardView({
 
       {/* Charts Grid */}
       {showWeekly || showPeakHours ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           {showWeekly ? (
-            <div id="admin-weekly-trend" className="scroll-mt-28">
+            <div id="admin-weekly-trend" className="scroll-mt-28 xl:h-[340px]">
               <Panel 
                 className="h-full" 
                 title="Demand Growth" 
@@ -1300,7 +1273,7 @@ export function DashboardView({
                 {weeklyTrendCounts.length > 0 ? (
                   <DemandGrowthChart points={weeklyTrendCounts} />
                 ) : (
-                  <div className="mt-4">
+                  <div className="mt-3 flex h-[244px] items-center">
                     <EmptyState label="No demand growth data yet" />
                   </div>
                 )}
@@ -1309,7 +1282,7 @@ export function DashboardView({
           ) : null}
 
           {showPeakHours ? (
-            <div id="admin-peak-hours" className="scroll-mt-28">
+            <div id="admin-peak-hours" className="scroll-mt-28 xl:h-[340px]">
               <Panel 
                 className="h-full" 
                 title="Peak Hours Heatmap"
@@ -1326,9 +1299,9 @@ export function DashboardView({
 
       {/* Order & Hourly Volume */}
       {showOrdersWeek || showHourly ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           {showOrdersWeek ? (
-            <div id="admin-orders-week" className="scroll-mt-28">
+            <div id="admin-orders-week" className="scroll-mt-28 xl:h-[320px]">
               <Panel 
                 className="h-full" 
                 title="Orders by Day"
@@ -1336,25 +1309,28 @@ export function DashboardView({
                 formula="Order Count = number of completed orders per day (5PM–12AM)"
                 formulaExplanation="Shows which days are busiest. Orders are counted during store operating hours only."
               >
-                <div className="mt-4 space-y-4">
-                  <div className="flex items-end gap-2.5 rounded-[20px] bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-5 pb-6 pt-4 h-[180px]">
-                    {weekdayCounts.map((item, idx) => {
+                <div className="mt-3 space-y-3">
+                  <div className="flex h-[130px] items-end gap-2 rounded-[18px] border border-[#EFE3CF]/45 bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-4 pb-4 pt-3">
+                    {weekdayCounts.map((item) => {
+                      const hasOrders = item.orders > 0;
                       const heightPercent = Math.max(8, (item.orders / maxWeekdayOrders) * 100);
                       const isHighest = item.orders === Math.max(...weekdayCounts.map(c => c.orders));
                       
                       return (
-                        <div key={item.day} className="flex min-w-0 flex-1 flex-col items-center gap-2 group">
+                        <div key={item.day} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
                           {/* Count Label */}
-                          <p className="font-sans text-sm font-bold tabular-nums text-[#0D2E18] transition-all group-hover:scale-110">
+                          <p className="font-sans text-xs font-bold tabular-nums text-[#0D2E18] transition-all group-hover:scale-110">
                             {item.orders}
                           </p>
                           
                           {/* Bar */}
                           <div
-                            className={`w-full max-w-[48px] rounded-t-[16px] transition-all duration-300 shadow-[0_8px_16px_rgba(13,46,24,0.12)] group-hover:shadow-[0_12px_28px_rgba(13,46,24,0.2)] group-hover:translate-y-[-2px] ${
-                              isHighest
-                                ? "bg-gradient-to-t from-[#0D2E18] via-[#1A4123] to-[#2D5F35] hover:via-[#225A2E]"
-                                : "bg-gradient-to-t from-[#4A6B4D] via-[#5F8A64] to-[#7AA476] hover:from-[#5A7B5D]"
+                            className={`w-full max-w-[42px] rounded-t-[14px] transition-all duration-300 shadow-[0_8px_16px_rgba(13,46,24,0.12)] group-hover:translate-y-[-2px] group-hover:shadow-[0_12px_28px_rgba(13,46,24,0.2)] ${
+                              !hasOrders
+                                ? "border border-[#DCCFB8] bg-gradient-to-t from-[#DCCFB8] to-[#FFF0DA] shadow-none"
+                                : isHighest
+                                ? "bg-gradient-to-t from-[#0D2E18] via-[#0F441D] to-[#2E6A3A]"
+                                : "bg-gradient-to-t from-[#684B35] via-[#7D6B55] to-[#DCCFB8]"
                             }`}
                             style={{
                               height: `${heightPercent}%`,
@@ -1362,7 +1338,7 @@ export function DashboardView({
                           />
                           
                           {/* Day Label */}
-                          <p className="font-sans text-xs font-bold text-[#684B35]">
+                          <p className="font-sans text-[0.68rem] font-bold text-[#684B35]">
                             {item.day}
                           </p>
                         </div>
@@ -1371,7 +1347,7 @@ export function DashboardView({
                   </div>
 
                   {/* Trend Text */}
-                  <div className="flex items-center justify-between rounded-[14px] bg-[#FFF0DA]/60 px-3.5 py-2.5 border border-[#FFE0BA]/50">
+                  <div className="flex items-center justify-between rounded-[14px] border border-[#FFE0BA]/50 bg-[#FFF0DA]/60 px-3 py-2">
                     <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
                       <span className="font-semibold text-[#0D2E18]">Peak day:</span>{" "}
                       {weekdayCounts.reduce((a, b) => a.orders > b.orders ? a : b, weekdayCounts[0]).day} with{" "}
@@ -1387,7 +1363,7 @@ export function DashboardView({
           ) : null}
 
           {showHourly ? (
-            <div id="admin-hourly-order-volume" className="scroll-mt-28">
+            <div id="admin-hourly-order-volume" className="scroll-mt-28 xl:h-[320px]">
               <Panel 
                 className="h-full" 
                 title="Hourly Volume"
@@ -1408,9 +1384,9 @@ export function DashboardView({
 
       {/* Top Items & Satisfaction */}
       {showTopItems || showSatisfaction ? (
-        <div className="grid items-stretch gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           {showTopItems ? (
-            <div id="admin-top-items" className="scroll-mt-28">
+            <div id="admin-top-items" className="scroll-mt-28 xl:h-[330px]">
               <Panel 
                 className="h-full" 
                 title="Top Sellers" 
@@ -1419,7 +1395,7 @@ export function DashboardView({
                 formula="Item Sales = Σ quantity sold per item"
                 formulaExplanation="Ranks menu items by total orders. #1 badge shows your most popular item. Use this to optimize inventory and marketing."
               >
-                <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
+                <div className="mt-3 rounded-[18px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-1">
                   {visibleItemRanking.slice(0, 5).map((item, index) => (
                     <RankingRow
                       key={item.item}
@@ -1436,16 +1412,16 @@ export function DashboardView({
           ) : null}
 
           {showSatisfaction ? (
-            <div id="admin-satisfaction" className="scroll-mt-28">
+            <div id="admin-satisfaction" className="scroll-mt-28 xl:h-[330px]">
               <Panel 
                 className="h-full" 
                 title="Customer Ratings" 
                 rightLabel="AVG / 5"
                 formulaTitle="Average Customer Rating"
                 formula="Average Rating = Σ ratings / feedback entries"
-                formulaExplanation="Calculates mean rating from customer feedback (1–5 stars). Green = excellent (4.5+), yellow = good, orange = needs improvement."
+                formulaExplanation="Calculates mean rating from customer feedback (1–5 stars). Deep green = excellent, muted green = good, coffee brown = needs attention."
               >
-                <div className="mt-3 rounded-[18px] bg-[#FFF8EF] px-3">
+                <div className="mt-3 rounded-[18px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-1">
                   {visibleItemRanking.slice(0, 5).map((item) => (
                     <RatingRow key={item.item} item={item.item} rating={item.rating} />
                   ))}

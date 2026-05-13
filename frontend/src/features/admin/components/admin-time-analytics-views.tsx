@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Flame, TrendingUp, Users, Clock } from "lucide-react";
+import { type ComponentType, useState } from "react";
+import { Activity, BarChart3, Clock, Flame, TrendingUp, Users } from "lucide-react";
 
 export type PeakHourWindow = {
   id: string;
@@ -26,7 +26,6 @@ const weekDays = [
 // Operating hours: 5PM (17) to 12AM (0)
 const OPERATING_HOURS = [17, 18, 19, 20, 21, 22, 23, 0];
 const HOUR_LABELS = ["5PM", "6PM", "7PM", "8PM", "9PM", "10PM", "11PM", "12AM"];
-const peakHourNumbers = Array.from({ length: 24 }, (_, hour) => hour);
 
 function formatHourNumber(hour: number) {
   const normalizedHour = ((hour % 24) + 24) % 24;
@@ -44,48 +43,194 @@ function formatOrderCount(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function getHeatmapColor(avgOrderCount: number, max: number) {
-  if (avgOrderCount === 0) return "#F7FBF5";
+function getVolumeBand(orders: number, maxOrders: number) {
+  if (orders === 0) return "None";
 
-  const ratio = avgOrderCount / max;
+  const ratio = orders / Math.max(1, maxOrders);
 
-  if (ratio >= 0.8) return "#684B35";
-  if (ratio >= 0.6) return "#8C5F3C";
-  if (ratio >= 0.4) return "#A77B5D";
-  if (ratio >= 0.2) return "#D0AC91";
+  if (ratio >= 0.8) return "Peak";
+  if (ratio >= 0.5) return "High";
+  if (ratio >= 0.25) return "Medium";
 
-  return "#FFF0DA";
+  return "Low";
 }
 
-function Panel({
-  children,
-  rightLabel,
-  title,
+function TimeSeriesMetricCard({
+  detail,
+  icon: Icon,
+  label,
+  value,
 }: {
-  children: React.ReactNode;
-  rightLabel?: string;
-  title: string;
+  detail: string;
+  icon: ComponentType<{ className?: string; size?: number }>;
+  label: string;
+  value: string;
 }) {
   return (
-    <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+    <div className="rounded-[20px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-sans text-lg font-bold text-[#0D2E18]">{title}</h2>
-        {rightLabel ? (
-          <p className="font-sans text-sm uppercase text-[#0D2E18]">{rightLabel}</p>
-        ) : null}
+        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+          {label}
+        </p>
+        <Icon size={16} className="text-[#7D6B55]" />
       </div>
-      {children}
-    </section>
+      <p className="mt-3 font-sans text-[1.75rem] font-bold leading-none text-[#0D2E18]">
+        {value}
+      </p>
+      <p className="mt-2 font-sans text-xs font-semibold text-[#8C7A64]">
+        {detail}
+      </p>
+    </div>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function ServiceWindowCurve({
+  activeIndex,
+  maxOrders,
+  points,
+  setActiveIndex,
+}: {
+  activeIndex: number;
+  maxOrders: number;
+  points: Array<{ label: string; orders: number }>;
+  setActiveIndex: (index: number) => void;
+}) {
+  const width = 640;
+  const height = 200;
+  const padX = 40;
+  const padTop = 22;
+  const padBottom = 42;
+  const plotWidth = width - padX * 2;
+  const plotHeight = height - padTop - padBottom;
+  const yTicks = Array.from(new Set([maxOrders, Math.round(maxOrders / 2), 0]));
+  const coords = points.map((point, index) => {
+    const x =
+      points.length === 1
+        ? width / 2
+        : padX + (plotWidth * index) / (points.length - 1);
+    const y =
+      padTop +
+      plotHeight -
+      (point.orders / Math.max(1, maxOrders)) * plotHeight;
+
+    return { ...point, x, y };
+  });
+  const path = coords
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
+  const areaPath = `${path} L ${coords.at(-1)?.x ?? padX} ${padTop + plotHeight} L ${
+    coords[0]?.x ?? padX
+  } ${padTop + plotHeight} Z`;
+  const activePoint = coords[activeIndex] ?? coords[0];
+
   return (
-    <div className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 shadow-[0_8px_18px_rgba(13,46,24,0.05)]">
-      <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">{label}</p>
-      <p className="mt-2 font-sans text-2xl font-black text-[#0D2E18]">
-        {value}
-      </p>
+    <div className="flex h-full flex-col rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+            Demand Curve
+          </p>
+          <h3 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
+            Hourly demand curve
+          </h3>
+        </div>
+        {activePoint ? (
+          <div className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 text-right font-sans text-xs font-bold text-[#684B35]">
+            {activePoint.label} | {activePoint.orders} orders
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-5 flex flex-1 items-center rounded-[20px] border border-[#EFE3CF] bg-white px-3 py-4">
+        <svg
+          aria-label="Hourly demand curve"
+          className="h-[220px] w-full overflow-visible"
+          role="img"
+          viewBox={`0 0 ${width} ${height}`}
+        >
+          {yTicks.map((tick) => {
+            const y =
+              padTop +
+              plotHeight -
+              (tick / Math.max(1, maxOrders)) * plotHeight;
+
+            return (
+              <g key={tick}>
+                <line
+                  x1={padX}
+                  x2={width - padX}
+                  y1={y}
+                  y2={y}
+                  stroke="#EFE3CF"
+                  strokeDasharray="6 8"
+                  strokeWidth="1"
+                />
+                <text
+                  fill="#8C7A64"
+                  fontSize="11"
+                  fontWeight="700"
+                  textAnchor="end"
+                  x={padX - 10}
+                  y={y + 4}
+                >
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          {coords.length > 0 ? (
+            <>
+              <path d={areaPath} fill="rgba(13,46,24,0.08)" />
+              <path
+                d={path}
+                fill="none"
+                stroke="#0D2E18"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="5"
+              />
+              {coords.map((point, index) => (
+                <g key={point.label}>
+                  <line
+                    x1={point.x}
+                    x2={point.x}
+                    y1={point.y}
+                    y2={padTop + plotHeight}
+                    stroke={index === activeIndex ? "#DCCFB8" : "transparent"}
+                    strokeDasharray="5 7"
+                    strokeWidth="2"
+                  />
+                  <circle
+                    className="cursor-pointer transition"
+                    cx={point.x}
+                    cy={point.y}
+                    fill={index === activeIndex ? "#FFF8EF" : "#FFFCF7"}
+                    onFocus={() => setActiveIndex(index)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    r={index === activeIndex ? 8 : 6}
+                    stroke="#0D2E18"
+                    strokeWidth={index === activeIndex ? 5 : 3}
+                    tabIndex={0}
+                  />
+                  <text
+                    fill="#684B35"
+                    fontSize="11"
+                    fontWeight="800"
+                    textAnchor="middle"
+                    x={point.x}
+                    y={height - 10}
+                  >
+                    {points.length > 12 && index !== activeIndex && index % 3 !== 0
+                      ? ""
+                      : point.label}
+                  </text>
+                </g>
+              ))}
+            </>
+          ) : null}
+        </svg>
+      </div>
     </div>
   );
 }
@@ -110,102 +255,102 @@ function Heatmap({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
   );
 
   const getIntensityColor = (avgOrderCount: number, max: number) => {
-    if (avgOrderCount === 0) return { bg: "#FFF3E6", border: "#E8D9BE" };
+    if (avgOrderCount === 0) return { bg: "#FFF8EF", border: "#DCCFB8" };
     
     const ratio = avgOrderCount / max;
     
     if (ratio >= 0.9) return { bg: "#0D2E18", border: "#0D2E18", glow: true };
-    if (ratio >= 0.7) return { bg: "#4A6B4D", border: "#3D5A42" };
-    if (ratio >= 0.5) return { bg: "#8C6C48", border: "#7A5F3D" };
-    if (ratio >= 0.3) return { bg: "#B8956A", border: "#A0825D" };
+    if (ratio >= 0.7) return { bg: "#0F441D", border: "#0F441D" };
+    if (ratio >= 0.5) return { bg: "#684B35", border: "#684B35" };
+    if (ratio >= 0.3) return { bg: "#8C7A64", border: "#8C7A64" };
     
-    return { bg: "#FFE8CC", border: "#E8D9BE" };
+    return { bg: "#EFE3CF", border: "#DCCFB8" };
   };
 
   return (
     <div className="mt-6 space-y-4">
       {/* Heatmap Grid */}
-      <div className="overflow-x-auto rounded-xl pb-2">
-        <div className="min-w-full space-y-2">
+      <div className="rounded-[18px] border border-[#EFE3CF] bg-white/45 p-4">
+        <div className="space-y-2">
           {weekDays.map((day) => (
-            <div key={day.label} className="grid grid-cols-[70px_1fr] items-center gap-4">
-              <span className="font-sans text-sm font-semibold text-[#0D2E18]">
+            <div
+              key={day.label}
+              className="grid grid-cols-[58px_repeat(8,minmax(46px,1fr))] items-center gap-2"
+            >
+              <span className="font-sans text-xs font-bold text-[#0D2E18]">
                 {day.label}
               </span>
-              <div className="flex gap-2">
-                {OPERATING_HOURS.map((hour, idx) => {
-                  const row = rowsBySlot.get(`${day.value}:${hour}`);
-                  const avgOrderCount = Number(row?.avg_order_count ?? 0);
-                  const colors = getIntensityColor(avgOrderCount, maxOrders);
-                  const cellId = `${day.value}:${hour}`;
-                  const isHovered = hoveredCell === cellId;
+              {OPERATING_HOURS.map((hour, idx) => {
+                const row = rowsBySlot.get(`${day.value}:${hour}`);
+                const avgOrderCount = Number(row?.avg_order_count ?? 0);
+                const colors = getIntensityColor(avgOrderCount, maxOrders);
+                const cellId = `${day.value}:${hour}`;
+                const isHovered = hoveredCell === cellId;
 
-                  return (
+                return (
+                  <div
+                    key={`${day.label}-${hour}`}
+                    onMouseEnter={() => setHoveredCell(cellId)}
+                    onMouseLeave={() => setHoveredCell(null)}
+                    className="group relative cursor-pointer"
+                  >
                     <div
-                      key={`${day.label}-${hour}`}
-                      onMouseEnter={() => setHoveredCell(cellId)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                      className="relative group cursor-pointer"
-                    >
-                      <div
-                        className={`h-10 w-10 rounded-lg transition-all duration-200 border ${
-                          isHovered
-                            ? "scale-110 shadow-lg"
-                            : "hover:scale-105 hover:shadow-md"
-                        } ${
-                          colors.glow
-                            ? "shadow-[0_0_16px_rgba(13,46,24,0.3)]"
-                            : ""
-                        }`}
-                        style={{
-                          backgroundColor: colors.bg,
-                          borderColor: colors.border,
-                          borderWidth: "1.5px",
-                        }}
-                        title={`${day.label} • ${HOUR_LABELS[idx]} • ${formatOrderCount(avgOrderCount)} orders`}
-                      />
-                      
-                      {/* Tooltip */}
-                      {isHovered && (
-                        <div className="absolute bottom-full left-1/2 mb-3 -translate-x-1/2 z-20 px-3 py-2 rounded-lg bg-[#0D2E18] text-white text-xs font-semibold whitespace-nowrap shadow-lg animate-in fade-in zoom-in-95 duration-200">
-                          {day.label} • {HOUR_LABELS[idx]}
-                          <br />
-                          <span className="text-[#FFF0DA]">
-                            {formatOrderCount(avgOrderCount)} orders
-                          </span>
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-[#0D2E18]" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      className={`h-10 rounded-[12px] border transition-all duration-200 ${
+                        isHovered
+                          ? "scale-[1.03] shadow-lg"
+                          : "hover:scale-[1.015] hover:shadow-md"
+                      } ${
+                        colors.glow
+                          ? "shadow-[0_0_16px_rgba(13,46,24,0.22)]"
+                          : ""
+                      }`}
+                      style={{
+                        backgroundColor: colors.bg,
+                        borderColor: colors.border,
+                        borderWidth: "1.5px",
+                      }}
+                      title={`${day.label} / ${HOUR_LABELS[idx]} / ${formatOrderCount(avgOrderCount)} orders`}
+                    />
+
+                    {isHovered && (
+                      <div className="absolute bottom-full left-1/2 z-20 mb-3 -translate-x-1/2 rounded-lg bg-[#0D2E18] px-3 py-2 text-xs font-semibold whitespace-nowrap text-white shadow-lg animate-in fade-in zoom-in-95 duration-200">
+                        {day.label} / {HOUR_LABELS[idx]}
+                        <br />
+                        <span className="text-[#FFF0DA]">
+                          {formatOrderCount(avgOrderCount)} orders
+                        </span>
+                        <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 border-t-4 border-r-4 border-l-4 border-t-[#0D2E18] border-r-transparent border-l-transparent" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-[58px_repeat(8,minmax(46px,1fr))] gap-2">
+          <span />
+          {HOUR_LABELS.map((label) => (
+            <span
+              key={label}
+              className="text-center font-sans text-xs font-bold text-[#8C7A64]"
+            >
+              {label}
+            </span>
           ))}
         </div>
       </div>
 
-      {/* Hour Labels */}
-      <div className="flex gap-2 ml-[70px] mt-2">
-        {HOUR_LABELS.map((label) => (
-          <div key={label} className="h-10 w-10 flex items-center justify-center">
-            <span className="font-sans text-xs font-semibold text-[#8C7A64]">
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Intensity Legend */}
-      <div className="mt-4 flex items-center justify-center flex-wrap gap-4 text-xs">
-        <span className="font-sans font-semibold text-[#8C6C48]">Traffic Level:</span>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs">
+        <span className="font-sans font-semibold text-[#684B35]">Traffic Level:</span>
         <div className="flex gap-3">
           {[
             { color: "#0D2E18", label: "Very High" },
-            { color: "#4A6B4D", label: "High" },
-            { color: "#8C6C48", label: "Medium" },
-            { color: "#B8956A", label: "Low" },
-            { color: "#FFE8CC", label: "Minimal" },
+            { color: "#0F441D", label: "High" },
+            { color: "#684B35", label: "Medium" },
+            { color: "#8C7A64", label: "Low" },
+            { color: "#EFE3CF", label: "Minimal" },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-1.5">
               <div
@@ -223,7 +368,7 @@ function Heatmap({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
+    <div className="rounded-[18px] border border-dashed border-[#DCCFB8] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
       {label}
     </div>
   );
@@ -271,19 +416,19 @@ function PeakInsights({
   // Determine staffing recommendation
   const maxOrders = Math.max(...peakHourWindows.map((w) => Number(w.avg_order_count ?? 0)));
   let staffingLevel = "Standard";
-  let staffingColor = "bg-[#4A6B4D]/10 border-[#4A6B4D]/30";
+  let staffingColor = "bg-[#E6F2E8] border-[#0F441D]/20";
   if (maxOrders >= 8) {
     staffingLevel = "High Alert";
-    staffingColor = "bg-[#D97C6F]/10 border-[#D97C6F]/30";
+    staffingColor = "bg-[#FFF1EC] border-[#C55432]/20";
   } else if (maxOrders >= 5) {
     staffingLevel = "Elevated";
-    staffingColor = "bg-[#B8956A]/10 border-[#B8956A]/30";
+    staffingColor = "bg-[#FFF0DA] border-[#DCCFB8]";
   }
 
   return (
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-      <div className="rounded-lg border border-[#D8C8AA]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
+        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
           Busiest Day
         </p>
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
@@ -294,8 +439,8 @@ function PeakInsights({
         </p>
       </div>
 
-      <div className="rounded-lg border border-[#D8C8AA]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
+        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
           Peak Hour
         </p>
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
@@ -306,8 +451,8 @@ function PeakInsights({
         </p>
       </div>
 
-      <div className="rounded-lg border border-[#D8C8AA]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
+        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
           Average Traffic
         </p>
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
@@ -319,7 +464,7 @@ function PeakInsights({
       </div>
 
       <div className={`rounded-lg border p-4 ${staffingColor}`}>
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
           Staffing Level
         </p>
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
@@ -351,112 +496,172 @@ export function TimeSeriesView({
   const low = hourlyCounts.length
     ? Math.min(...hourlyCounts.map((item) => item.orders))
     : 0;
+  const serviceWindowCounts = HOUR_LABELS
+    .map((label) => hourlyCounts.find((item) => item.label === label))
+    .filter((item): item is { label: string; orders: number } => Boolean(item));
+  const serviceTotal = serviceWindowCounts.reduce((sum, item) => sum + item.orders, 0);
+  const chartSeries = hourlyCounts.length > 0 ? hourlyCounts : serviceWindowCounts;
+  const chartMax = Math.max(1, ...chartSeries.map((item) => item.orders));
+  const activeHourCount = hourlyCounts.filter((item) => item.orders > 0).length;
+  const serviceShare = total ? Math.round((serviceTotal / total) * 100) : 0;
+  const peakIndex = Math.max(
+    0,
+    chartSeries.findIndex((item) => item.label === peak.label)
+  );
+  const [selectedServiceIndex, setSelectedServiceIndex] = useState<number | null>(
+    null
+  );
+  const activeServiceIndex =
+    selectedServiceIndex == null
+      ? peakIndex
+      : Math.min(selectedServiceIndex, Math.max(0, chartSeries.length - 1));
+  const topHours = [...hourlyCounts]
+    .sort((first, second) => second.orders - first.orders)
+    .slice(0, 3);
 
   return (
     <div className="space-y-4">
-      {/* Info Header */}
-      <div className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-6 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
-        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-          <p className="font-sans text-sm text-[#6D5B48]">
-            Operating Hours: 5PM–12AM Analysis
-          </p>
-          <span className="rounded-full border border-[#FFE0BA] bg-[#FFF0DA]/60 px-4 py-1.5 font-sans text-xs font-semibold text-[#684B35]">
-            {dateLabel} · {total} total orders
-          </span>
+      <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
+              Time Series
+            </p>
+            <h3 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
+              Hourly demand profile
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 font-sans text-xs font-bold text-[#684B35]">
+              {dateLabel}
+            </span>
+            <span className="rounded-full border border-[#DCCFB8] bg-white px-4 py-2 font-sans text-xs font-bold text-[#684B35]">
+              {total} orders
+            </span>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Quick Stats */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition hover:shadow-[0_20px_50px_rgba(75,50,24,0.12)]">
-          <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">Peak Hour</p>
-          <p className="mt-2 font-sans text-3xl font-bold text-[#0D2E18]">{peak.orders}</p>
-          <p className="mt-1 font-sans text-sm text-[#8C7A64]">at {peak.label}</p>
-        </div>
-
-        <div className="rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition hover:shadow-[0_20px_50px_rgba(75,50,24,0.12)]">
-          <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">Lowest Hour</p>
-          <p className="mt-2 font-sans text-3xl font-bold text-[#0D2E18]">{low}</p>
-          <p className="mt-1 font-sans text-sm text-[#8C7A64]">orders</p>
-        </div>
-
-        <div className="rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition hover:shadow-[0_20px_50px_rgba(75,50,24,0.12)]">
-          <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">Average</p>
-          <p className="mt-2 font-sans text-3xl font-bold text-[#0D2E18]">{avg}</p>
-          <p className="mt-1 font-sans text-sm text-[#8C7A64]">per hour</p>
-        </div>
-
-        <div className="rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition hover:shadow-[0_20px_50px_rgba(75,50,24,0.12)]">
-          <p className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-[#8C6C48]">Total Volume</p>
-          <p className="mt-2 font-sans text-3xl font-bold text-[#0D2E18]">{total}</p>
-          <p className="mt-1 font-sans text-sm text-[#8C7A64]">orders</p>
-        </div>
+        <TimeSeriesMetricCard
+          detail={`at ${peak.label}`}
+          icon={Activity}
+          label="Peak Hour"
+          value={String(peak.orders)}
+        />
+        <TimeSeriesMetricCard
+          detail={`${activeHourCount} active hours`}
+          icon={BarChart3}
+          label="Total Volume"
+          value={String(total)}
+        />
+        <TimeSeriesMetricCard
+          detail={`${serviceShare}% of daily demand`}
+          icon={Clock}
+          label="Service Window"
+          value={String(serviceTotal)}
+        />
+        <TimeSeriesMetricCard
+          detail={`${low} lowest hour`}
+          icon={TrendingUp}
+          label="Average"
+          value={String(avg)}
+        />
       </div>
 
-      {/* Hourly Volume Chart */}
-      <section className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
-        <h3 className="font-sans text-lg font-bold text-[#0D2E18]">Hourly Order Volume</h3>
-        <p className="mt-1 font-sans text-sm text-[#8C7A64]">Distribution across operating hours (5PM–12AM)</p>
-        
-        <div className="mt-6 rounded-[20px] border border-[#D8C8AA]/40 bg-white/50 backdrop-blur-sm px-4 py-6">
-          <div className="flex min-w-0 items-end gap-3 overflow-x-auto pb-3 sm:gap-4">
+      <div className="grid items-stretch gap-4 xl:grid-cols-2">
+        <ServiceWindowCurve
+          activeIndex={activeServiceIndex}
+          maxOrders={chartMax}
+          points={chartSeries}
+          setActiveIndex={setSelectedServiceIndex}
+        />
+
+        <section className="flex h-full flex-col rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                All-Day Scan
+              </p>
+              <h3 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
+                24-hour volume
+              </h3>
+            </div>
+            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
+              {activeHourCount} active
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-6 gap-1.5">
             {hourlyCounts.map((item) => (
               <div
                 key={item.label}
-                className="flex min-w-[54px] flex-col items-center gap-2 sm:min-w-[68px]"
+                className="rounded-[14px] border border-[#EFE3CF] bg-white px-2 py-1.5 text-center"
+                title={`${item.label} / ${item.orders} orders`}
               >
-                <p
-                  className={`font-sans text-sm font-semibold tabular-nums ${
+                <p className={`font-sans text-xs font-bold tabular-nums ${
                     item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
-                  }`}
-                >
+                  }`}>
                   {item.orders}
                 </p>
-                <div className="flex h-[120px] items-end">
+                <div className="mt-1.5 flex h-8 items-end justify-center">
                   <div
-                    className="w-10 rounded-t-[12px] transition hover:opacity-90 sm:w-12"
+                    className="w-5 rounded-t-full"
                     style={{
                       backgroundColor:
                         item.orders >= maxHourlyOrders * 0.8
                           ? "#0D2E18"
                           : item.orders >= maxHourlyOrders * 0.5
-                            ? "#4A6B4D"
+                            ? "#0F441D"
                             : item.orders >= maxHourlyOrders * 0.2
-                              ? "#B8956A"
-                              : "rgba(13,46,24,0.15)",
-                      height: `${Math.max(10, (item.orders / maxHourlyOrders) * 108)}px`,
+                              ? "#684B35"
+                              : "#EFE3CF",
+                      height: `${Math.max(5, (item.orders / Math.max(1, maxHourlyOrders)) * 30)}px`,
                     }}
                   />
                 </div>
-                <p className="font-sans text-xs font-semibold text-[#8C7A64]">
+                <p className="mt-1 font-sans text-[0.68rem] font-bold text-[#8C7A64]">
                   {item.label}
                 </p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
 
-      {/* Data Table */}
-      <section className="rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-6 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+          <div className="mt-5 space-y-2">
+            {topHours.map((item, index) => (
+              <div
+                key={`${item.label}-${index}`}
+                className="flex items-center justify-between rounded-full border border-[#EFE3CF] bg-white px-3 py-2 font-sans text-xs font-bold"
+              >
+                <span className="text-[#684B35]">#{index + 1} {item.label}</span>
+                <span className="text-[#0D2E18]">{item.orders} orders</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
         <h3 className="font-sans text-lg font-bold text-[#0D2E18]">Hourly Breakdown</h3>
-        <p className="mt-1 font-sans text-sm text-[#8C7A64]">Order counts and trend analysis by time period</p>
         
-        <div className="mt-4 overflow-x-auto rounded-[16px] border border-[#D8C8AA]/40 bg-white/50 backdrop-blur-sm">
-          <div className="min-w-[400px]">
-            <div className="grid grid-cols-3 gap-4 border-b border-[#D8C8AA]/40 bg-white/60 px-5 py-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+        <div className="mt-4 overflow-x-auto rounded-[18px] border border-[#EFE3CF] bg-white">
+          <div className="min-w-[560px]">
+            <div className="grid grid-cols-[1fr_1fr_1fr_1.1fr] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF] px-5 py-3 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
               <span>Hour</span>
               <span>Orders</span>
+              <span>Share</span>
               <span>Trend</span>
             </div>
-            <div className="divide-y divide-[#D8C8AA]/40">
+            <div className="max-h-[360px] divide-y divide-[#EFE3CF] overflow-y-auto">
               {hourlyCounts.map((item, index, list) => {
                 const previous = list[index - 1]?.orders ?? item.orders;
-                const isUp = item.orders >= previous;
+                const delta = item.orders - previous;
+                const band = getVolumeBand(item.orders, maxHourlyOrders);
+
                 return (
                   <div
                     key={item.label}
-                    className={`grid grid-cols-3 gap-4 px-5 py-3 font-sans text-sm transition hover:bg-white/40 ${
+                    className={`grid grid-cols-[1fr_1fr_1fr_1.1fr] items-center gap-4 px-5 py-3 font-sans text-sm transition hover:bg-[#FFF8EF] ${
                       index % 2 === 0 ? "bg-white/30" : ""
                     }`}
                   >
@@ -464,8 +669,22 @@ export function TimeSeriesView({
                     <span className="font-bold tabular-nums text-[#0D2E18]">
                       {item.orders}
                     </span>
-                    <span className={`font-semibold ${isUp ? "text-[#0D2E18]" : "text-[#8C7A64]"}`}>
-                      {isUp ? "↑ Up" : "↓ Down"}
+                    <span className="font-semibold text-[#8C7A64]">
+                      {total ? `${Math.round((item.orders / total) * 100)}%` : "0%"}
+                    </span>
+                    <span
+                      className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                        band === "Peak"
+                          ? "bg-[#0D2E18] text-[#FFF8EF]"
+                          : band === "High"
+                            ? "bg-[#E6F2E8] text-[#0F441D]"
+                            : band === "Medium"
+                              ? "bg-[#FFF0DA] text-[#684B35]"
+                              : "bg-[#EFE3CF] text-[#7D6B55]"
+                      }`}
+                    >
+                      {delta > 0 ? "+" : ""}
+                      {delta} / {band}
                     </span>
                   </div>
                 );
@@ -495,27 +714,24 @@ export function PeakHoursView({
   return (
     <div className="space-y-5">
       {/* Main Analytics Card Header */}
-      <section className="rounded-2xl border border-[#D8C8AA]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)] transition-all hover:shadow-[0_20px_60px_rgba(75,50,24,0.15)]">
+      <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)] transition-all hover:shadow-[0_20px_60px_rgba(75,50,24,0.15)]">
         <div className="space-y-3">
           {/* Title with Icon */}
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Flame size={20} className="text-[#B8956A]" />
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+                <Flame size={20} className="text-[#684B35]" />
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
                   Peak Hour Intelligence
                 </p>
               </div>
               <h3 className="font-sans text-2xl font-bold text-[#0D2E18]">
-                Track the busiest operating hours
+                Busiest operating hours
               </h3>
-              <p className="font-sans text-sm text-[#8C7A64] max-w-2xl">
-                Monitor demand patterns between 5PM–12AM to optimize staffing and inventory planning.
-              </p>
             </div>
-            <span className="whitespace-nowrap rounded-full border border-[#FFE0BA] bg-[#FFF0DA]/60 px-4 py-2 font-sans text-xs font-semibold text-[#684B35]">
+            <span className="whitespace-nowrap rounded-full border border-[#DCCFB8] bg-[#FFF0DA]/60 px-4 py-2 font-sans text-xs font-semibold text-[#684B35]">
               <Clock size={12} className="inline mr-1" />
-              Store Hours: 5PM–12AM
+              5PM-12AM
             </span>
           </div>
         </div>
@@ -524,7 +740,7 @@ export function PeakHoursView({
       {/* Peak Insights Cards */}
       {peakHourWindows.length > 0 && (
         <div>
-          <h4 className="mb-3 font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+          <h4 className="mb-3 font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#684B35]">
             Quick Intelligence
           </h4>
           <PeakInsights peakHourWindows={peakHourWindows} />
@@ -532,17 +748,14 @@ export function PeakHoursView({
       )}
 
       {/* Modern Heatmap Section */}
-      <section className="rounded-2xl border border-[#D8C8AA]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
+      <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
         <div className="space-y-2 mb-6">
           <div className="flex items-center gap-2">
-            <TrendingUp size={18} className="text-[#8C6C48]" />
+            <TrendingUp size={18} className="text-[#684B35]" />
             <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
               Hourly Traffic Heatmap
             </h4>
           </div>
-          <p className="font-sans text-sm text-[#8C7A64]">
-            Visualize demand intensity across all days and hours. Darker cells indicate higher traffic periods.
-          </p>
         </div>
 
         <div className="mt-8">
@@ -556,17 +769,14 @@ export function PeakHoursView({
 
       {/* Busiest Service Hours Section */}
       {detectedPeakWindows.length > 0 && (
-        <section className="rounded-2xl border border-[#D8C8AA]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
+        <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
           <div className="space-y-2 mb-6">
             <div className="flex items-center gap-2">
-              <Users size={18} className="text-[#8C6C48]" />
+              <Users size={18} className="text-[#684B35]" />
               <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
                 Busiest Service Hours
               </h4>
             </div>
-            <p className="font-sans text-sm text-[#8C7A64]">
-              Top 5 peak windows ranked by average order volume. Plan staffing around these times.
-            </p>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-5">
@@ -580,11 +790,11 @@ export function PeakHoursView({
                   case "Very High":
                     return { bg: "#0D2E18", text: "white", badge: "bg-[#0D2E18]/10 text-[#0D2E18]" };
                   case "High":
-                    return { bg: "#4A6B4D", text: "white", badge: "bg-[#4A6B4D]/10 text-[#4A6B4D]" };
+                    return { bg: "#0F441D", text: "white", badge: "bg-[#E6F2E8] text-[#0F441D]" };
                   case "Medium":
-                    return { bg: "#8C6C48", text: "white", badge: "bg-[#8C6C48]/10 text-[#8C6C48]" };
+                    return { bg: "#684B35", text: "white", badge: "bg-[#FFF0DA] text-[#684B35]" };
                   default:
-                    return { bg: "#B8956A", text: "white", badge: "bg-[#B8956A]/10 text-[#B8956A]" };
+                    return { bg: "#8C7A64", text: "white", badge: "bg-[#EFE3CF] text-[#684B35]" };
                 }
               };
 
@@ -593,7 +803,7 @@ export function PeakHoursView({
               return (
                 <div
                   key={`${peak.day_of_week}-${peak.hour_start}`}
-                  className="group rounded-xl border border-[#D8C8AA]/40 bg-white/60 p-5 transition-all hover:border-[#D8C8AA]/70 hover:bg-white hover:shadow-[0_8px_24px_rgba(75,50,24,0.12)]"
+                  className="group rounded-xl border border-[#DCCFB8]/40 bg-white/60 p-5 transition-all hover:border-[#DCCFB8]/70 hover:bg-white hover:shadow-[0_8px_24px_rgba(75,50,24,0.12)]"
                 >
                   {/* Rank Badge */}
                   <div className="mb-3 inline-block">
@@ -606,8 +816,8 @@ export function PeakHoursView({
                   <div className="space-y-3">
                     {/* Time Display */}
                     <div>
-                      <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
-                        {getDayLabel(Number(peak.day_of_week))} • {hourLabel}
+                      <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
+                        {getDayLabel(Number(peak.day_of_week))} / {hourLabel}
                       </p>
                       <p className="mt-2 font-sans text-xl font-bold text-[#0D2E18]">
                         {formatOrderCount(Number(peak.avg_order_count ?? 0))} orders
@@ -622,7 +832,7 @@ export function PeakHoursView({
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="relative h-1.5 rounded-full bg-[#E8D9BE]/40 overflow-hidden">
+                    <div className="relative h-1.5 rounded-full bg-[#EFE3CF]/40 overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-300"
                         style={{
@@ -641,3 +851,4 @@ export function PeakHoursView({
     </div>
   );
 }
+

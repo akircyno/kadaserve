@@ -38,6 +38,13 @@ type CustomerPreferenceRow = {
 
 const FINAL_ORDER_STATUSES = new Set(["completed", "delivered"]);
 const MANILA_TIME_ZONE = "Asia/Manila";
+const RECENCY_DECAY_DAYS = 30;
+const NEUTRAL_FEEDBACK_SCORE = 0.6;
+const PREFERENCE_WEIGHTS = {
+  frequency: 0.5,
+  recency: 0.3,
+  feedback: 0.2,
+} as const;
 const REQUIRED_COLUMNS =
   "customer_id, menu_item_id, frequency, recency_score, avg_rating, preference_score, last_ordered_at, updated_at";
 const CUSTOMER_PREFERENCES_MIGRATION_SQL = `alter table if exists public.customer_preferences
@@ -70,9 +77,16 @@ function isMissingConflictConstraint(message: string) {
     .includes("no unique or exclusion constraint matching the on conflict");
 }
 
-function getNumberValue(value: unknown) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : 0;
+function clamp01(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function getOrderItemQuantity(quantity: number | null) {
+  const normalizedQuantity = Number(quantity);
+
+  return Number.isFinite(normalizedQuantity) && normalizedQuantity > 0
+    ? Math.round(normalizedQuantity)
+    : 1;
 }
 
 function formatManilaDateKey(value: string) {
@@ -94,12 +108,26 @@ function getDaysSinceLastOrder(lastOrderedAt: string) {
   return Math.max(0, days);
 }
 
+function getRecencyScore(lastOrderedAt: string) {
+  const daysSinceLastOrder = getDaysSinceLastOrder(lastOrderedAt);
+
+  return clamp01(1 / (1 + daysSinceLastOrder / RECENCY_DECAY_DAYS));
+}
+
 function getFeedbackScore(row: PreferenceFeedbackRow) {
-  return (
-    getNumberValue(row.taste_rating) +
-    getNumberValue(row.strength_rating) +
-    getNumberValue(row.overall_rating)
-  ) / 3;
+  const ratings = [
+    row.taste_rating,
+    row.strength_rating,
+    row.overall_rating,
+  ]
+    .map((rating) => Number(rating))
+    .filter((rating) => Number.isFinite(rating) && rating > 0);
+
+  if (ratings.length === 0) {
+    return null;
+  }
+
+  return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
 }
 
 function getBucketKey(customerId: string, menuItemId: string) {
@@ -118,6 +146,10 @@ function buildCustomerPreferences(
   );
   const ordersById = new Map(validOrders.map((order) => [order.id, order]));
   const orderItemsByOrderId = new Map<string, PreferenceOrderItemRow[]>();
+  const orderItemLookup = new Map<
+    string,
+    { customerId: string; menuItemId: string }
+  >();
   const buckets = new Map<
     string,
     {
@@ -146,7 +178,7 @@ function buildCustomerPreferences(
         feedbackScores: [],
       };
 
-    currentBucket.frequency += 1;
+    currentBucket.frequency += getOrderItemQuantity(item.quantity);
 
     if (new Date(order.ordered_at).getTime() > new Date(currentBucket.lastOrderedAt).getTime()) {
       currentBucket.lastOrderedAt = order.ordered_at;
@@ -157,6 +189,10 @@ function buildCustomerPreferences(
     const orderItemsForOrder = orderItemsByOrderId.get(item.order_id) ?? [];
     orderItemsForOrder.push(item);
     orderItemsByOrderId.set(item.order_id, orderItemsForOrder);
+    orderItemLookup.set(item.id, {
+      customerId: order.customer_id,
+      menuItemId: item.menu_item_id,
+    });
   });
 
   feedbackRows.forEach((feedback) => {
@@ -164,8 +200,22 @@ function buildCustomerPreferences(
     const customerId = feedback.customer_id ?? order?.customer_id;
     const rating = getFeedbackScore(feedback);
 
-    if (!customerId || !Number.isFinite(rating)) {
+    if (!customerId || rating === null) {
       return;
+    }
+
+    if (feedback.order_item_id) {
+      const matchedOrderItem = orderItemLookup.get(feedback.order_item_id);
+      const bucket = matchedOrderItem
+        ? buckets.get(
+            getBucketKey(matchedOrderItem.customerId, matchedOrderItem.menuItemId)
+          )
+        : null;
+
+      if (bucket) {
+        bucket.feedbackScores.push(rating);
+        return;
+      }
     }
 
     if (feedback.menu_item_id) {
@@ -193,12 +243,21 @@ function buildCustomerPreferences(
   });
 
   const updatedAt = new Date().toISOString();
+  const maxFrequencyByCustomer = Array.from(buckets.values()).reduce(
+    (map, bucket) => {
+      const currentMax = map.get(bucket.customerId) ?? 1;
+      map.set(bucket.customerId, Math.max(currentMax, bucket.frequency));
+
+      return map;
+    },
+    new Map<string, number>()
+  );
 
   return Array.from(buckets.values())
     .map((bucket) => {
-      const recencyScore = Number(
-        (1 / (getDaysSinceLastOrder(bucket.lastOrderedAt) + 1)).toFixed(4)
-      );
+      const maxCustomerFrequency = maxFrequencyByCustomer.get(bucket.customerId) ?? 1;
+      const frequencyScore = clamp01(bucket.frequency / maxCustomerFrequency);
+      const recencyScore = Number(getRecencyScore(bucket.lastOrderedAt).toFixed(4));
       const avgRating = Number(
         (
           bucket.feedbackScores.length > 0
@@ -207,8 +266,14 @@ function buildCustomerPreferences(
             : 0
         ).toFixed(2)
       );
+      const feedbackScore =
+        avgRating > 0 ? clamp01(avgRating / 5) : NEUTRAL_FEEDBACK_SCORE;
       const preferenceScore = Number(
-        (0.5 * bucket.frequency + 0.3 * recencyScore + 0.2 * avgRating).toFixed(4)
+        (
+          PREFERENCE_WEIGHTS.frequency * frequencyScore +
+          PREFERENCE_WEIGHTS.recency * recencyScore +
+          PREFERENCE_WEIGHTS.feedback * feedbackScore
+        ).toFixed(4)
       );
 
       return {
@@ -226,6 +291,7 @@ function buildCustomerPreferences(
       (first, second) =>
         second.preference_score - first.preference_score ||
         second.frequency - first.frequency ||
+        second.avg_rating - first.avg_rating ||
         new Date(second.last_ordered_at).getTime() -
           new Date(first.last_ordered_at).getTime()
     );

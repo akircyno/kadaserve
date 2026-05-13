@@ -5,11 +5,13 @@ import {
   getAnalyticsItemId,
   sortAnalyticsItemsByGlobalRanking,
 } from "@/lib/analytics-ranking";
-
-type CustomerPreferenceRow = {
-  menu_item_id: string | null;
-  preference_score: number | null;
-};
+import {
+  getRecommendationsForCustomer,
+  type RecommendationFeedback,
+  type RecommendationGlobalRankItem,
+  type RecommendationMenuItem,
+  type RecommendationOrder,
+} from "@/lib/recommendations";
 
 type AnalyticsItemRow = {
   item_id?: string | null;
@@ -35,92 +37,116 @@ type MenuItemRow = {
   has_temp_option: boolean | null;
 };
 
-type RecommendationBasis = "preference" | "top_seller" | "popularity";
-type RecommendationCard = ReturnType<typeof normalizeMenuItem>;
+type OrderRecommendationRow = {
+  id: string;
+  customer_id?: string | null;
+  status: string;
+  ordered_at: string;
+  order_items?: Array<{
+    quantity: number | null;
+    menu_items:
+      | {
+          id: string | null;
+          name: string | null;
+          category: string | null;
+        }
+      | Array<{
+          id: string | null;
+          name: string | null;
+          category: string | null;
+        }>
+      | null;
+  }> | null;
+};
+
+type FeedbackRecommendationRow = {
+  customer_id?: string | null;
+  menu_item_id: string | null;
+  taste_rating: number | null;
+  strength_rating: number | null;
+  overall_rating: number | null;
+};
 
 const MENU_ITEM_COLUMNS =
   "id, name, description, category, base_price, image_url, is_available, has_sugar_level, has_ice_level, has_size_option, has_temp_option";
 
-function getNumberValue(value: unknown) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : 0;
-}
-
-function normalizeMenuItem(
-  item: MenuItemRow,
-  score: number | null,
-  rank: number,
-  basis: RecommendationBasis
+function makeRecommendationCard(
+  recommendation: ReturnType<typeof getRecommendationsForCustomer>["recommendations"][number],
+  rank: number
 ) {
+  const item = recommendation.item;
+
   return {
     rank,
-    label:
-      basis === "preference"
-        ? "Best for You"
-        : basis === "top_seller"
-        ? "Top Seller"
-        : "Popular Now",
-    basis,
-    reason:
-      basis === "preference"
-        ? "Recommended from your preference score."
-        : basis === "top_seller"
-        ? "Global most ordered item from Admin Item Ranking."
-        : "Global popular item from Admin Item Ranking.",
+    label: recommendation.label,
+    basis: recommendation.basis,
+    reason: recommendation.reason,
     item_id: item.id,
     item_name: item.name,
-    price: Number(item.base_price ?? 0),
-    image_url: item.image_url,
+    price: Number(item.price ?? 0),
+    image_url: item.imageUrl ?? null,
     category: item.category,
-    preference_score: basis === "preference" ? score : null,
+    preference_score:
+      recommendation.basis === "preference" ? recommendation.score : null,
     item: {
       id: item.id,
       name: item.name,
-      description: item.description,
+      description: null,
       category: item.category,
-      base_price: Number(item.base_price ?? 0),
-      image_url: item.image_url,
-      is_available: Boolean(item.is_available),
-      has_sugar_level: Boolean(item.has_sugar_level),
-      has_ice_level: Boolean(item.has_ice_level),
-      has_size_option: Boolean(item.has_size_option),
-      has_temp_option: Boolean(item.has_temp_option),
+      base_price: Number(item.price ?? 0),
+      image_url: item.imageUrl ?? null,
+      is_available: Boolean(item.isAvailable),
+      has_sugar_level: false,
+      has_ice_level: false,
+      has_size_option: false,
+      has_temp_option: false,
     },
   };
 }
 
-function uniqueIds(ids: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      ids.filter(
-        (id): id is string =>
-          typeof id === "string" && id.trim().length > 0 && id !== "null"
-      )
-    )
+function normalizeOrderRows(
+  rows: OrderRecommendationRow[] | null | undefined,
+  customerId: string,
+  customerName: string,
+  mode: "customer" | "global"
+): RecommendationOrder[] {
+  return (
+    rows?.map((order) => ({
+      id: String(order.id),
+      customerId: mode === "customer" ? customerId : `global-${order.id}`,
+      customerName,
+      status: String(order.status),
+      orderedAt: String(order.ordered_at),
+      items:
+        order.order_items?.map((item) => {
+          const menuItem = Array.isArray(item.menu_items)
+            ? item.menu_items[0]
+            : item.menu_items;
+
+          return {
+            menuItemId: menuItem?.id,
+            name: menuItem?.name ?? "Menu item",
+            category: menuItem?.category,
+            quantity: Number(item.quantity) || 1,
+          };
+        }) ?? [],
+    })) ?? []
   );
 }
 
-function sortMenuByRequestedIds(menuItems: MenuItemRow[], requestedIds: string[]) {
-  const orderById = new Map(requestedIds.map((id, index) => [id, index]));
-
-  return [...menuItems].sort(
-    (left, right) =>
-      (orderById.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
-        (orderById.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
-      left.name.localeCompare(right.name)
+function normalizeFeedbackRows(
+  rows: FeedbackRecommendationRow[] | null | undefined,
+  customerId: string | null
+): RecommendationFeedback[] {
+  return (
+    rows?.map((row) => ({
+      customerId,
+      menuItemId: row.menu_item_id,
+      tasteRating: row.taste_rating,
+      strengthRating: row.strength_rating,
+      overallRating: row.overall_rating,
+    })) ?? []
   );
-}
-
-function appendUniqueRecommendation(
-  recommendations: RecommendationCard[],
-  recommendation: RecommendationCard | null
-) {
-  if (
-    recommendation &&
-    !recommendations.some((item) => item.item_id === recommendation.item_id)
-  ) {
-    recommendations.push(recommendation);
-  }
 }
 
 export async function GET() {
@@ -136,56 +162,14 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: preferenceRows, error: preferenceError } = await supabase
-      .from("customer_preferences")
-      .select("menu_item_id, preference_score")
-      .eq("customer_id", user.id)
-      .order("preference_score", { ascending: false })
-      .limit(12)
-      .returns<CustomerPreferenceRow[]>();
+    const { data: menuRows, error: menuError } = await adminSupabase
+      .from("menu_items")
+      .select(MENU_ITEM_COLUMNS)
+      .eq("is_available", true)
+      .returns<MenuItemRow[]>();
 
-    const recommendations: RecommendationCard[] = [];
-
-    if (!preferenceError && preferenceRows && preferenceRows.length > 0) {
-      const preferenceByItemId = new Map(
-        preferenceRows.map((row) => [
-          row.menu_item_id,
-          getNumberValue(row.preference_score),
-        ])
-      );
-      const preferredItemIds = uniqueIds(preferenceRows.map((row) => row.menu_item_id));
-
-      if (preferredItemIds.length > 0) {
-        const { data: preferredMenuItems, error: preferredMenuError } = await supabase
-          .from("menu_items")
-          .select(MENU_ITEM_COLUMNS)
-          .in("id", preferredItemIds)
-          .eq("is_available", true)
-          .returns<MenuItemRow[]>();
-
-        if (preferredMenuError) {
-          return NextResponse.json(
-            { error: preferredMenuError.message },
-            { status: 500 }
-          );
-        }
-
-        const personalizedRecommendation = sortMenuByRequestedIds(
-          preferredMenuItems ?? [],
-          preferredItemIds
-        )
-          .slice(0, 1)
-          .map((item, index) =>
-            normalizeMenuItem(
-              item,
-              preferenceByItemId.get(item.id) ?? null,
-              index + 1,
-              "preference"
-            )
-          )[0] ?? null;
-
-        appendUniqueRecommendation(recommendations, personalizedRecommendation);
-      }
+    if (menuError) {
+      return NextResponse.json({ error: menuError.message }, { status: 500 });
     }
 
     const { data: analyticsRows, error: analyticsError } = await adminSupabase
@@ -203,66 +187,81 @@ export async function GET() {
     }
 
     const sortedAnalyticsRows = sortAnalyticsItemsByGlobalRanking(analyticsRows ?? []);
-    const sortedPopularItemIds = uniqueIds(sortedAnalyticsRows.map(getAnalyticsItemId));
-    let rankedMenuItems: MenuItemRow[] = [];
-
-    if (sortedPopularItemIds.length > 0) {
-      const { data: popularMenuItems, error: popularMenuError } = await adminSupabase
-        .from("menu_items")
-        .select(MENU_ITEM_COLUMNS)
-        .in("id", sortedPopularItemIds)
-        .returns<MenuItemRow[]>();
-
-      if (popularMenuError) {
-        return NextResponse.json(
-          { error: popularMenuError.message },
-          { status: 500 }
-        );
-      }
-
-      rankedMenuItems = sortMenuByRequestedIds(
-        popularMenuItems ?? [],
-        sortedPopularItemIds
-      );
-    }
-
-    if (sortedAnalyticsRows.length === 0 && rankedMenuItems.length < 3) {
-      const existingIds = new Set(rankedMenuItems.map((item) => item.id));
-      const { data: menuRows, error: menuError } = await supabase
-        .from("menu_items")
-        .select(MENU_ITEM_COLUMNS)
-        .eq("is_available", true)
-        .order("name", { ascending: true })
-        .limit(12)
-        .returns<MenuItemRow[]>();
-
-      if (menuError) {
-        return NextResponse.json({ error: menuError.message }, { status: 500 });
-      }
-
-      rankedMenuItems = [
-        ...rankedMenuItems,
-        ...(menuRows ?? []).filter((item) => !existingIds.has(item.id)),
-      ];
-    }
-
-    rankedMenuItems.forEach((item, index) => {
-      if (recommendations.length >= 3) {
-        return;
-      }
-
-      const isTopSeller = index === 0;
-
-      appendUniqueRecommendation(
-        recommendations,
-        normalizeMenuItem(
-          item,
-          null,
-          index + 1,
-          isTopSeller ? "top_seller" : "popularity"
+    const globalRanking: RecommendationGlobalRankItem[] = sortedAnalyticsRows.map(
+      (row, index) => ({
+        id: getAnalyticsItemId(row),
+        name: row.item_name ?? "",
+        orderCount: Number(row.order_count ?? row.quantity_sold ?? 0),
+        rank: index + 1,
+      })
+    );
+    const recommendationMenuItems: RecommendationMenuItem[] = (menuRows ?? []).map(
+      (item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        price: Number(item.base_price ?? 0),
+        imageUrl: item.image_url,
+        isAvailable: Boolean(item.is_available),
+      })
+    );
+    const orderSelect = `
+      id,
+      customer_id,
+      status,
+      ordered_at,
+      order_items (
+        quantity,
+        menu_items (
+          id,
+          name,
+          category
         )
-      );
+      )
+    `;
+    const [{ data: customerOrders }, { data: globalOrders }] = await Promise.all([
+      supabase
+        .from("orders")
+        .select(orderSelect)
+        .eq("customer_id", user.id)
+        .in("status", ["completed", "delivered"])
+        .returns<OrderRecommendationRow[]>(),
+      adminSupabase
+        .from("orders")
+        .select(orderSelect)
+        .in("status", ["completed", "delivered"])
+        .returns<OrderRecommendationRow[]>(),
+    ]);
+    const [{ data: customerFeedback }, { data: globalFeedback }] = await Promise.all([
+      supabase
+        .from("feedback")
+        .select("customer_id, menu_item_id, taste_rating, strength_rating, overall_rating")
+        .eq("customer_id", user.id)
+        .returns<FeedbackRecommendationRow[]>(),
+      adminSupabase
+        .from("feedback")
+        .select("customer_id, menu_item_id, taste_rating, strength_rating, overall_rating")
+        .returns<FeedbackRecommendationRow[]>(),
+    ]);
+    const profile = getRecommendationsForCustomer({
+      customerId: user.id,
+      customerName: user.email ?? "Customer",
+      menuItems: recommendationMenuItems,
+      orders: [
+        ...normalizeOrderRows(globalOrders, user.id, "Customer", "global"),
+        ...normalizeOrderRows(customerOrders, user.id, user.email ?? "Customer", "customer"),
+      ],
+      feedback: [
+        ...normalizeFeedbackRows(globalFeedback, null),
+        ...normalizeFeedbackRows(customerFeedback, user.id),
+      ],
+      globalRanking,
     });
+    const recommendations = profile.recommendations
+      .slice(0, 3)
+      .map((recommendation, index) =>
+        makeRecommendationCard(recommendation, index + 1)
+      );
 
     return NextResponse.json({
       source:
