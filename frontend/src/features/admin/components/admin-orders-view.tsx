@@ -1,16 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  CalendarDays,
-  ChevronRight,
-  Download,
-  Search,
-  SlidersHorizontal,
-  PackageCheck,
-  ReceiptText,
-  WalletCards,
-} from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   getAdminOrderTotals,
@@ -308,20 +299,20 @@ function openPdfReport(orders: StaffOrder[], timeFilter: TimeFilter) {
 
 function getOrderTypeStyle(orderType: StaffOrder["order_type"]) {
   return orderType === "pickup"
-    ? "border border-[#D6C6AC]/70 bg-transparent text-[#684B35]"
-    : "border border-[#D6C6AC]/70 bg-transparent text-[#684B35]";
+    ? "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]"
+    : "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]";
 }
 
 function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
   return paymentMethod === "gcash"
-    ? "border border-[#D6C6AC]/70 bg-transparent text-[#684B35]"
-    : "border border-[#D6C6AC]/70 bg-transparent text-[#684B35]";
+    ? "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]"
+    : "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]";
 }
 
 function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
   return paymentStatus === "paid"
-    ? "border border-[#0F441D]/15 bg-[#E7F4EA] text-[#0F441D]"
-    : "border border-[#684B35] bg-[#684B35] text-[#FFF0DA]";
+    ? "border border-[#0F441D]/15 bg-[#E6F2E8] text-[#0F441D]"
+    : "border border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]";
 }
 
 function getStatusStyle(status: OrderStatus) {
@@ -330,7 +321,6 @@ function getStatusStyle(status: OrderStatus) {
     case "delivered":
       return "border border-[#0F441D]/15 bg-[#E7F4EA] text-[#0F441D]";
     case "cancelled":
-    case "expired":
       return "border border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]";
     case "out_for_delivery":
       return "border border-[#684B35]/20 bg-[#FFF0DA] text-[#684B35]";
@@ -338,23 +328,6 @@ function getStatusStyle(status: OrderStatus) {
       return "border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35]";
     default:
       return "border border-[#D6C6AC] bg-transparent text-[#684B35]";
-  }
-}
-
-function getStatusDotStyle(status: OrderStatus) {
-  switch (status) {
-    case "completed":
-    case "delivered":
-      return "bg-[#0F441D]";
-    case "cancelled":
-    case "expired":
-      return "bg-[#C55432]";
-    case "out_for_delivery":
-      return "bg-[#684B35]";
-    case "ready":
-      return "bg-[#7D6B55]";
-    default:
-      return "bg-[#D6C6AC]";
   }
 }
 
@@ -381,11 +354,10 @@ export function OrdersView({
     "all" | "paid" | "unpaid" | "cash" | "gcash"
   >("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("month");
-  const [orderSearch, setOrderSearch] = useState("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExportingReport, setIsExportingReport] = useState(false);
 
-  const reportOrders = useMemo(() => {
+  const visibleOrders = useMemo(() => {
     return getAdminReportOrders(filteredOrders, {
       paymentFilter,
       statusFilter,
@@ -394,113 +366,17 @@ export function OrdersView({
     });
   }, [filteredOrders, paymentFilter, statusFilter, timeFilter, typeFilter]);
 
-  const visibleOrders = useMemo(() => {
-    const query = orderSearch.trim().toLowerCase();
-
-    if (!query) return reportOrders;
-
-    return reportOrders.filter((order) => {
-      const searchable = [
-        formatOrderCode(order.id),
-        getOrderDisplayName(order),
-        getEncodedByName(order),
-        getContactEmail(order),
-        getContactPhone(order),
-        formatOrderItems(order),
-        formatStatus(order.status),
-        formatOrderTypeLabel(order.order_type),
-        formatPaymentMethod(order.payment_method),
-        formatPaymentStatus(order.payment_status),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(query);
-    });
-  }, [orderSearch, reportOrders]);
-
   const visibleTotals = useMemo(
     () => getAdminOrderTotals(visibleOrders),
     [visibleOrders]
   );
-  const completedCount = visibleOrders.filter((order) =>
-    ["completed", "delivered"].includes(order.status)
-  ).length;
-  const expiredCount = visibleOrders.filter(
-    (order) => order.status === "expired"
-  ).length;
-  const pickupCount = visibleOrders.filter(
-    (order) => order.order_type === "pickup"
-  ).length;
-  const deliveryCount = visibleOrders.length - pickupCount;
-  const paidCount = visibleOrders.filter(
-    (order) => order.payment_status === "paid"
-  ).length;
-  const attentionCount = visibleOrders.filter((order) =>
-    ["pending", "preparing", "ready", "out_for_delivery", "pending_payment"].includes(
-      order.status
-    )
-  ).length;
-  const avgOrderValue = visibleOrders.length
-    ? Math.round(visibleTotals.totalRevenue / visibleOrders.length)
-    : 0;
-  const demandCards = [
-    {
-      icon: ReceiptText,
-      label: "Orders",
-      value: String(visibleTotals.totalOrders),
-      detail: getAdminReportRangeLabel(timeFilter),
-    },
-    {
-      icon: WalletCards,
-      label: "Gross Sales",
-      value: peso(visibleTotals.totalRevenue),
-      detail: `${paidCount} paid orders`,
-    },
-    {
-      icon: PackageCheck,
-      label: "Fulfilled",
-      value: String(completedCount),
-      detail: expiredCount ? `${expiredCount} expired` : "No expired orders",
-    },
-    {
-      icon: CalendarDays,
-      label: "Order Mix",
-      value: `${pickupCount}/${deliveryCount}`,
-      detail: "Pickup / Delivery",
-    },
-  ];
-  const statusSummary = [
-    {
-      label: "Needs Action",
-      value: attentionCount,
-      className: "border-[#DCCFB8] bg-[#FFF0DA] text-[#684B35]",
-    },
-    {
-      label: "Completed",
-      value: completedCount,
-      className: "border-[#0F441D]/15 bg-[#E6F2E8] text-[#0F441D]",
-    },
-    {
-      label: "Expired",
-      value: expiredCount,
-      className: "border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]",
-    },
-    {
-      label: "AOV",
-      value: peso(avgOrderValue),
-      className: "border-[#DCCFB8] bg-white text-[#0D2E18]",
-    },
-  ];
 
   const statusOptions: Array<{ value: "all" | OrderStatus; label: string }> = [
-    { value: "all", label: "All Statuses" },
+    { value: "all", label: "All Active" },
     { value: "pending", label: "Pending" },
     { value: "preparing", label: "Preparing" },
     { value: "ready", label: "Ready" },
     { value: "out_for_delivery", label: "Out for Delivery" },
-    { value: "expired", label: "Expired" },
     { value: "delivered", label: "Delivered" },
     { value: "completed", label: "Completed" },
     { value: "cancelled", label: "Cancelled" },
@@ -535,159 +411,89 @@ export function OrdersView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:p-5">
+      {/* Controls Section */}
+      <div className="rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7] p-5">
         <div className="space-y-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          {/* Header */}
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                Demand Ledger
+              <p className="font-sans text-xs font-semibold uppercase tracking-[0.08em] text-[#8C7A64]">
+                ORDER RECORDS
               </p>
-              <h3 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
-                {getAdminReportRangeLabel(timeFilter)}
-              </h3>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {statusSummary.map((item) => (
-                  <span
-                    key={item.label}
-                    className={`rounded-full border px-3 py-1.5 font-sans text-xs font-bold ${item.className}`}
-                  >
-                    {item.label}: {item.value}
-                  </span>
-                ))}
-              </div>
+              <p className="mt-1.5 font-sans text-sm font-medium text-[#684B35]">
+                {getAdminReportRangeLabel(timeFilter)} · Showing {visibleTotals.totalOrders} orders · {peso(visibleTotals.totalRevenue)}
+              </p>
             </div>
+            
+            {/* Export Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsExportOpen((current) => !current)}
+                disabled={isExportingReport}
+                className="inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 font-sans text-sm font-medium text-[#0D2E18] transition hover:bg-[#FFF1EC]"
+              >
+                {isExportingReport ? (
+                  <LoadingSpinner label="Generating report" />
+                ) : (
+                  <Download size={16} />
+                )}
+                {isExportingReport ? "Generating..." : "Export"}
+              </button>
 
-            <div className="flex w-full flex-col gap-3 xl:max-w-[640px]">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="relative flex-1">
-                  <span className="sr-only">Search demand orders</span>
-                  <Search
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8C7A64]"
-                    size={17}
-                  />
-                  <input
-                    value={orderSearch}
-                    onChange={(event) => setOrderSearch(event.target.value)}
-                    placeholder="Search order, customer, item..."
-                    className="h-11 w-full rounded-full border border-[#DCCFB8] bg-white pl-11 pr-4 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition placeholder:text-[#8C7A64] hover:border-[#D6C6AC] focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                  />
-                </label>
-
-                <div className="relative">
+              {isExportOpen ? (
+                <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-[16px] border border-[#D8C8AA] bg-[#FFFCF7] p-2">
                   <button
                     type="button"
-                    onClick={() => setIsExportOpen((current) => !current)}
-                    disabled={isExportingReport}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#0D2E18] px-5 font-sans text-sm font-bold text-[#FFF8EF] transition hover:bg-[#0F441D] hover:shadow-[0_8px_20px_rgba(13,46,24,0.2)] sm:w-auto"
+                    onClick={() => {
+                      setIsExportingReport(true);
+                      openPdfReport(visibleOrders, timeFilter);
+                      setIsExportOpen(false);
+                      window.setTimeout(() => setIsExportingReport(false), 450);
+                    }}
+                    className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
                   >
-                    {isExportingReport ? (
-                      <LoadingSpinner label="Generating report" />
-                    ) : (
-                      <Download size={16} />
-                    )}
-                    {isExportingReport ? "Generating..." : "Export"}
+                    Download PDF
                   </button>
-
-                  {isExportOpen ? (
-                    <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-[#FFFCF7] p-2 shadow-[0_18px_45px_rgba(42,29,12,0.14)]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsExportingReport(true);
-                          openPdfReport(visibleOrders, timeFilter);
-                          setIsExportOpen(false);
-                          window.setTimeout(() => setIsExportingReport(false), 450);
-                        }}
-                        className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
-                      >
-                        Download PDF
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsExportingReport(true);
-                          downloadCsv(visibleOrders, timeFilter);
-                          setIsExportOpen(false);
-                          window.setTimeout(() => setIsExportingReport(false), 450);
-                        }}
-                        className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
-                      >
-                        Download CSV
-                      </button>
-                    </div>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportingReport(true);
+                      downloadCsv(visibleOrders, timeFilter);
+                      setIsExportOpen(false);
+                      window.setTimeout(() => setIsExportingReport(false), 450);
+                    }}
+                    className="w-full rounded-[12px] px-3 py-2.5 text-left font-sans text-sm font-semibold text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                  >
+                    Download CSV
+                  </button>
                 </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-[#EFE3CF] bg-white px-3 py-2">
-                <SlidersHorizontal size={15} className="text-[#7D6B55]" />
-                <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                  Filters
-                </span>
-                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                  {getTimeFilterLabel(timeFilter)}
-                </span>
-                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                  {statusFilter === "all" ? "All statuses" : formatStatus(statusFilter)}
-                </span>
-                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                  {visibleOrders.length}/{reportOrders.length} shown
-                </span>
-              </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {demandCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.label}
-                  className="rounded-[18px] border border-[#EFE3CF] bg-white px-4 py-3 shadow-[0_8px_20px_rgba(75,50,24,0.04)]"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                      {card.label}
-                    </p>
-                    <Icon size={16} className="text-[#7D6B55]" />
-                  </div>
-                  <p className="mt-3 font-sans text-2xl font-bold text-[#0D2E18]">
-                    {card.value}
-                  </p>
-                  <p className="mt-1 font-sans text-xs font-semibold text-[#8C7A64]">
-                    {card.detail}
-                  </p>
-                </div>
-              );
-            })}
+          {/* Time Period Filter */}
+          <div className="flex flex-wrap gap-2">
+            {timeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setTimeFilter(option.value)}
+                className={`rounded-full px-4 py-1.5 font-sans text-sm font-medium transition ${
+                  timeFilter === option.value
+                    ? "bg-[#0D2E18] text-[#FFF8EF]"
+                    : "border border-[#DCCFB8] bg-transparent text-[#8C7A64] hover:bg-[#FFF8EF]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,0.95fr)]">
-            <div>
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                Range
-              </span>
-              <div className="mt-2 grid grid-cols-2 gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4">
-                {timeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setTimeFilter(option.value)}
-                    className={`rounded-full px-3 py-2 font-sans text-xs font-bold transition ${
-                      timeFilter === option.value
-                        ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_4px_12px_rgba(13,46,24,0.15)]"
-                        : "text-[#684B35] hover:bg-white"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          {/* Filter Dropdowns */}
+          <div className="grid gap-4 sm:grid-cols-3">
             <label className="block">
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              <span className="font-sans text-xs text-[#8C7A64]">
                 Status
               </span>
               <select
@@ -695,7 +501,7 @@ export function OrdersView({
                 onChange={(event) =>
                   setStatusFilter(event.target.value as "all" | OrderStatus)
                 }
-                className="mt-2 h-11 w-full rounded-[16px] border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D6C6AC] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+                className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -706,7 +512,7 @@ export function OrdersView({
             </label>
             
             <label className="block">
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              <span className="font-sans text-xs text-[#8C7A64]">
                 Type
               </span>
               <select
@@ -714,7 +520,7 @@ export function OrdersView({
                 onChange={(event) =>
                   setTypeFilter(event.target.value as "all" | StaffOrder["order_type"])
                 }
-                className="mt-2 h-11 w-full rounded-[16px] border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D6C6AC] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+                className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {typeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -725,7 +531,7 @@ export function OrdersView({
             </label>
             
             <label className="block">
-              <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+              <span className="font-sans text-xs text-[#8C7A64]">
                 Payment
               </span>
               <select
@@ -735,7 +541,7 @@ export function OrdersView({
                     event.target.value as "all" | "paid" | "unpaid" | "cash" | "gcash"
                   )
                 }
-                className="mt-2 h-11 w-full rounded-[16px] border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm font-semibold text-[#0D2E18] outline-none transition hover:border-[#D6C6AC] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+                className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {paymentOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -748,186 +554,104 @@ export function OrdersView({
         </div>
       </div>
 
-      <div className="space-y-3 lg:hidden">
-        {visibleOrders.map((order) => (
-          <button
-            key={order.id}
-            type="button"
-            onClick={() => onOpenOrder(order)}
-            className="w-full rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 text-left font-sans shadow-[0_12px_28px_rgba(75,50,24,0.07)] transition hover:border-[#D6C6AC] hover:bg-white"
-          >
-            <div className="flex items-start justify-between gap-3">
+      {/* Data Table Card */}
+      <div className="overflow-hidden rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7]">
+        {/* Table Header */}
+        <div className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#D8C8AA]/70 px-6 py-4 font-sans text-xs font-medium text-[#8C7A64]">
+          <span>Order</span>
+          <span>Customer</span>
+          <span>Encoded by</span>
+          <span>Type</span>
+          <span>Payment</span>
+          <span>Status</span>
+          <span>Total</span>
+          <span>Time</span>
+          <span />
+        </div>
+
+        {/* Table Rows */}
+        <div>
+          {visibleOrders.map((order, idx) => (
+            <div
+              key={order.id}
+              className={`group grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 border-b border-[#D8C8AA]/70 px-6 py-4 font-sans text-sm transition hover:bg-[#FFF8EF] ${
+                idx % 2 === 0 ? "bg-white/40" : ""
+              }`}
+            >
+              <span className="font-mono text-sm font-semibold text-[#0D2E18]">
+                {formatOrderCode(order.id)}
+              </span>
+              
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${getStatusDotStyle(
-                      order.status
-                    )}`}
-                  />
-                  <span className="font-bold text-[#0D2E18]">
-                    {formatOrderCode(order.id)}
-                  </span>
-                </div>
-                <p className="mt-1 truncate font-semibold text-[#0D2E18]">
+                <p className="text-sm font-medium text-[#0D2E18] truncate">
                   {getOrderDisplayName(order)}
                 </p>
+                <p className="mt-0.5 line-clamp-2 font-normal text-xs text-[#8C7A64]">
+                  {formatOrderItems(order) || "No items"}
+                </p>
               </div>
-              <span className="shrink-0 font-bold text-[#0D2E18]">
-                {peso(order.total_amount)}
+              
+              <span className="text-xs text-[#8C7A64]">
+                {getEncodedByName(order)}
               </span>
-            </div>
-
-            <p className="mt-2 line-clamp-2 text-xs font-semibold leading-relaxed text-[#8C7A64]">
-              {formatOrderItems(order) || "No items"}
-            </p>
-
-            <div className="mt-3 flex flex-wrap gap-1.5">
+              
               <span
-                className={`rounded-full px-2.5 py-1 text-[0.68rem] font-bold uppercase ${getStatusStyle(
-                  order.status
-                )}`}
-              >
-                {formatStatus(order.status)}
-              </span>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[0.68rem] font-bold uppercase ${getOrderTypeStyle(
+                className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${getOrderTypeStyle(
                   order.order_type
                 )}`}
               >
                 {formatOrderTypeLabel(order.order_type)}
               </span>
+              
+              <div className="flex flex-wrap gap-2">
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentStyle(
+                    order.payment_method
+                  )}`}
+                >
+                  {formatPaymentMethod(order.payment_method)}
+                </span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentStatusStyle(
+                    order.payment_status
+                  )}`}
+                >
+                  {formatPaymentStatus(order.payment_status)}
+                </span>
+              </div>
+              
               <span
-                className={`rounded-full px-2.5 py-1 text-[0.68rem] font-bold ${getPaymentStatusStyle(
-                  order.payment_status
+                className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusStyle(
+                  order.status
                 )}`}
               >
-                {formatPaymentStatus(order.payment_status)}
+                {formatStatus(order.status)}
               </span>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-[#EFE3CF] pt-3 text-xs font-semibold text-[#8C7A64]">
-              <span>{getEncodedByName(order)}</span>
-              <span>
-                {formatDate(order.ordered_at)} · {formatTime(order.ordered_at)}
+              
+              <span className="font-mono text-sm text-[#0D2E18]">
+                {peso(order.total_amount)}
               </span>
-            </div>
-          </button>
-        ))}
-
-        {visibleOrders.length === 0 ? (
-          <EmptyState label="No orders found matching your filters" />
-        ) : null}
-      </div>
-
-      <div className="hidden overflow-hidden rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] shadow-[0_12px_30px_rgba(75,50,24,0.08)] lg:block">
-        <div className="overflow-x-auto">
-          <div className="grid min-w-[1080px] grid-cols-[112px_minmax(220px,1.35fr)_minmax(128px,0.9fr)_94px_minmax(170px,1fr)_minmax(140px,0.9fr)_96px_96px_44px] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF] px-5 py-3 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-            <span>Order ID</span>
-            <span>Customer / Items</span>
-            <span>Encoded By</span>
-            <span>Type</span>
-            <span>Payment</span>
-            <span>Status</span>
-            <span>Total</span>
-            <span>Date</span>
-            <span></span>
-          </div>
-
-          <div className="min-w-[1080px] divide-y divide-[#EFE3CF]">
-            {visibleOrders.map((order, idx) => (
-              <div
-                key={order.id}
-                className={`group grid grid-cols-[112px_minmax(220px,1.35fr)_minmax(128px,0.9fr)_94px_minmax(170px,1fr)_minmax(140px,0.9fr)_96px_96px_44px] items-center gap-4 px-5 py-3.5 font-sans text-sm transition hover:bg-[#FFF8EF] ${
-                  idx % 2 === 0 ? "bg-white/55" : "bg-[#FFFCF7]"
-                }`}
+              
+              <span className="text-xs text-[#8C7A64]">
+                {formatTime(order.ordered_at)}
+              </span>
+              
+              <button
+                type="button"
+                onClick={() => onOpenOrder(order)}
+                aria-label={`View ${formatOrderCode(order.id)}`}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${getStatusDotStyle(
-                        order.status
-                      )}`}
-                    />
-                    <span className="font-bold text-[#0D2E18]">
-                      {formatOrderCode(order.id)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] text-[#8C7A64]">
-                    {formatTime(order.ordered_at)}
-                  </p>
-                </div>
-
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-[#0D2E18]">
-                    {getOrderDisplayName(order)}
-                  </p>
-                  <p className="mt-0.5 line-clamp-2 text-xs font-normal leading-relaxed text-[#8C7A64]">
-                    {formatOrderItems(order) || "No items"}
-                  </p>
-                </div>
-
-                <span className="text-xs font-semibold leading-snug text-[#684B35]">
-                  {getEncodedByName(order)}
-                </span>
-
-                <span
-                  className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase ${getOrderTypeStyle(
-                    order.order_type
-                  )}`}
-                >
-                  {formatOrderTypeLabel(order.order_type)}
-                </span>
-
-                <div className="flex flex-wrap gap-1.5">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${getPaymentStyle(
-                      order.payment_method
-                    )}`}
-                  >
-                    {formatPaymentMethod(order.payment_method)}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${getPaymentStatusStyle(
-                      order.payment_status
-                    )}`}
-                  >
-                    {formatPaymentStatus(order.payment_status)}
-                  </span>
-                </div>
-
-                <span
-                  className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase ${getStatusStyle(
-                    order.status
-                  )}`}
-                >
-                  {formatStatus(order.status)}
-                </span>
-
-                <span className="font-bold text-[#0D2E18]">
-                  {peso(order.total_amount)}
-                </span>
-
-                <span className="text-xs font-semibold leading-snug text-[#8C7A64]">
-                  {formatDate(order.ordered_at)}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => onOpenOrder(order)}
-                  aria-label={`View ${formatOrderCode(order.id)}`}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#E6F2E8] hover:text-[#0D2E18] group-hover:bg-[#FFF0DA]/70"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            ))}
-
-            {visibleOrders.length === 0 ? (
-              <div className="px-6 py-8">
-                <EmptyState label="No orders found matching your filters" />
-              </div>
-            ) : null}
-          </div>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          ))}
+          
+          {visibleOrders.length === 0 ? (
+            <div className="px-6 py-8">
+              <EmptyState label="No orders found matching your filters" />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
