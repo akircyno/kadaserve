@@ -9,7 +9,7 @@ import {
   Menu as MenuIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  Pencil,
+  PenLine,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +23,7 @@ const navItems = [
   {
     href: "/staff/encode-order",
     label: "Encode Order",
-    icon: Pencil,
+    icon: PenLine,
   },
   {
     href: "/staff/order-history",
@@ -45,7 +45,7 @@ export default function StaffLayout({
   const isOrderHistory = pathname.includes("order-history");
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
 
     function syncSidebarState() {
       setIsMobileSidebarOpen(false);
@@ -55,6 +55,11 @@ export default function StaffLayout({
     mediaQuery.addEventListener("change", syncSidebarState);
 
     return () => mediaQuery.removeEventListener("change", syncSidebarState);
+  }, []);
+
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    setIsSidebarCollapsed(isMobile);
   }, []);
 
   function toggleSidebarCollapse() {
@@ -86,29 +91,23 @@ export default function StaffLayout({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden rounded-r-[24px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_18px_40px_rgba(13,46,24,0.22)] transition-all duration-250 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden border-r border-[#FFF8EF]/5 bg-[#0D2E18] text-[#FFF8EF] transition-all duration-300 ease-in-out lg:translate-x-0 ${
           isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } ${
-          isSidebarCollapsed ? "w-[70px] lg:w-[70px]" : "w-[250px] lg:w-[232px]"
+          isSidebarCollapsed ? "w-16" : "w-56"
         }`}
       >
-        <div className="flex items-center justify-between gap-2 px-3 pt-4 lg:px-4 lg:pt-5">
+        <div className="flex items-center justify-between gap-2 px-3 py-5">
           <Link
             href="/staff"
-            className={`min-w-0 flex-shrink-0 font-sans text-[#FFF0DA] transition-all duration-250 ${
-              isSidebarCollapsed
-                ? "w-0 opacity-0"
-                : "w-auto opacity-100"
+            className={`min-w-0 font-sans transition-all duration-300 ${
+              isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
             }`}
-            style={{
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-            }}
           >
-            <span className="block text-[1.7rem] font-bold leading-none tracking-[-0.04em]">
+            <span className="block text-lg font-bold leading-none text-[#FFF8EF]">
               KadaServe
             </span>
-            <span className="mt-1 block font-sans text-[10px] font-black uppercase tracking-[0.2em] text-[#DCCFB8]">
+            <span className="mt-1 block text-xs text-[#8C7A64]">
               Staff Workspace
             </span>
           </Link>
@@ -119,12 +118,12 @@ export default function StaffLayout({
               onClick={toggleSidebarCollapse}
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="hidden lg:flex h-9 w-9 items-center justify-center rounded-xl border border-[#FFF0DA]/15 bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:border-[#FFF0DA]/30 hover:bg-[#FFF0DA]/18"
+              className="hidden lg:flex items-center justify-center rounded-full p-1.5 text-[#8C7A64] transition hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
             >
               {isSidebarCollapsed ? (
-                <PanelLeftOpen size={17} strokeWidth={2.4} />
+                <PanelLeftOpen size={20} />
               ) : (
-                <PanelLeftClose size={17} strokeWidth={2.4} />
+                <PanelLeftClose size={20} />
               )}
             </button>
 
@@ -132,24 +131,18 @@ export default function StaffLayout({
               type="button"
               onClick={() => setIsMobileSidebarOpen(false)}
               aria-label="Close staff navigation"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFF0DA]/10 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/18 lg:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFF8EF]/10 text-[#FFF8EF] transition hover:bg-[#FFF8EF]/18 lg:hidden"
             >
-              <X size={17} />
+              <X size={18} />
             </button>
           </div>
         </div>
 
         <nav
-          className={`mt-9 space-y-1 transition-all duration-250 ${
+          className={`mb-2 mt-8 space-y-1 transition-all duration-300 ${
             isSidebarCollapsed ? "px-2" : "px-3"
           }`}
         >
-          {!isSidebarCollapsed ? (
-            <p className="mb-2 px-2 font-sans text-[10px] font-black uppercase tracking-[0.18em] text-[#DCCFB8]/80">
-              Navigation
-            </p>
-          ) : null}
-
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -157,81 +150,62 @@ export default function StaffLayout({
               (item.href !== "/staff" && pathname.startsWith(item.href));
 
             return (
-              <div
+              <Link
                 key={item.href}
-                className="group/nav relative"
+                href={item.href}
+                onClick={() => setIsMobileSidebarOpen(false)}
+                title={isSidebarCollapsed ? item.label : undefined}
+                className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
+                  isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
+                } ${
+                  isActive
+                    ? "bg-[#FFF8EF] font-medium text-[#0D2E18]"
+                    : "text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
+                }`}
               >
-                <Link
-                  href={item.href}
-                  onClick={() => setIsMobileSidebarOpen(false)}
-                  className={`flex min-h-11 items-center justify-center rounded-[14px] px-3 py-3 font-sans text-sm font-semibold transition-all duration-250 lg:justify-start lg:gap-3 lg:px-4 ${
-                    isActive
-                      ? "bg-[#FFF0DA] text-[#0D2E18] shadow-[0_10px_22px_rgba(0,0,0,0.16)]"
-                      : "text-[#FFF0DA]/88 hover:bg-[#FFF0DA]/10 hover:text-[#FFF0DA]"
+                <Icon size={20} className="shrink-0" />
+                <span
+                  className={`text-sm transition-all duration-200 ${
+                    isSidebarCollapsed
+                      ? "w-0 overflow-hidden opacity-0"
+                      : "w-auto opacity-100"
                   }`}
                 >
-                  <Icon size={18} className="shrink-0" />
-                  <span
-                    className={`hidden font-sans text-sm font-semibold transition-all duration-250 lg:inline ${
-                      isSidebarCollapsed
-                        ? "w-0 overflow-hidden opacity-0"
-                        : "w-auto overflow-visible opacity-100"
-                    }`}
-                  >
-                    {item.label}
-                  </span>
-                </Link>
-
-                {isSidebarCollapsed && (
-                  <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#0D2E18] px-2 py-1 font-sans text-xs font-semibold text-[#FFF0DA] opacity-0 shadow-lg transition-opacity duration-200 group-hover/nav:pointer-events-auto group-hover/nav:opacity-100">
-                    {item.label}
-                  </div>
-                )}
-              </div>
+                  {item.label}
+                </span>
+              </Link>
             );
           })}
         </nav>
 
         <div
-          className={`mt-auto transition-all duration-250 ${
-            isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-5"
+          className={`mt-auto transition-all duration-300 ${
+            isSidebarCollapsed ? "px-2 pb-5" : "px-3 pb-5"
           }`}
         >
-          <div className="mb-3 h-px bg-[#FFF0DA]/12" />
-
           <button
             type="button"
             onClick={handleLogout}
-            title="Sign out"
-            className={`group/logout relative flex w-full items-center justify-center rounded-[16px] border font-sans text-sm font-bold transition-all duration-250 lg:justify-start lg:gap-3 ${
-              isSidebarCollapsed
-                ? "border-[#FFF0DA]/12 bg-[#FFF0DA]/8 px-3 py-3 text-[#FFF0DA]/90 hover:bg-[#FFF0DA]/14 hover:text-[#FFF0DA]"
-                : "border-[#F2C8BD]/25 bg-[#FFF1EC]/10 px-4 py-3 text-[#FFE4DA] hover:border-[#F2C8BD]/45 hover:bg-[#FFF1EC]/18 hover:text-white"
-            }`}
+            title={isSidebarCollapsed ? "Sign out" : undefined}
+            className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
+              isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
+            } text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]`}
           >
-            <LogOut size={17} className="shrink-0" />
+            <LogOut size={20} className="shrink-0" />
             <span
-              className={`hidden font-sans text-sm font-semibold transition-all duration-250 lg:inline ${
-                isSidebarCollapsed
-                  ? "w-0 overflow-hidden opacity-0"
-                  : "w-auto overflow-visible opacity-100"
+              className={`text-sm transition-all duration-200 ${
+                isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
               }`}
             >
               Sign out
             </span>
-
-            {isSidebarCollapsed && (
-              <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#0D2E18] px-2 py-1 font-sans text-xs font-semibold text-[#FFF0DA] opacity-0 shadow-lg transition-opacity duration-200 group-hover/logout:pointer-events-auto group-hover/logout:opacity-100">
-                Sign out
-              </div>
-            )}
           </button>
         </div>
       </aside>
 
       <div
-        className={`min-h-screen transition-all duration-250 ${
-          isSidebarCollapsed ? "lg:pl-[70px]" : "lg:pl-[232px]"
+        className={`min-h-screen transition-all duration-300 ${
+          isSidebarCollapsed ? "lg:pl-16" : "lg:pl-56"
         } ${isEncodeOrder ? "lg:flex lg:h-screen lg:flex-col lg:overflow-hidden" : ""}`}
       >
         <header className="sticky top-0 z-30 shrink-0 border-b border-[#D8C5A8] bg-[linear-gradient(90deg,#FFF8EF_0%,#FFF4E6_55%,#F8E7CC_100%)] shadow-[0_12px_28px_rgba(104,75,53,0.09)] backdrop-blur">

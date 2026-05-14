@@ -3,7 +3,15 @@
 import { useCallback, useMemo, useState } from "react";
 import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
-import { Search } from "lucide-react";
+import {
+  AlertCircle,
+  Layers,
+  LayoutGrid,
+  Minus,
+  PauseCircle,
+  Search,
+  TrendingUp,
+} from "lucide-react";
 import type * as React from "react";
 import {
   Dialog,
@@ -132,41 +140,25 @@ function getMenuSignal(
 function SignalChip({ signal }: { signal: MenuSignal }) {
   const classes = {
     strong: "bg-[#E6F2E8] text-[#0F441D]",
-    steady: "bg-[#FFF0DA] text-[#684B35]",
+    steady: "bg-[#FFF8EF] text-[#684B35]",
     watch: "bg-[#FFF1EC] text-[#9C543D]",
-    muted: "bg-[#EFE8DC] text-[#7D6B55]",
+    muted: "bg-[#FFFCF7] text-[#8C7A64] border border-[#DCCFB8]",
   };
+  const icons = {
+    strong: TrendingUp,
+    steady: Minus,
+    watch: AlertCircle,
+    muted: PauseCircle,
+  };
+  const Icon = icons[signal.tone];
 
   return (
     <span
-      className={`inline-flex w-fit rounded-full px-3 py-1 font-sans text-xs font-bold ${classes[signal.tone]}`}
+      className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${classes[signal.tone]}`}
     >
+      <Icon size={12} />
       {signal.label}
     </span>
-  );
-}
-
-function IntelligenceCard({
-  detail,
-  label,
-  value,
-}: {
-  detail: string;
-  label: string;
-  value: string;
-}) {
-  return (
-    <article className="rounded-[22px] border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
-      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
-        {label}
-      </p>
-      <p className="mt-2 font-sans text-2xl font-black leading-tight text-[#0D2E18]">
-        {value}
-      </p>
-      <p className="mt-2 font-sans text-sm leading-relaxed text-[#6D5B48]">
-        {detail}
-      </p>
-    </article>
   );
 }
 
@@ -542,60 +534,83 @@ export function MenuView({
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-[26px] border border-[#D8C8AA] bg-white/88 p-4 shadow-[0_16px_38px_rgba(75,50,24,0.08)]">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
-              Menu Intelligence
-            </p>
-            <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-              Recommendation, category, review, and coverage
-            </h2>
-          </div>
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-[#DCCFB8] bg-[#FFFCF7]">
+        <div className="px-5 py-4">
+          <p className="font-sans text-base font-semibold text-[#0D2E18]">
+            Recommendation, category, review, and coverage
+          </p>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          <IntelligenceCard
-            label="Recommendation Candidate"
-            value={menuIntelligence.recommendationCandidate?.item.name ?? "No item yet"}
-            detail={
-              menuIntelligence.recommendationCandidate
+        <div className="grid grid-cols-2 divide-x divide-[#EFE3CF] border-t border-[#EFE3CF] sm:grid-cols-4">
+          {[
+            {
+              label: "Recommendation Candidate",
+              value:
+                menuIntelligence.recommendationCandidate?.item.name ?? "No item yet",
+              detail: menuIntelligence.recommendationCandidate
                 ? `${menuIntelligence.recommendationCandidate.signal.orders} orders and ${menuIntelligence.recommendationCandidate.signal.rating.toFixed(1)} rating.`
-                : "Waiting for order data."
-            }
-          />
-          <IntelligenceCard
-            label="Strongest Category"
-            value={menuIntelligence.strongestCategory?.label ?? "No category yet"}
-            detail={
-              menuIntelligence.strongestCategory
+                : "Waiting for order data.",
+              icon: TrendingUp,
+            },
+            {
+              label: "Strongest Category",
+              value: menuIntelligence.strongestCategory?.label ?? "No category yet",
+              detail: menuIntelligence.strongestCategory
                 ? `${menuIntelligence.strongestCategory.orders} orders across ${menuIntelligence.strongestCategory.available} available items.`
-                : "No category demand has been detected yet."
-            }
-          />
-          <IntelligenceCard
-            label="Review Candidate"
-            value={menuIntelligence.reviewCandidate?.item.name ?? "No item yet"}
-            detail={
-              menuIntelligence.reviewCandidate
+                : "No category demand has been detected yet.",
+              icon: Layers,
+            },
+            {
+              label: "Review Candidate",
+              value: menuIntelligence.reviewCandidate?.item.name ?? "No item yet",
+              detail: menuIntelligence.reviewCandidate
                 ? `${menuIntelligence.reviewCandidate.signal.orders} orders. ${menuIntelligence.reviewCandidate.signal.rating.toFixed(1)} rating.`
-                : "No available item needs review yet."
-            }
-          />
-          <IntelligenceCard
-            label="Active Coverage"
-            value={`${menuIntelligence.availableCount}/${menuItems.length}`}
-            detail={`${menuIntelligence.categoryCount} categories currently have available items for ordering.`}
-          />
+                : "No available item needs review yet.",
+              icon: AlertCircle,
+            },
+            {
+              label: "Active Coverage",
+              value: `${menuIntelligence.availableCount}/${menuItems.length}`,
+              detail: `${menuIntelligence.categoryCount} categories currently have available items for ordering.`,
+              icon: LayoutGrid,
+            },
+          ].map((card) => {
+            const Icon = card.icon;
+
+            return (
+              <div key={card.label} className="relative px-5 py-4">
+                <Icon size={15} className="absolute right-4 top-4 text-[#8C7A64]" />
+                <p className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">
+                  {card.label}
+                </p>
+                <p className="mt-2 font-sans text-lg font-bold text-[#0D2E18]">
+                  {card.value}
+                </p>
+                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
+                  {card.detail}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex w-full items-center gap-3 rounded-xl border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-2 sm:max-w-[420px]">
+          <Search size={17} className="text-[#8C7A64]" />
+          <input
+            value={menuSearch}
+            onChange={(event) => setMenuSearch(event.target.value)}
+            placeholder="Search menu items..."
+            className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8C7A64]"
+          />
+        </label>
+
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-full bg-[#0D2E18] px-8 py-3 font-sans text-base font-bold text-[#FFF0DA]"
+          className="rounded-xl bg-[#0D2E18] px-4 py-2 font-sans text-sm font-semibold text-[#FFF8EF] transition hover:bg-[#0F441D]"
         >
           + Add New
         </button>
@@ -613,109 +628,103 @@ export function MenuView({
         </div>
       ) : null}
 
-      <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <label className="flex w-full items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 xl:max-w-[420px]">
-            <Search size={17} className="text-[#6F7F69]" />
-            <input
-              value={menuSearch}
-              onChange={(event) => setMenuSearch(event.target.value)}
-              placeholder="Search menu items..."
-              className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8D9C87]"
-            />
-          </label>
-
-          <div className="flex flex-wrap gap-2">
-            {menuFilterOptions.map((category) => (
-              <button
-                key={category.value}
-                type="button"
-                onClick={() => setMenuCategoryFilter(category.value)}
-                className={`rounded-full border px-4 py-2 font-sans text-sm font-semibold transition ${
-                  menuCategoryFilter === category.value
-                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
-                    : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
-                }`}
-              >
-                {category.label}
-                <span className="ml-2 opacity-70">{category.count}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {menuFilterOptions.map((category) => (
+          <button
+            key={category.value}
+            type="button"
+            onClick={() => setMenuCategoryFilter(category.value)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              menuCategoryFilter === category.value
+                ? "bg-[#0D2E18] text-[#FFF8EF]"
+                : "border border-[#DCCFB8] bg-[#FFFCF7] text-[#684B35] hover:border-[#0D2E18]"
+            }`}
+          >
+            {category.label}
+            <span className="ml-2 font-mono text-[10px]">{category.count}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-white">
+      <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-[#FFFCF7]">
         <div className="min-w-[940px]">
-        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
-          <span>Item</span>
-          <span>Category</span>
-          <span>Price</span>
-          <span>Status</span>
-          <span>Signal</span>
-          <span>Action</span>
-        </div>
+          <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-3 font-sans text-[10px] font-medium uppercase tracking-[0.12em] text-[#8C7A64]">
+            <span>Item</span>
+            <span>Category</span>
+            <span>Price</span>
+            <span>Status</span>
+            <span>Signal</span>
+            <span>Action</span>
+          </div>
 
-        <div className="divide-y divide-[#EFE3CF]">
-          {filteredMenuItems.map((item) => {
-            const signal = menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
+          <div className="divide-y divide-[#EFE3CF]">
+            {filteredMenuItems.map((item) => {
+              const signal =
+                menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
 
-            return (
-              <div
-                key={item.id}
-                className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
-              >
-              <div className="flex items-center gap-3">
-                <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
-                  {item.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="aspect-square h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-5 w-5 rounded-full bg-[#D9D9D9]" />
-                  )}
-                </div>
-                <p className="font-semibold text-[#0D2E18]">{item.name}</p>
-              </div>
-
-              <span>{formatCategory(item.category)}</span>
-              <span>{peso(item.price)}</span>
-
-              <span
-                className={`w-fit rounded-full px-4 py-1 font-semibold ${item.isAvailable
-                  ? "bg-[#E6F2E8] text-[#0F441D]"
-                  : "bg-[#FFF1EC] text-[#9C543D]"
-                  }`}
-              >
-                {item.isAvailable ? "Available" : "Not Available"}
-              </span>
-              <div>
-                <SignalChip signal={signal} />
-                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-                  {signal.orders} orders
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEditForm(item)}
-                  className="rounded-full bg-[#F4EEE6] px-5 py-2 font-semibold text-[#0D2E18]"
+              return (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-3 font-sans text-sm transition hover:bg-[#FFF8EF]/60"
                 >
-                  Edit
-                </button>
-              </div>
-            </div>
-            );
-          })}
+                  <div className="flex items-center gap-3">
+                    <div className="flex aspect-square h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#E6F2E8]">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="aspect-square h-full w-full rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full bg-[#D9D9D9]" />
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-[#0D2E18]">
+                      {item.name}
+                    </p>
+                  </div>
 
-          {filteredMenuItems.length === 0 ? (
-            <EmptyState label="No matching menu items" />
-          ) : null}
-        </div>
+                  <span className="text-sm text-[#8C7A64]">
+                    {formatCategory(item.category)}
+                  </span>
+                  <span className="text-sm text-[#8C7A64]">
+                    {peso(item.price)}
+                  </span>
+
+                  <span
+                    className={`w-fit rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      item.isAvailable
+                        ? "border-[#C2DFC7] bg-[#E6F2E8] text-[#0F441D]"
+                        : "border-[#F5C5BC] bg-[#FFF1EC] text-[#C55432]"
+                    }`}
+                  >
+                    {item.isAvailable ? "Available" : "Not Available"}
+                  </span>
+                  <div>
+                    <SignalChip signal={signal} />
+                    <p className="mt-0.5 font-mono text-xs text-[#8C7A64]">
+                      {signal.orders} orders
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditForm(item)}
+                      className="rounded-lg border border-[#DCCFB8] bg-[#FFFCF7] px-3 py-1.5 text-xs text-[#684B35] transition hover:border-[#0D2E18] hover:text-[#0D2E18]"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredMenuItems.length === 0 ? (
+              <EmptyState label="No matching menu items" />
+            ) : null}
+          </div>
         </div>
       </div>
 
