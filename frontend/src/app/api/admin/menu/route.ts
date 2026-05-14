@@ -322,3 +322,32 @@ export async function PATCH(request: Request) {
     },
   });
 }
+
+export async function DELETE(request: Request) {
+  const { supabase, error } = await requireAdmin();
+
+  if (error) {
+    return error;
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json(
+      { error: "Menu item ID is required." },
+      { status: 400 }
+    );
+  }
+
+  const { error: deleteError } = await supabase
+    .from("menu_items")
+    .delete()
+    .eq("id", id);
+
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

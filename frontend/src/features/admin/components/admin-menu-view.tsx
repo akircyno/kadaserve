@@ -5,12 +5,15 @@ import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
 import {
   AlertCircle,
+  CheckCircle2,
   Layers,
   LayoutGrid,
   Minus,
   PauseCircle,
   Search,
+  Trash2,
   TrendingUp,
+  X,
 } from "lucide-react";
 import type * as React from "react";
 import {
@@ -185,16 +188,18 @@ async function getCroppedImageFile(imageUrl: string, cropArea: Area) {
 
   canvas.width = cropArea.width;
   canvas.height = cropArea.height;
+
+  // Use Math.round to ensure we are drawing from exact pixel coordinates
   context.drawImage(
     image,
-    cropArea.x,
-    cropArea.y,
-    cropArea.width,
-    cropArea.height,
+    Math.round(cropArea.x),
+    Math.round(cropArea.y),
+    Math.round(cropArea.width),
+    Math.round(cropArea.height),
     0,
     0,
-    cropArea.width,
-    cropArea.height
+    Math.round(cropArea.width),
+    Math.round(cropArea.height)
   );
 
   const blob = await new Promise<Blob | null>((resolve) =>
@@ -228,6 +233,9 @@ export function MenuView({
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<AdminMenuItem | null>(null);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("all");
   const performanceByName = useMemo(
@@ -533,6 +541,36 @@ export function MenuView({
     }
   }
 
+  async function handleDeleteMenuItem() {
+    if (!itemToDelete) return;
+
+    setIsDeletingItem(true);
+    setMenuMessage("");
+    setMenuError("");
+
+    try {
+      const response = await fetch(`/api/admin/menu?id=${itemToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setMenuError(result.error || "Failed to delete menu item.");
+        return;
+      }
+
+      setMenuItems((current) => current.filter((i) => i.id !== itemToDelete.id));
+      setMenuMessage(`"${itemToDelete.name}" has been removed from the menu.`);
+      setIsDeleteConfirmOpen(false);
+      setItemToDelete(null);
+    } catch {
+      setMenuError("Something went wrong while deleting the menu item.");
+    } finally {
+      setIsDeletingItem(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-[#DCCFB8] bg-[#FFFCF7]">
@@ -712,9 +750,19 @@ export function MenuView({
                     <button
                       type="button"
                       onClick={() => openEditForm(item)}
-                      className="rounded-lg border border-[#DCCFB8] bg-[#FFFCF7] px-3 py-1.5 text-xs text-[#684B35] transition hover:border-[#0D2E18] hover:text-[#0D2E18]"
+                      className="rounded-lg border border-[#DCCFB8] bg-[#FFFCF7] px-3 py-1.5 text-xs font-bold text-[#684B35] transition hover:border-[#0D2E18] hover:text-[#0D2E18]"
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setItemToDelete(item);
+                        setIsDeleteConfirmOpen(true);
+                      }}
+                      className="rounded-lg border border-[#F5C5BC] bg-[#FFF1EC] px-3 py-1.5 text-xs font-bold text-[#C55432] transition hover:border-[#C55432] hover:bg-[#F5C5BC]/20"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -751,13 +799,7 @@ export function MenuView({
                 </h2>
               </div>
 
-              <button
-                type="button"
-                onClick={closeForm}
-                className="rounded-full border border-[#D6C6AC] px-4 py-2 font-sans text-sm font-semibold text-[#684B35] transition hover:bg-[#FFF8EF]"
-              >
-                Cancel
-              </button>
+
             </div>
 
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -952,6 +994,7 @@ export function MenuView({
                   aspect={1}
                   cropShape="round"
                   showGrid={false}
+                  restrictPosition={true}
                   onCropChange={setCrop}
                   onZoomChange={setZoom}
                   onCropComplete={handleCropComplete}
@@ -1032,6 +1075,43 @@ export function MenuView({
           `}</style>
         </DialogContent>
       </Dialog>
+      {isDeleteConfirmOpen && itemToDelete ? (
+        <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+          <DialogContent className="max-w-md rounded-[26px] border border-[#DCCFB8] bg-white p-6 shadow-[0_24px_70px_rgba(13,46,24,0.24)]">
+            <DialogHeader>
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF1EC] text-[#C55432]">
+                <Trash2 size={24} />
+              </div>
+              <DialogTitle className="mt-4 font-sans text-2xl font-black text-[#0D2E18]">
+                Delete Menu Item?
+              </DialogTitle>
+              <DialogDescription className="font-sans text-sm text-[#8C7A64]">
+                Are you sure you want to delete <span className="font-bold text-[#0D2E18]">"{itemToDelete.name}"</span>? 
+                This action cannot be undone and will remove it from all customer views.
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                disabled={isDeletingItem}
+                className="flex-1 rounded-xl border border-[#D6C6AC] px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-50"
+              >
+                Keep Item
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteMenuItem}
+                disabled={isDeletingItem}
+                className="flex-1 rounded-xl bg-[#C55432] px-4 py-3 font-sans text-sm font-bold text-white transition hover:bg-[#A84328] disabled:opacity-50"
+              >
+                {isDeletingItem ? <LoadingSpinner label="Deleting..." /> : "Yes, Delete"}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

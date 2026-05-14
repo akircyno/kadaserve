@@ -461,9 +461,17 @@ export async function POST(request: Request) {
     }
 
     if (action === "mark_paid") {
-      if (order.status !== "out_for_delivery") {
+      const canMarkPaid = 
+        (order.order_type === "delivery" && order.status === "out_for_delivery") ||
+        (order.order_type === "pickup" && (order.status === "ready" || order.status === "preparing"));
+
+      if (!canMarkPaid) {
         return NextResponse.json(
-          { error: "Payment can only be marked paid when the order is out for delivery." },
+          { 
+            error: order.order_type === "delivery" 
+              ? "Payment can only be marked paid when the order is out for delivery."
+              : "Payment can only be marked paid when the order is being prepared or is ready for pickup."
+          },
           { status: 400 }
         );
       }
@@ -573,7 +581,7 @@ export async function POST(request: Request) {
 
     if (
       paymentStatus !== "paid" &&
-      nextStatus === "delivered"
+      (nextStatus === "delivered" || nextStatus === "completed")
     ) {
       return NextResponse.json(
         { error: "Mark this order as paid before closing it." },

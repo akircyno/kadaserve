@@ -345,6 +345,18 @@ export default function CartPage() {
       return;
     }
 
+    if (orderType === "delivery" && !deliveryPhone.trim()) {
+      setError("Phone number is required for delivery.");
+      return;
+    }
+
+    const phPhoneRegex = /^(09|\+639)\d{2}-?\d{3}-?\d{4}$|^(09|\+639)\d{9}$/;
+    const cleanPhone = deliveryPhone.replace(/-/g, "").trim();
+    if (orderType === "delivery" && !phPhoneRegex.test(deliveryPhone.trim())) {
+      setError("Please enter a valid Philippine mobile number (e.g., 0912-345-6789).");
+      return;
+    }
+
     if (orderType === "delivery" && !hasDeliveryCoordinates(deliveryLat, deliveryLng)) {
       setError("Pin your delivery location on the map to calculate the delivery fee.");
       return;
@@ -577,7 +589,7 @@ export default function CartPage() {
                 ) : null}
                 <label className="mt-3 block">
                   <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                    Phone Number <span className="normal-case tracking-normal text-[#8C7A64]">(optional)</span>
+                    Phone Number
                   </span>
                   <div className="mt-2 flex items-center rounded-[16px] border border-[#E3D3B7] bg-white/65 px-4 py-3 transition focus-within:border-[#0D2E18] focus-within:ring-2 focus-within:ring-[#0D2E18]/10">
                     <Phone className="mr-3 h-4 w-4 shrink-0 text-[#8C7A64]" />
@@ -586,11 +598,25 @@ export default function CartPage() {
                       inputMode="tel"
                       autoComplete="tel"
                       value={deliveryPhone}
-                      onChange={(event) => setDeliveryPhone(event.target.value)}
-                      placeholder="Optional contact number"
+                      onChange={(event) => {
+                        const input = event.target.value.replace(/\D/g, "");
+                        let formatted = input;
+                        if (input.length > 4) {
+                          formatted = `${input.slice(0, 4)}-${input.slice(4)}`;
+                        }
+                        if (input.length > 7) {
+                          formatted = `${input.slice(0, 4)}-${input.slice(4, 7)}-${input.slice(7, 11)}`;
+                        }
+                        if (formatted.length <= 13) setDeliveryPhone(formatted);
+                      }}
+                      placeholder="0912-345-6789"
                       className="min-w-0 flex-1 bg-transparent font-sans text-sm font-semibold text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                      required={orderType === "delivery"}
                     />
                   </div>
+                  <p className="mt-1.5 font-sans text-[10px] font-bold uppercase tracking-wider text-[#8A755D]">
+                    Format: 0999-999-9999
+                  </p>
                 </label>
                 <p className="mt-2 font-sans text-sm font-semibold text-[#684B35]">
                   Estimated delivery time: 25-40mins

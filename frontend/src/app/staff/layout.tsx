@@ -41,6 +41,8 @@ export default function StaffLayout({
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const isEncodeOrder = pathname.includes("encode-order");
   const isOrderHistory = pathname.includes("order-history");
 
@@ -67,6 +69,7 @@ export default function StaffLayout({
   }
 
   async function handleLogout() {
+    setIsLoggingOut(true);
     try {
       await fetch("/api/logout", {
         method: "POST",
@@ -75,6 +78,8 @@ export default function StaffLayout({
       router.push("/login");
       router.refresh();
     } finally {
+      setIsLoggingOut(false);
+      setIsLogoutConfirmOpen(false);
       setIsMobileSidebarOpen(false);
     }
   }
@@ -185,7 +190,7 @@ export default function StaffLayout({
         >
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             title={isSidebarCollapsed ? "Sign out" : undefined}
             className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
               isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
@@ -257,6 +262,43 @@ export default function StaffLayout({
           {children}
         </main>
       </div>
+      {isLogoutConfirmOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-[#0D2E18]/45 backdrop-blur-sm"
+            onClick={() => !isLoggingOut && setIsLogoutConfirmOpen(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-[#FFF0DA] p-6 shadow-[0_20px_50px_rgba(13,46,24,0.15)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF8EF] text-[#684B35]">
+              <LogOut size={24} />
+            </div>
+            <h2 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
+              Ready to leave?
+            </h2>
+            <p className="mt-2 font-sans text-sm font-medium text-[#7D6B55]">
+              Are you sure you want to log out of your staff account? Any unsaved progress may be lost.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#143E21] disabled:opacity-60"
+              >
+                {isLoggingOut ? "Signing out..." : "Yes, Sign out"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+                className="w-full rounded-xl border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

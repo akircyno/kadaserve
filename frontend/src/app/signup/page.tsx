@@ -489,14 +489,12 @@ export default function SignupPage() {
                 {requirementResults.map((requirement) => (
                   <div
                     key={requirement.label}
-                    className={`flex items-center gap-2 font-sans text-xs sm:text-sm ${
-                      requirement.isMet ? "text-[#0F441D]" : "text-[#8C7A64]"
-                    }`}
+                    className={`flex items-center gap-2 font-sans text-xs sm:text-sm ${requirement.isMet ? "text-[#0F441D]" : "text-[#8C7A64]"
+                      }`}
                   >
                     <CheckCircle2
-                      className={`h-4 w-4 ${
-                        requirement.isMet ? "fill-[#0F441D] text-white" : ""
-                      }`}
+                      className={`h-4 w-4 ${requirement.isMet ? "fill-[#0F441D] text-white" : ""
+                        }`}
                     />
                     {requirement.label
                       .replace("At least ", "")

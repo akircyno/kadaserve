@@ -486,13 +486,17 @@ function requiresPaymentBeforeNextAction(order: StaffOrder) {
 
   return (
     order.payment_status === "unpaid" &&
-    order.status === "out_for_delivery" &&
-    nextAction === "Mark Delivered"
+    ((order.order_type === "delivery" && order.status === "out_for_delivery") ||
+     (order.order_type === "pickup" && order.status === "ready"))
   );
 }
 
 function canMarkPaid(order: StaffOrder) {
-  return order.payment_status === "unpaid" && order.status === "out_for_delivery";
+  return (
+    order.payment_status === "unpaid" &&
+    ((order.order_type === "delivery" && order.status === "out_for_delivery") ||
+     (order.order_type === "pickup" && (order.status === "ready" || order.status === "preparing")))
+  );
 }
 
 function canCancelOrder(order: StaffOrder) {

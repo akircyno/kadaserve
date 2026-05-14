@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Crosshair, ExternalLink, MapPin } from "lucide-react";
+import { storeLocation } from "@/lib/delivery-fee";
 
 type LeafletLatLng = {
   lat: number;
@@ -23,6 +24,7 @@ type LeafletMarker = {
   getLatLng: () => LeafletLatLng;
   on: (event: "dragend", handler: () => void) => LeafletMarker;
   addTo: (map: LeafletMap) => LeafletMarker;
+  bindPopup: (content: string) => LeafletMarker;
 };
 
 type LeafletApi = {
@@ -35,6 +37,7 @@ type LeafletApi = {
     coords: [number, number],
     options?: Record<string, unknown>
   ) => LeafletMarker;
+  icon: (options: Record<string, unknown>) => unknown;
 };
 
 declare global {
@@ -260,6 +263,23 @@ export function DeliveryLocationPicker({
             attribution: "OpenStreetMap contributors",
           })
           .addTo(map);
+
+        // Add the cafe marker
+        const cafeIcon = leaflet.icon({
+          iconUrl: "/apple-icon.png",
+          iconSize: [48, 48],
+          iconAnchor: [24, 24],
+          popupAnchor: [0, -20],
+          className: "rounded-2xl border-4 border-[#0D2E18] shadow-lg bg-white",
+        });
+
+        leaflet
+          .marker([storeLocation.lat, storeLocation.lng], {
+            icon: cafeIcon,
+            interactive: true,
+          })
+          .addTo(map)
+          .bindPopup("<b>Kada Cafe PH</b><br/>Store Location");
 
         const marker = leaflet
           .marker(start, {
