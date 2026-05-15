@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
@@ -563,6 +564,7 @@ function getExpiredOrderLabel(status: OrderStatus) {
 
 export function StaffDashboard() {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [orders, setOrders] = useState<StaffOrder[]>(fallbackOrders);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
@@ -770,6 +772,11 @@ export function StaffDashboard() {
 
         if (!response.ok) {
           setError(result.error || "Failed to load staff orders.");
+          showToast({
+            title: "Orders not loaded",
+            description: result.error || "Failed to load staff orders.",
+            variant: "error",
+          });
           return;
         }
 
@@ -792,6 +799,11 @@ export function StaffDashboard() {
         });
       } catch {
         setError("Something went wrong while loading orders.");
+        showToast({
+          title: "Orders not loaded",
+          description: "Something went wrong while loading orders.",
+          variant: "error",
+        });
       } finally {
         if (showLoading) {
           setIsLoading(false);
@@ -800,7 +812,7 @@ export function StaffDashboard() {
         }
       }
     },
-    []
+    [showToast]
   );
 
   const headerContainerRef = useRef<HTMLElement | null>(null);
@@ -1041,6 +1053,11 @@ export function StaffDashboard() {
 
         if (!isCancelled) {
           setStaffToast("Expired pending orders were moved to history.");
+          showToast({
+            title: "Pending orders expired",
+            description: "Expired pending orders were moved to history.",
+            variant: "info",
+          });
           await loadOrders({ showLoading: false });
         }
       } finally {
@@ -1057,7 +1074,7 @@ export function StaffDashboard() {
     return () => {
       isCancelled = true;
     };
-  }, [expiringOrderIds, loadOrders, now, orders]);
+  }, [expiringOrderIds, loadOrders, now, orders, showToast]);
 
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
@@ -1094,12 +1111,27 @@ export function StaffDashboard() {
 
       if (!response.ok) {
         setStoreStatusError(result.error || "Failed to update store status.");
+        showToast({
+          title: "Store status not updated",
+          description: result.error || "Failed to update store status.",
+          variant: "error",
+        });
         return;
       }
 
       applyStoreStatus(result);
+      showToast({
+        title: "Store status updated",
+        description: `Manual override is now ${overrideStatus}.`,
+        variant: "success",
+      });
     } catch {
       setStoreStatusError("Something went wrong while updating store status.");
+      showToast({
+        title: "Store status not updated",
+        description: "Something went wrong while updating store status.",
+        variant: "error",
+      });
     } finally {
       setIsStoreStatusUpdating(false);
     }
@@ -1134,6 +1166,11 @@ export function StaffDashboard() {
 
       if (!response.ok) {
         setError(result.error || "Failed to update order status.");
+        showToast({
+          title: "Order not updated",
+          description: result.error || "Failed to update order status.",
+          variant: "error",
+        });
         if (result.currentStatus) {
           await loadOrders();
         }
@@ -1141,25 +1178,38 @@ export function StaffDashboard() {
       }
 
       if (result.nextStatus === "out_for_delivery") {
-        setDispatchToast(
-          result.notificationSent
-            ? "Email Sent"
-            : "Out for delivery. Email not configured."
-        );
+        setDispatchToast("Customer notification updated.");
+        showToast({
+          title: "Customer notification updated",
+          description: "The delivery update is visible in KadaServe.",
+          variant: "success",
+        });
       }
 
       if (result.nextStatus === "delivered") {
-        setStaffToast(
-          result.receiptSent
-            ? "Delivery receipt sent."
-            : "Delivered. Receipt email not configured."
-        );
+        setStaffToast("Order marked delivered. Receipt is available in KadaServe.");
+        showToast({
+          title: "Order delivered",
+          description: "Receipt details are available in KadaServe notifications.",
+          variant: "success",
+        });
+      } else if (result.nextStatus && result.nextStatus !== "out_for_delivery") {
+        showToast({
+          title: "Order status updated",
+          description: `Moved to ${formatStatus(result.nextStatus)}.`,
+          variant: "success",
+        });
       }
 
       await loadOrders();
       router.refresh();
     } catch {
       setError("Something went wrong while updating status.");
+      showToast({
+        title: "Order not updated",
+        description: "Something went wrong while updating status.",
+        variant: "error",
+      });
     } finally {
       setUpdatingOrderIds((current) =>
         current.filter((updatingOrderId) => updatingOrderId !== orderId)
@@ -1184,17 +1234,32 @@ export function StaffDashboard() {
 
       if (!response.ok) {
         setError(result.error || "Failed to mark order as paid.");
+        showToast({
+          title: "Payment not updated",
+          description: result.error || "Failed to mark order as paid.",
+          variant: "error",
+        });
         return;
       }
 
       setStaffToast(
-        "Payment marked paid. Complete delivery to send the receipt."
+        "Payment marked paid. Complete delivery to show the receipt in KadaServe."
       );
+      showToast({
+        title: "Payment marked paid",
+        description: "Complete delivery to show the receipt in KadaServe.",
+        variant: "success",
+      });
 
       await loadOrders();
       router.refresh();
     } catch {
       setError("Something went wrong while marking payment as paid.");
+      showToast({
+        title: "Payment not updated",
+        description: "Something went wrong while marking payment as paid.",
+        variant: "error",
+      });
     } finally {
       setIsMarkingPaid(false);
     }
@@ -1217,14 +1282,29 @@ export function StaffDashboard() {
 
       if (!response.ok) {
         setError(result.error || "Failed to cancel order.");
+        showToast({
+          title: "Order not cancelled",
+          description: result.error || "Failed to cancel order.",
+          variant: "error",
+        });
         return;
       }
 
       closeOrder();
+      showToast({
+        title: "Order cancelled",
+        description: "The order was moved out of the active queue.",
+        variant: "success",
+      });
       await loadOrders();
       router.refresh();
     } catch {
       setError("Something went wrong while cancelling the order.");
+      showToast({
+        title: "Order not cancelled",
+        description: "Something went wrong while cancelling the order.",
+        variant: "error",
+      });
     } finally {
       setIsCancelling(false);
     }
@@ -1580,6 +1660,11 @@ export function StaffDashboard() {
                                 if (requiresFinalDeliveryFee(order)) {
                                   openOrder(order);
                                   setStaffToast("Delivery fee is missing. Add it before dispatch.");
+                                  showToast({
+                                    title: "Delivery fee required",
+                                    description: "Add the final delivery fee before dispatch.",
+                                    variant: "info",
+                                  });
                                   return;
                                 }
 
@@ -2178,6 +2263,11 @@ export function StaffDashboard() {
                                 finalDeliveryFee <= 0)
                             ) {
                               setError("Delivery fee is missing. Add it before dispatch.");
+                              showToast({
+                                title: "Delivery fee required",
+                                description: "Add the final delivery fee before dispatch.",
+                                variant: "error",
+                              });
                               return;
                             }
 

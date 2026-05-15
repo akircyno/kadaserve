@@ -26,6 +26,7 @@ export async function GET() {
         total_amount,
         delivery_fee,
         ordered_at,
+        updated_at,
         delivery_address,
         delivery_lat,
         delivery_lng,

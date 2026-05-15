@@ -1,6 +1,6 @@
 # KadaServe Documentation
 
-Last updated: 2026-05-14
+Last updated: 2026-05-16
 
 ## Project Focus
 
@@ -9,6 +9,9 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 ## Current Progress
 
 - Customer menu supports search, category filtering, item customization, and add to cart.
+- Customer menu, customization, and cart now show estimated nutrition for staff-recipe drinks, covering calories, protein, carbs, fat, sugar, sodium, and serving volume using KadaServe staff recipes plus generic ingredient estimates pending supplier-label confirmation.
+- Customer notifications now live behind a top bell button instead of a bottom tab; the bottom mobile navigation stays focused on Home, Menu, Orders, and Profile while the bell drawer shows timestamped active order updates, delivered-order receipt details, and feedback reminders.
+- A shared toast notification layer now gives standard success, error, and info feedback across auth entry pages, customer checkout/profile/menu actions, staff order workflows, and admin analytics/menu/store controls.
 - Cart supports pickup and delivery order methods.
 - Delivery orders support map pinning, saved addresses, optional phone number, and distance-based delivery fee.
 - Delivery fee is computed using geographic coordinates and Haversine distance.
@@ -25,6 +28,7 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Feedback modal does not reopen on page refresh alone.
 - PayMongo online payment foundation is implemented but disabled until the beneficiary PayMongo account is ready.
 - Customer order tracker now auto-syncs order status from `/api/customer/orders` every 10 seconds, so customers do not need to refresh the page.
+- Staff-triggered delivery and receipt emails were removed from the order status flow; order updates and receipt details are now surfaced through KadaServe in-app notifications while account/security emails remain separate.
 - Staff dashboard now uses clear payment labels: `Pay at Cafe`, `Cash on Delivery`, `Online`, and `Awaiting Payment`.
 - Staff delivery orders now show items total, delivery fee, and grand total in the active dashboard and order details.
 - Manual delivery fee input is only a fallback for delivery orders that have no calculated fee.
@@ -75,6 +79,7 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Customer preference generation logic was corrected for the intelligent-system flow: item frequency now uses ordered quantity, frequency is normalized per customer, recency uses a 30-day decay curve, feedback ignores missing rating fields instead of treating them as zero, item-level feedback is matched through `order_item_id` when available, and the final score stays on a 0-1 scale using 50% frequency, 30% recency, and 20% feedback.
 - Customer recommendation cards now use the same live recommendation engine as the admin Customer Intelligence profile before falling back to saved analytics rows, preventing stale `customer_preferences` rows from showing a different `Best for You` item than the admin panel. Recommendation cards also show the basis text for preference, top-seller, and popularity picks.
 - Admin Customer Intelligence was redesigned as a cohesive decision-support module: the header now summarizes customer orders, feedback samples, and ranked items; Preferences shows profile-level Top-N recommendation reasoning; Ranking highlights leader, ranked demand, and review candidates; Satisfaction uses a rating quality map; and Feedback uses a compact feedback stream with item-level averages.
+- Admin UI now uses a local KadaServe custom SVG icon set instead of `lucide-react` inside admin screens, giving the sidebar, analytics cards, menu intelligence, demand views, and admin actions a more original visual identity while keeping icons monochrome and theme-colored.
 
 ## Current Payment Behavior
 

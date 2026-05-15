@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+<<<<<<< HEAD
 import { CalendarDays, ChevronRight, Download } from "lucide-react";
+=======
+import {
+  KadaChevronRightIcon,
+  KadaDownloadIcon,
+} from "@/components/icons/kadaserve-admin-icons";
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   getAdminOrderTotals,
@@ -492,7 +499,7 @@ export function OrdersView({
                 {isExportingReport ? (
                   <LoadingSpinner label="Generating report" />
                 ) : (
-                  <Download size={16} />
+                  <KadaDownloadIcon size={16} />
                 )}
                 {isExportingReport ? "Generating..." : "Export"}
               </button>
@@ -739,7 +746,7 @@ export function OrdersView({
                 aria-label={`View ${formatOrderCode(order.id)}`}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
               >
-                <ChevronRight size={18} />
+                <KadaChevronRightIcon size={18} />
               </button>
             </div>
           ))}

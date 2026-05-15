@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
+<<<<<<< HEAD
   BarChart2,
   LayoutDashboard,
   LogOut,
@@ -19,11 +20,25 @@ import {
   MessageSquareText,
   Star,
 } from "lucide-react";
+=======
+  KadaAlertIcon,
+  KadaClockIcon,
+  KadaCloseIcon,
+  KadaLogoutIcon,
+  KadaMenuIcon as KadaCafeMenuIcon,
+  KadaMessageIcon,
+  KadaPanelMenuIcon,
+  KadaRefreshIcon,
+  KadaSearchIcon,
+  KadaStarIcon,
+} from "@/components/icons/kadaserve-admin-icons";
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
 import {
   CustomerPreferenceView,
   ItemRankingView,
   SatisfactionView,
 } from "@/features/admin/components/admin-insights-views";
+import { useToast } from "@/components/ui/toast-provider";
 import { MenuView } from "@/features/admin/components/admin-menu-view";
 import { AdminOrderDetailsDrawer } from "@/features/admin/components/admin-order-details-drawer";
 import { DashboardView } from "@/features/admin/components/admin-overview-view";
@@ -351,19 +366,19 @@ function FeedbackManagementView({
       <div className="grid gap-3 md:grid-cols-4">
         {[
           {
-            icon: MessageSquareText,
+            icon: KadaMessageIcon,
             label: "Responses",
             value: String(feedbackRows.length),
             detail: `${sortedFeedbackRows.length} shown`,
           },
           {
-            icon: Star,
+            icon: KadaStarIcon,
             label: "Overall Avg",
             value: average ? average.toFixed(1) : "N/A",
             detail: "All feedback",
           },
           {
-            icon: Coffee,
+            icon: KadaCafeMenuIcon,
             label: "Strongest Item",
             value: strongestItem?.item ?? "None",
             detail: strongestItem
@@ -371,7 +386,7 @@ function FeedbackManagementView({
               : "No rated item",
           },
           {
-            icon: CircleAlert,
+            icon: KadaAlertIcon,
             label: "Needs Review",
             value: String(reviewItems.length),
             detail: weakestItem
@@ -513,6 +528,7 @@ function FeedbackManagementView({
 
 export function AdminDashboard() {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [demandView, setDemandView] = useState<DemandView>("orders");
@@ -1121,19 +1137,33 @@ export function AdminDashboard() {
       };
 
       if (!response.ok) {
-        setStoreStatusError(result.error || "Failed to load store status.");
+        const message = result.error || "Failed to load store status.";
+        setStoreStatusError(message);
+        showToast({
+          title: "Store status not loaded",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
       applyStoreStatus(result);
     } catch {
-      setStoreStatusError("Something went wrong while loading store status.");
+      const message = "Something went wrong while loading store status.";
+      setStoreStatusError(message);
+      showToast({
+        title: "Store status not loaded",
+        description: message,
+        variant: "error",
+      });
     }
-  }, [applyStoreStatus]);
+  }, [applyStoreStatus, showToast]);
 
   useEffect(() => {
     loadAdminData({ showLoading: true });
     loadStoreStatus();
+    // loadAdminData writes fresh server data; loadStoreStatus controls store sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadStoreStatus]);
 
   useEffect(() => {
@@ -1173,6 +1203,8 @@ export function AdminDashboard() {
     }, 15000);
 
     return () => window.clearInterval(intervalId);
+    // loadAdminData is an untracked polling action; activeTab owns this interval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   async function loadAdminData({
@@ -1229,12 +1261,28 @@ export function AdminDashboard() {
       };
 
       if (!ordersResponse.ok) {
-        setError(ordersResult.error || "Failed to load admin orders.");
+        const message = ordersResult.error || "Failed to load admin orders.";
+        setError(message);
+        if (showLoading) {
+          showToast({
+            title: "Admin data not loaded",
+            description: message,
+            variant: "error",
+          });
+        }
         return;
       }
 
       if (!menuResponse.ok) {
-        setError(menuResult.error || "Failed to load menu items.");
+        const message = menuResult.error || "Failed to load menu items.";
+        setError(message);
+        if (showLoading) {
+          showToast({
+            title: "Admin data not loaded",
+            description: message,
+            variant: "error",
+          });
+        }
         return;
       }
 
@@ -1265,7 +1313,15 @@ export function AdminDashboard() {
       }
       setLastSyncedAt(new Date());
     } catch {
-      setError("Something went wrong while loading admin data.");
+      const message = "Something went wrong while loading admin data.";
+      setError(message);
+      if (showLoading) {
+        showToast({
+          title: "Admin data not loaded",
+          description: message,
+          variant: "error",
+        });
+      }
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -1331,14 +1387,24 @@ export function AdminDashboard() {
         !itemsResponse.ok ||
         !customerPreferencesResponse.ok
       ) {
-        setError(
+        const message =
           dailyResult.error ||
           hourlyResult.error ||
           weeklyResult.error ||
           itemsResult.error ||
           customerPreferencesResult.error ||
+<<<<<<< HEAD
           "Failed to refresh analytics."
         );
+=======
+          "Failed to refresh analytics.";
+        setError(message);
+        showToast({
+          title: "Analytics not refreshed",
+          description: message,
+          variant: "error",
+        });
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
         return;
       }
 
@@ -1348,13 +1414,31 @@ export function AdminDashboard() {
       const peakHoursResult = (await peakHoursResponse.json()) as { error?: string };
 
       if (!peakHoursResponse.ok) {
-        setError(peakHoursResult.error || "Failed to refresh peak-hour windows.");
+        const message =
+          peakHoursResult.error || "Failed to refresh peak-hour windows.";
+        setError(message);
+        showToast({
+          title: "Analytics not refreshed",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
       await loadAdminData({ showLoading: true });
+      showToast({
+        title: "Analytics refreshed",
+        description: "Dashboard and demand signals are now up to date.",
+        variant: "success",
+      });
     } catch {
-      setError("Something went wrong while refreshing analytics.");
+      const message = "Something went wrong while refreshing analytics.";
+      setError(message);
+      showToast({
+        title: "Analytics not refreshed",
+        description: message,
+        variant: "error",
+      });
     }
   }
 
@@ -1375,13 +1459,32 @@ export function AdminDashboard() {
       };
 
       if (!response.ok) {
-        setStoreStatusError(result.error || "Failed to update store status.");
+        const message = result.error || "Failed to update store status.";
+        setStoreStatusError(message);
+        showToast({
+          title: "Store status not updated",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
       applyStoreStatus(result);
+      showToast({
+        title: "Store status updated",
+        description: result.label
+          ? `Customer ordering now shows ${result.label.toLowerCase()}.`
+          : "Customer ordering status has been updated.",
+        variant: "success",
+      });
     } catch {
-      setStoreStatusError("Something went wrong while updating store status.");
+      const message = "Something went wrong while updating store status.";
+      setStoreStatusError(message);
+      showToast({
+        title: "Store status not updated",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsStoreStatusUpdating(false);
     }
@@ -1459,11 +1562,15 @@ export function AdminDashboard() {
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="flex shrink-0 items-center justify-center rounded-full p-1.5 text-[#8C7A64] transition hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
             >
+<<<<<<< HEAD
               {isSidebarCollapsed ? (
                 <PanelLeftOpen size={20} />
               ) : (
                 <PanelLeftClose size={20} />
               )}
+=======
+              {isSidebarOpen ? <KadaCloseIcon size={20} /> : <KadaPanelMenuIcon size={20} />}
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
             </button>
           </div>
 
@@ -1514,6 +1621,7 @@ export function AdminDashboard() {
               className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 disabled:opacity-60 ${isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
                 } text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]`}
             >
+<<<<<<< HEAD
               <LogOut size={20} className="shrink-0" />
               <span
                 className={`text-sm transition-all duration-200 ${isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
@@ -1521,6 +1629,10 @@ export function AdminDashboard() {
               >
                 {isLoggingOut ? "Logging out..." : "Logout"}
               </span>
+=======
+              <KadaLogoutIcon size={20} className="shrink-0" />
+              {isSidebarOpen ? (isLoggingOut ? "Logging out..." : "Logout") : null}
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
             </button>
           </div>
         </aside>
@@ -1536,7 +1648,7 @@ export function AdminDashboard() {
                   aria-label="Open admin navigation"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white lg:hidden"
                 >
-                  <MenuIcon size={20} />
+                  <KadaPanelMenuIcon size={20} />
                 </button>
                 <div>
                   <div className="flex flex-col gap-1">
@@ -1547,7 +1659,7 @@ export function AdminDashboard() {
                           : activeHeaderTitle}
                       </h1>
                       {activeTab === "dashboard" && (
-                        <Coffee size={24} className="text-[#8C6C48]" />
+                        <KadaCafeMenuIcon size={24} className="text-[#8C6C48]" />
                       )}
                     </div>
                     {activeTab === "dashboard" && (
@@ -1568,7 +1680,7 @@ export function AdminDashboard() {
                   aria-label="Refresh analytics"
                   className="inline-flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-4 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
                 >
-                  <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+                  <KadaRefreshIcon size={16} className={isLoading ? "animate-spin" : ""} />
                   Refresh Analytics
                 </button>
               </div>
@@ -1577,7 +1689,7 @@ export function AdminDashboard() {
               <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
                 <div className="relative w-full max-w-[260px]">
                   <label className="flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
-                    <Search size={15} className="text-[#8C7A64]" />
+                    <KadaSearchIcon size={15} className="text-[#8C7A64]" />
                     <input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
@@ -1729,7 +1841,7 @@ export function AdminDashboard() {
                       </div>
 
                       <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[#DCCFB8] bg-white px-4 py-2.5 font-sans text-xs font-bold text-[#684B35]">
-                        <Clock size={13} />
+                        <KadaClockIcon size={13} />
                         5PM-12AM
                       </span>
                     </div>

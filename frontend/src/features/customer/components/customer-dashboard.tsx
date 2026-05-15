@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bell,
   Camera,
   ChevronDown,
   ChevronLeft,
@@ -37,6 +38,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
@@ -46,6 +48,11 @@ import {
   type RecommendationMenuItem,
   type RecommendationOrder,
 } from "@/lib/recommendations";
+import {
+  formatNutritionMetric,
+  getMenuItemNutrition,
+  nutritionMetricLabels,
+} from "@/lib/nutrition";
 import type { CustomerMenuItem } from "@/types/menu";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
@@ -118,6 +125,24 @@ type MenuRecommendationCard = {
   basis: string;
   reason: string;
   score: number;
+};
+
+type CustomerNotification = {
+  id: string;
+  kind: "order" | "receipt" | "feedback";
+  typeLabel: string;
+  timestamp: string;
+  title: string;
+  body: string;
+  actionLabel: string;
+  orderId: string;
+  receipt?: {
+    itemsTotal: number;
+    deliveryFee: number;
+    grandTotal: number;
+    paymentMethod: string;
+    itemLines: string[];
+  };
 };
 
 
@@ -194,6 +219,7 @@ const customerSplashSessionKey = "kadaserve_show_customer_splash";
 const feedbackDismissedOrdersStorageKey =
   "kadaserve_feedback_dismissed_orders";
 const feedbackMaybeLaterStorageKey = "kadaserve_feedback_maybe_later_orders";
+const notificationsReadStorageKey = "kadaserve_read_notifications";
 const feedbackMaybeLaterDelayMs = 30 * 60 * 1000;
 const promotionImages = [
   "/images/promotions/promotion1.png",
@@ -235,6 +261,39 @@ function formatTime(value: string) {
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatNotificationTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Just now";
+  }
+
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const time = date.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (isToday) {
+    return `Today, ${time}`;
+  }
+
+  if (isYesterday) {
+    return `Yesterday, ${time}`;
+  }
+
+  return date.toLocaleString("en-PH", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -373,6 +432,88 @@ function formatStatus(status: CustomerOrder["status"]) {
     default:
       return status;
   }
+}
+
+function getOrderNotificationTitle(order: CustomerOrder) {
+  switch (order.status) {
+    case "pending_payment":
+      return "Payment is pending";
+    case "pending":
+      return "Order received";
+    case "preparing":
+      return "Your order is being prepared";
+    case "ready":
+      return order.order_type === "pickup"
+        ? "Ready for pickup"
+        : "Order is ready";
+    case "out_for_delivery":
+      return "Order is out for delivery";
+    default:
+      return `${formatStatus(order.status)} order`;
+  }
+}
+
+function getOrderNotificationBody(order: CustomerOrder) {
+  const itemSummary = formatOrderItemSummary(
+    order.order_items
+      .map((item) => item.menu_items?.name)
+      .filter(Boolean) as string[]
+  );
+
+  if (order.status === "ready" && order.order_type === "pickup") {
+    return `${formatOrderCode(order.id)} is ready at the cafe counter. ${itemSummary}`;
+  }
+
+  if (order.status === "out_for_delivery") {
+    return `${formatOrderCode(order.id)} is on the way. ${itemSummary}`;
+  }
+
+  return `${formatOrderCode(order.id)} is ${formatStatus(
+    order.status
+  ).toLowerCase()}. ${itemSummary}`;
+}
+
+function getCustomerPaymentMethodLabel(method?: CustomerOrder["payment_method"]) {
+  switch (method) {
+    case "cash":
+      return "Cash";
+    case "gcash":
+      return "GCash";
+    case "online":
+      return "Online Payment";
+    default:
+      return "Payment";
+  }
+}
+
+function getNotificationTimestamp(order: CustomerOrder) {
+  return order.updated_at || order.ordered_at;
+}
+
+function getOrderReceipt(order: CustomerOrder) {
+  const deliveryFee =
+    order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
+  const itemLines = order.order_items.map((item) => {
+    const name = item.menu_items?.name ?? "Menu item";
+    const total = Number(item.unit_price ?? 0) * item.quantity;
+
+    return `${name} x ${item.quantity} - ${formatPrice(total)}`;
+  });
+  const itemsTotal =
+    order.order_items.length > 0
+      ? order.order_items.reduce(
+          (sum, item) => sum + Number(item.unit_price ?? 0) * item.quantity,
+          0
+        )
+      : Math.max(0, Number(order.total_amount ?? 0) - deliveryFee);
+
+  return {
+    itemsTotal,
+    deliveryFee,
+    grandTotal: Number(order.total_amount ?? 0),
+    paymentMethod: getCustomerPaymentMethodLabel(order.payment_method),
+    itemLines,
+  };
 }
 
 function getEmoji(item: CustomerMenuItem) {
@@ -677,6 +818,7 @@ export function CustomerDashboard({
 }: CustomerDashboardProps) {
 
   const router = useRouter();
+  const { showToast } = useToast();
   const { addItem, cartCount, items: cartItems } = useCart();
   const [customerOrders, setCustomerOrders] = useState(orders);
   const [isOrderSyncing, setIsOrderSyncing] = useState(false);
@@ -751,6 +893,14 @@ export function CustomerDashboard({
   const [openProfileFaq, setOpenProfileFaq] = useState<ProfileFaq | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSettingsMessage, setProfileSettingsMessage] = useState("");
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return readStoredOrderIds(notificationsReadStorageKey);
+  });
   const profileInitials = getInitials(displayProfileName);
   const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
@@ -1055,10 +1205,20 @@ export function CustomerDashboard({
 
       if (!response.ok) {
         setFeedbackMessage(result.error || "Failed to submit feedback.");
+        showToast({
+          title: "Feedback not sent",
+          description: result.error || "Please try again.",
+          variant: "error",
+        });
         return;
       }
 
       setFeedbackMessage("Feedback submitted successfully.");
+      showToast({
+        title: "Feedback submitted",
+        description: "Thanks. Your rating will improve future recommendations.",
+        variant: "success",
+      });
       markFeedbackOrderDismissed(selectedFeedbackItem.order_id);
       setIsFeedbackPromptOpen(false);
       setSelectedFeedbackOrderId(null);
@@ -1069,6 +1229,11 @@ export function CustomerDashboard({
       router.refresh();
     } catch {
       setFeedbackMessage("Something went wrong while submitting feedback.");
+      showToast({
+        title: "Feedback not sent",
+        description: "Something went wrong while submitting feedback.",
+        variant: "error",
+      });
     } finally {
       setIsSubmittingFeedback(false);
     }
@@ -1217,16 +1382,109 @@ export function CustomerDashboard({
   const hasOrderAttention = currentOrders.some((order) =>
     ["preparing", "ready", "out_for_delivery"].includes(order.status)
   );
+  const notifications = useMemo<CustomerNotification[]>(() => {
+    if (!isAuthenticated) {
+      return [];
+    }
+
+    const orderNotifications = currentOrders.map((order) => ({
+      id: `order:${order.id}:${order.status}`,
+      kind: "order" as const,
+      typeLabel: formatStatus(order.status),
+      timestamp: getNotificationTimestamp(order),
+      title: getOrderNotificationTitle(order),
+      body: getOrderNotificationBody(order),
+      actionLabel: "Track order",
+      orderId: order.id,
+    }));
+    const receiptNotifications = orderHistory
+      .filter((order) => ["completed", "delivered"].includes(order.status))
+      .map((order) => {
+        const receipt = getOrderReceipt(order);
+
+        return {
+          id: `receipt:${order.id}:${order.status}:${order.payment_status ?? "unpaid"}`,
+          kind: "receipt" as const,
+          typeLabel: "Receipt",
+          timestamp: getNotificationTimestamp(order),
+          title: "Receipt and order details",
+          body: `${formatOrderCode(order.id)} is ${formatStatus(
+            order.status
+          ).toLowerCase()}. Total ${formatPrice(receipt.grandTotal)} via ${
+            receipt.paymentMethod
+          }.`,
+          actionLabel: "View order",
+          orderId: order.id,
+          receipt,
+        };
+      });
+    const feedbackOrderIds = Array.from(
+      new Set(feedbackItems.map((item) => item.order_id))
+    );
+    const feedbackNotifications = feedbackOrderIds
+      .filter((orderId) => isFeedbackPromptAllowed(orderId))
+      .map((orderId) => {
+        const feedbackItem = getFeedbackItemForOrder(orderId);
+
+        return {
+          id: `feedback:${orderId}`,
+          kind: "feedback" as const,
+          typeLabel: "Feedback",
+          timestamp:
+            customerOrders.find((order) => order.id === orderId)?.updated_at ||
+            customerOrders.find((order) => order.id === orderId)?.ordered_at ||
+            new Date().toISOString(),
+          title: "Rate your recent order",
+          body: feedbackItem
+            ? `Tell us how ${feedbackItem.item_name} tasted so recommendations improve.`
+            : "Your feedback helps improve future recommendations.",
+          actionLabel: "Give feedback",
+          orderId,
+        };
+      });
+
+    return [...orderNotifications, ...receiptNotifications, ...feedbackNotifications]
+      .sort(
+        (first, second) =>
+          new Date(second.timestamp).getTime() -
+          new Date(first.timestamp).getTime()
+      );
+  }, [
+    customerOrders,
+    currentOrders,
+    feedbackItems,
+    getFeedbackItemForOrder,
+    isAuthenticated,
+    isFeedbackPromptAllowed,
+    orderHistory,
+  ]);
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !readNotificationIds.includes(notification.id)
+  ).length;
+
+  useEffect(() => {
+    writeStoredOrderIds(notificationsReadStorageKey, readNotificationIds);
+  }, [readNotificationIds]);
 
   useEffect(() => {
     document.body.style.overflow =
       selectedMenuItem ||
+<<<<<<< HEAD
         isProfileOpen ||
         isFeedbackPromptOpen ||
         trackingOrder ||
         isSplashVisible ||
         isTaglineVisible ||
         isOnboardingOpen
+=======
+      isProfileOpen ||
+      isNotificationsOpen ||
+      isFeedbackPromptOpen ||
+      trackingOrder ||
+      isSplashVisible ||
+      isTaglineVisible ||
+      isOnboardingOpen
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
         ? "hidden"
         : "";
 
@@ -1235,6 +1493,7 @@ export function CustomerDashboard({
     };
   }, [
     isFeedbackPromptOpen,
+    isNotificationsOpen,
     isOnboardingOpen,
     isProfileOpen,
     isSplashVisible,
@@ -1532,6 +1791,14 @@ export function CustomerDashboard({
   const customizeTotal = selectedMenuItem
     ? (selectedMenuItem.base_price + addonTotal + sizeCharge) * quantity
     : 0;
+  const selectedNutrition = selectedMenuItem
+    ? getMenuItemNutrition(selectedMenuItem, {
+        sugarLevel:
+          selectedMenuItem.has_sugar_level === false ? 100 : sugarLevel,
+        size,
+        addons: selectedAddons,
+      })
+    : null;
 
   useEffect(() => {
     if (
@@ -1597,6 +1864,11 @@ export function CustomerDashboard({
     }
 
     setGuestActionMessage(message);
+    showToast({
+      title: "Login required",
+      description: message,
+      variant: "info",
+    });
     const callbackUrl = `${window.location.pathname}${window.location.search}`;
     router.push(
       `/login?callbackUrl=${encodeURIComponent(
@@ -1672,6 +1944,11 @@ export function CustomerDashboard({
 
     navigator.vibrate?.(18);
     setCustomizeMessage("Added to cart.");
+    showToast({
+      title: "Added to cart",
+      description: `${selectedMenuItem.name} is ready for checkout.`,
+      variant: "success",
+    });
 
     window.setTimeout(() => {
       closeCustomizeModal();
@@ -1809,6 +2086,11 @@ export function CustomerDashboard({
 
       if (!response.ok || !result.order) {
         setTrackingActionMessage(result.error || "Failed to cancel order.");
+        showToast({
+          title: "Order not cancelled",
+          description: result.error || "Failed to cancel order.",
+          variant: "error",
+        });
         return;
       }
 
@@ -1818,11 +2100,21 @@ export function CustomerDashboard({
         )
       );
       setTrackingActionMessage("Order cancelled. Staff and admin are updated.");
+      showToast({
+        title: "Order cancelled",
+        description: `${formatOrderCode(trackingOrder.id)} moved out of the active queue.`,
+        variant: "success",
+      });
       window.setTimeout(() => {
         closeTrackingModal();
       }, 650);
     } catch {
       setTrackingActionMessage("Something went wrong while cancelling the order.");
+      showToast({
+        title: "Order not cancelled",
+        description: "Something went wrong while cancelling the order.",
+        variant: "error",
+      });
     } finally {
       setIsCancellingTrackedOrder(false);
     }
@@ -1838,11 +2130,21 @@ export function CustomerDashboard({
 
     if (!file.type.startsWith("image/")) {
       setAvatarMessage("Please choose an image file.");
+      showToast({
+        title: "Invalid file",
+        description: "Please choose an image file.",
+        variant: "error",
+      });
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
       setAvatarMessage("Profile picture must be 2MB or smaller.");
+      showToast({
+        title: "Image too large",
+        description: "Profile picture must be 2MB or smaller.",
+        variant: "error",
+      });
       return;
     }
 
@@ -1862,14 +2164,28 @@ export function CustomerDashboard({
 
       if (!response.ok) {
         setAvatarMessage(result.error || "Failed to upload profile picture.");
+        showToast({
+          title: "Photo not updated",
+          description: result.error || "Failed to upload profile picture.",
+          variant: "error",
+        });
         return;
       }
 
       setProfileAvatarUrl(result.avatarUrl ?? "");
       setAvatarMessage("Profile picture updated.");
+      showToast({
+        title: "Profile photo updated",
+        variant: "success",
+      });
       router.refresh();
     } catch {
       setAvatarMessage("Something went wrong while uploading your photo.");
+      showToast({
+        title: "Photo not updated",
+        description: "Something went wrong while uploading your photo.",
+        variant: "error",
+      });
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -1901,15 +2217,30 @@ export function CustomerDashboard({
         setProfileSettingsMessage(
           result.error || "Failed to save profile changes."
         );
+        showToast({
+          title: "Profile not saved",
+          description: result.error || "Failed to save profile changes.",
+          variant: "error",
+        });
         return;
       }
 
       setDisplayProfileName(result.profile?.fullName ?? normalizedProfileName);
       setProfilePhoneDraft(formatProfilePhone(result.profile?.phone ?? ""));
       setProfileSettingsMessage("Profile changes saved.");
+      showToast({
+        title: "Profile saved",
+        description: "Your customer details were updated.",
+        variant: "success",
+      });
       router.refresh();
     } catch {
       setProfileSettingsMessage("Something went wrong while saving profile.");
+      showToast({
+        title: "Profile not saved",
+        description: "Something went wrong while saving profile.",
+        variant: "error",
+      });
     } finally {
       setIsSavingProfile(false);
     }
@@ -1947,6 +2278,38 @@ export function CustomerDashboard({
 
     setActiveSection(section);
     setIsSidebarOpen(false);
+  }
+
+  function openNotifications() {
+    if (!requireCustomerAccount("Login to view notifications.")) {
+      return;
+    }
+
+    setIsNotificationsOpen(true);
+    setReadNotificationIds((current) => [
+      ...new Set([...current, ...notifications.map((item) => item.id)]),
+    ]);
+  }
+
+  function closeNotifications() {
+    setIsNotificationsOpen(false);
+  }
+
+  function handleNotificationAction(notification: CustomerNotification) {
+    setReadNotificationIds((current) => [
+      ...new Set([...current, notification.id]),
+    ]);
+    setIsNotificationsOpen(false);
+
+    if (notification.kind === "feedback") {
+      if (!openFeedbackPromptForOrder(notification.orderId)) {
+        handleSectionClick("orders");
+      }
+
+      return;
+    }
+
+    openTrackingModal(notification.orderId);
   }
 
   function finishOnboarding() {
@@ -2014,6 +2377,11 @@ export function CustomerDashboard({
 
     if (!feedbackItem) {
       setFeedbackMessage("Feedback for this order is already complete.");
+      showToast({
+        title: "Feedback already complete",
+        description: "There is no pending feedback item for this order.",
+        variant: "info",
+      });
       return;
     }
 
@@ -2129,6 +2497,7 @@ export function CustomerDashboard({
               <span aria-hidden="true" className="h-11 w-11" />
             )}
 
+<<<<<<< HEAD
             <button
               type="button"
               onClick={() => {
@@ -2159,10 +2528,58 @@ export function CustomerDashboard({
                 {profileEmail ? (
                   <span className="block truncate font-sans text-[11px] leading-tight text-[#8A755D]">
                     {profileEmail}
+=======
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={openNotifications}
+                aria-label="Open notifications"
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-[#FFF0DA]"
+              >
+                <Bell size={19} />
+                {unreadNotificationCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
                   </span>
                 ) : null}
-              </span>
-            </button>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!requireCustomerAccount("Login to open your profile.")) {
+                    return;
+                  }
+
+                  setIsSidebarOpen(false);
+                  setIsProfileOpen(true);
+                }}
+                className="hidden max-w-[210px] items-center gap-3 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:bg-[#FFF0DA] sm:flex"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#123E26] font-sans text-sm font-black text-[#FFF0D8]">
+                  {profileAvatarUrl ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-full w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${profileAvatarUrl})` }}
+                    />
+                  ) : (
+                    profileInitials
+                  )}
+                </span>
+                  <span className="hidden min-w-0 sm:block">
+                  <span className="block truncate font-sans text-sm font-bold leading-tight text-[#123E26]">
+                    {displayProfileName}
+                  </span>
+                  {profileEmail ? (
+                    <span className="block truncate font-sans text-[11px] leading-tight text-[#8A755D]">
+                      {profileEmail}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </div>
           </header>
 
           {isSearchOpen ? (
@@ -2201,9 +2618,26 @@ export function CustomerDashboard({
                       Menu
                     </h1>
                   </div>
-                  <span className="shrink-0 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.14)]">
-                    {filteredMenu.length} item{filteredMenu.length === 1 ? "" : "s"}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openNotifications}
+                      aria-label="Open notifications"
+                      className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-white sm:hidden"
+                    >
+                      <Bell size={18} />
+                      {unreadNotificationCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+                          {unreadNotificationCount > 9
+                            ? "9+"
+                            : unreadNotificationCount}
+                        </span>
+                      ) : null}
+                    </button>
+                    <span className="rounded-full border border-[#0D2E18] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.14)]">
+                      {filteredMenu.length} item{filteredMenu.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
                 <div className="mb-3 flex items-center gap-2 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5 shadow-sm transition focus-within:border-[#0D2E18] focus-within:ring-2 focus-within:ring-[#0D2E18]/10">
                   <Search size={17} className="shrink-0 text-[#0D2E18]" />
@@ -2516,6 +2950,7 @@ export function CustomerDashboard({
                       ) : null}
                     </div>
                   ) : null}
+<<<<<<< HEAD
                   {menuGroups.map((group) => (
                     <section
                       key={group.value}
@@ -2528,6 +2963,36 @@ export function CustomerDashboard({
                         {group.items.length === 0 ? (
                           <div className="col-span-full rounded-[20px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center font-sans text-sm font-semibold text-[#684B35]">
                             No items in this category yet.
+=======
+                    {menuGroups.map((group) => (
+                      <section
+                        key={group.value}
+                        className="scroll-mt-4"
+                      >
+                        <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
+                          {group.label}
+                        </h2>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+                          {group.items.length === 0 ? (
+                            <div className="col-span-full rounded-[20px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center font-sans text-sm font-semibold text-[#684B35]">
+                              No items in this category yet.
+                            </div>
+                          ) : null}
+                          {group.items.map((item) => {
+                            const menuImage = getMenuImage(item);
+                            const isQuickAdded = quickAddFeedback?.itemId === item.id;
+                            const itemNutrition = getMenuItemNutrition(item);
+
+                            return (
+                      <article
+                        key={item.id}
+                        className="relative min-w-0 text-center"
+                      >
+                        {isQuickAdded ? (
+                          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 animate-bounce items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
+                            <CheckCircle2 size={14} />
+                            Added
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
                           </div>
                         ) : null}
                         {group.items.map((item) => {
@@ -2557,6 +3022,7 @@ export function CustomerDashboard({
                                     return;
                                   }
 
+<<<<<<< HEAD
                                   openCustomizeModal(item);
                                 }}
                                 disabled={!item.is_available}
@@ -2614,6 +3080,48 @@ export function CustomerDashboard({
                       </div>
                     </section>
                   ))}
+=======
+                          <span
+                            className={`mt-3 inline-flex rounded-full px-2 py-1 font-sans text-[9px] font-bold uppercase tracking-[0.12em] ${
+                              item.is_available
+                                ? "bg-[#E9F5E7] text-[#2D7A40]"
+                                : "bg-[#FBE9E2] text-[#9C543D]"
+                            }`}
+                          >
+                            {item.is_available ? "Available" : "Sold out"}
+                          </span>
+                          <h2 className="mx-auto mt-2 line-clamp-2 max-w-[150px] font-sans text-sm font-black leading-tight text-[#123E26]">
+                            {item.name}
+                          </h2>
+                          <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
+                            {formatPrice(item.base_price)}
+                          </p>
+                          {itemNutrition ? (
+                            <p className="mx-auto mt-1 w-fit rounded-full bg-white/75 px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
+                              {itemNutrition.calories} cal est.
+                            </p>
+                          ) : null}
+                          <span
+                            className={`mx-auto mt-3 inline-flex h-9 items-center justify-center rounded-full px-4 font-sans text-xs font-black transition ${
+                              item.is_available
+                                ? "bg-[#0D2E18] text-[#FFF0DA] group-hover:bg-[#0F441D]"
+                                : "bg-[#E7D7BE] text-[#8A755D]"
+                            }`}
+                          >
+                            {!item.is_available
+                              ? "Sold Out"
+                              : isPastryMenuItem(item)
+                              ? "Add"
+                              : "Customize"}
+                          </span>
+                        </button>
+                      </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
                 </div>
               </div>
             )}
@@ -3412,8 +3920,33 @@ export function CustomerDashboard({
         </div>
       ) : null}
 
+<<<<<<< HEAD
       <nav className="fixed inset-x-3 bottom-3 z-50 rounded-[1.75rem] bg-[#0D2E18]/95 px-2 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_8px_32px_rgba(13,46,24,0.3)] backdrop-blur-xl md:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-0.5">
+=======
+      {!isSearchOpen &&
+      activeSection !== "menu" &&
+      !isSplashVisible &&
+      !isTaglineVisible &&
+      !isOnboardingOpen ? (
+        <button
+          type="button"
+          onClick={openNotifications}
+          aria-label="Open notifications"
+          className="fixed right-4 top-4 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-[#DCCFB8] bg-white/95 text-[#0D2E18] shadow-[0_12px_26px_rgba(13,46,24,0.18)] backdrop-blur transition hover:bg-[#FFF8EF] md:hidden"
+        >
+          <Bell size={20} />
+          {unreadNotificationCount > 0 ? (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+
+      <nav className="fixed inset-x-3 bottom-3 z-50 rounded-[24px] bg-[#0D2E18] px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_14px_34px_rgba(13,46,24,0.28)] md:hidden">
+        <div className="grid grid-cols-4 gap-1">
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
           {mobileTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive =
@@ -3468,6 +4001,157 @@ export function CustomerDashboard({
           })}
         </div>
       </nav>
+
+      {isNotificationsOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-start md:justify-end md:p-5">
+          <button
+            type="button"
+            aria-label="Close notifications"
+            className="absolute inset-0 cursor-default"
+            onClick={closeNotifications}
+          />
+          <section className="relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:mt-14 md:rounded-[26px] md:shadow-[0_18px_44px_rgba(13,46,24,0.18)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA]">
+                  <Bell className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                    Notifications
+                  </p>
+                  <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                    Updates
+                  </h2>
+                  <p className="mt-0.5 font-sans text-xs font-semibold text-[#8A755D]">
+                    {notifications.length} update
+                    {notifications.length === 1 ? "" : "s"} synced from KadaServe
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeNotifications}
+                aria-label="Close notifications"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F3E6D1] text-[#123E26] transition hover:bg-[#E8D9BE]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              {notifications.length === 0 ? (
+                <div className="rounded-[22px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center">
+                  <Bell className="mx-auto h-8 w-8 text-[#684B35]" />
+                  <p className="mt-3 font-sans text-lg font-black text-[#0D2E18]">
+                    No notifications yet
+                  </p>
+                  <p className="mx-auto mt-1 max-w-xs font-sans text-sm font-semibold leading-6 text-[#684B35]">
+                    Order updates, receipt details, and feedback reminders will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map((notification) => {
+                    const isUnread = !readNotificationIds.includes(notification.id);
+
+                    return (
+                      <article
+                        key={notification.id}
+                        className={`rounded-[20px] border p-4 ${
+                          isUnread
+                            ? "border-[#C96A12]/40 bg-[#FFF0DA]"
+                            : "border-[#E8D9BE] bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                              notification.kind === "feedback"
+                                ? "bg-[#2D7A40]"
+                                : notification.kind === "receipt"
+                                ? "bg-[#0D2E18]"
+                                : "bg-[#C96A12]"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-[#F3E6D1] px-2.5 py-1 font-sans text-[10px] font-black uppercase tracking-[0.12em] text-[#684B35]">
+                                {notification.typeLabel}
+                              </span>
+                              <time
+                                dateTime={notification.timestamp}
+                                className="font-sans text-xs font-bold text-[#8A755D]"
+                              >
+                                {formatNotificationTime(notification.timestamp)}
+                              </time>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-sans text-base font-black text-[#0D2E18]">
+                                {notification.title}
+                              </h3>
+                              {isUnread ? (
+                                <span className="rounded-full bg-white px-2 py-0.5 font-sans text-[10px] font-black uppercase tracking-[0.12em] text-[#C96A12]">
+                                  New
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 font-sans text-sm font-semibold leading-6 text-[#684B35]">
+                              {notification.body}
+                            </p>
+                            {notification.receipt ? (
+                              <div className="mt-3 rounded-[16px] border border-[#E8D9BE] bg-[#FFF8EF] p-3 font-sans text-xs font-semibold text-[#684B35]">
+                                <div className="space-y-1.5">
+                                  {notification.receipt.itemLines.map((line) => (
+                                    <p key={line}>{line}</p>
+                                  ))}
+                                </div>
+                                <div className="mt-3 space-y-1.5 border-t border-[#DCCFB8] pt-3">
+                                  <div className="flex justify-between gap-3">
+                                    <span>Items Total</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.itemsTotal)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span>Delivery Fee</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.deliveryFee)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-sm">
+                                    <span>Total</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.grandTotal)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span>Payment</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {notification.receipt.paymentMethod}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleNotificationAction(notification)}
+                              className="mt-3 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+                            >
+                              {notification.actionLabel}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {isFeedbackPromptOpen && selectedFeedbackItem ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-center md:p-6">
@@ -3878,6 +4562,43 @@ export function CustomerDashboard({
                     </p>
                   ) : null}
 
+                  {selectedNutrition ? (
+                    <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
+                            Nutrition estimate
+                          </p>
+                          <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                            Per selected serving, calculated from KadaServe staff recipe.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
+                          {selectedNutrition.servingSizeMl} ml
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {nutritionMetricLabels.map((metric) => (
+                          <div
+                            key={metric.key}
+                            className="rounded-[14px] bg-white px-3 py-2 font-sans"
+                          >
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                              {metric.label}
+                            </p>
+                            <p className="mt-0.5 text-base font-black text-[#0D2E18]">
+                              {formatNutritionMetric(
+                                metric.key,
+                                selectedNutrition[metric.key]
+                              )}
+                              {metric.unit ? ` ${metric.unit}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={handleAddCustomizedItem}
@@ -4125,7 +4846,7 @@ export function CustomerDashboard({
                       trackingOrder.status
                     ) ? (
                     <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">
-                      Check your email for the latest Kada Cafe PH update.
+                      Check KadaServe notifications for order updates and receipt details.
                     </div>
                   ) : null}
                 </section>

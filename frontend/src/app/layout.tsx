@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import { PwaRegister } from "@/components/pwa-register";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -52,8 +53,13 @@ export default function RootLayout({
       className={`${dmSans.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+<<<<<<< HEAD
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
+=======
+      <body className="min-h-full flex flex-col">
+        <ToastProvider>{children}</ToastProvider>
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
         <PwaRegister />
       </body>
     </html>

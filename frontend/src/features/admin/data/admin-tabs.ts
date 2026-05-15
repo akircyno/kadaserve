@@ -1,9 +1,10 @@
 import {
-  BarChart3,
-  Coffee,
-  LayoutDashboard,
-  Target,
-} from "lucide-react";
+  KadaCustomerIcon,
+  KadaDashboardIcon,
+  KadaDemandIcon,
+  KadaMenuIcon,
+  type KadaAdminIcon,
+} from "@/components/icons/kadaserve-admin-icons";
 
 export type AdminTab =
   | "dashboard"
@@ -14,10 +15,10 @@ export type AdminTab =
 export const adminTabs: Array<{
   key: AdminTab;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: KadaAdminIcon;
 }> = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { key: "demand", label: "Demand", icon: BarChart3 },
-  { key: "customer-intelligence", label: "Customer Intelligence", icon: Target },
-  { key: "menu", label: "Menu", icon: Coffee },
+  { key: "dashboard", label: "Dashboard", icon: KadaDashboardIcon },
+  { key: "demand", label: "Demand", icon: KadaDemandIcon },
+  { key: "customer-intelligence", label: "Customer Intelligence", icon: KadaCustomerIcon },
+  { key: "menu", label: "Menu", icon: KadaMenuIcon },
 ];

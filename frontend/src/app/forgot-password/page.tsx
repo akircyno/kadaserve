@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -21,6 +22,7 @@ const emailPattern =
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const [email, setEmail] = useState("");
@@ -41,7 +43,13 @@ export default function ForgotPasswordPage() {
     setSuccessMessage("");
 
     if (!isEmailValid || isSubmitting) {
-      setError("Please enter a valid email address.");
+      const message = "Please enter a valid email address.";
+      setError(message);
+      showToast({
+        title: "Email needed",
+        description: message,
+        variant: "error",
+      });
       return;
     }
 
@@ -59,16 +67,33 @@ export default function ForgotPasswordPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "Unable to send reset instructions.");
+        const message = result.error || "Unable to send reset instructions.";
+        setError(message);
+        showToast({
+          title: "Reset link not sent",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
-      setSuccessMessage(
+      const message =
         result.message ||
-          "If this email is registered, we sent a password reset link to it."
-      );
+        "If this email is registered, we sent a password reset link to it.";
+      setSuccessMessage(message);
+      showToast({
+        title: "Reset link requested",
+        description: message,
+        variant: "success",
+      });
     } catch {
-      setError("Unable to send reset instructions right now.");
+      const message = "Unable to send reset instructions right now.";
+      setError(message);
+      showToast({
+        title: "Reset link not sent",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }

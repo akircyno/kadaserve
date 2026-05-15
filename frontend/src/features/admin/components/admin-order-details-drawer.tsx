@@ -1,6 +1,10 @@
 "use client";
 
-import { Check, Copy, X } from "lucide-react";
+import {
+  KadaCheckIcon,
+  KadaCloseIcon,
+  KadaCopyIcon,
+} from "@/components/icons/kadaserve-admin-icons";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 function peso(value: number) {
@@ -154,7 +158,7 @@ export function AdminOrderDetailsDrawer({
             onClick={onClose}
             className="rounded-full bg-[#FFF8EF] p-2 text-[#0D2E18]"
           >
-            <X size={20} />
+            <KadaCloseIcon size={20} />
           </button>
         </div>
 
@@ -212,7 +216,7 @@ export function AdminOrderDetailsDrawer({
                       {formatStatus(status)}
                     </span>
                     {completedStatus ? (
-                      <Check size={14} className="text-[#0D2E18]" />
+                      <KadaCheckIcon size={14} className="text-[#0D2E18]" />
                     ) : null}
                   </div>
                 );
@@ -248,7 +252,7 @@ export function AdminOrderDetailsDrawer({
                       className="rounded-full p-1 text-[#684B35] transition hover:bg-[#FFF8EF] hover:text-[#0D2E18]"
                       aria-label="Copy phone number"
                     >
-                      <Copy size={14} />
+                      <KadaCopyIcon size={14} />
                     </button>
                   ) : null}
                 </div>

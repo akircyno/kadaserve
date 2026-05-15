@@ -1,7 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Package, TrendingUp, Clock, Smile, AlertTriangle, Zap, Flame, BarChart3, Coffee, DollarSign, Star, ChevronUp, Info } from "lucide-react";
+import {
+  KadaAlertIcon,
+  KadaChevronUpIcon,
+  KadaClockIcon,
+  KadaDemandIcon,
+  KadaFlameIcon,
+  KadaInfoIcon,
+  KadaMenuIcon,
+  KadaMoneyIcon,
+  KadaPackageIcon,
+  KadaSmileIcon,
+  KadaStarIcon,
+  KadaTrendIcon,
+  KadaZapIcon,
+} from "@/components/icons/kadaserve-admin-icons";
 import type { StaffOrder } from "@/types/orders";
 
 const STORE_HOURS_LABEL = "Store Hours: 5:00 PM – 12:00 AM";
@@ -379,7 +393,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
             return (
               <div key={i} className="relative h-3 w-3">
                 {isFilled || isHalf ? (
-                  <Star
+                  <KadaStarIcon
                     size={12}
                     className="absolute inset-0 fill-current text-[#0F441D] transition-transform group-hover:scale-110"
                     style={{
@@ -387,7 +401,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
                     }}
                   />
                 ) : null}
-                <Star size={12} className="absolute inset-0 text-[#DCCFB8]" />
+                <KadaStarIcon size={12} className="absolute inset-0 text-[#DCCFB8]" />
               </div>
             );
           })}
@@ -606,7 +620,7 @@ function FormulaTooltip({
         className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-[#0D2E18]/10 hover:bg-[#0D2E18]/20 transition-colors"
         title={title}
       >
-        <Info size={14} className="text-[#684B35]" />
+        <KadaInfoIcon size={14} className="text-[#684B35]" />
       </button>
       
       {isOpen && (
@@ -635,7 +649,7 @@ function FormulaTooltip({
 function StoreHoursBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#684B35] px-3 py-1.5 rounded-full bg-[#FFF0DA]/60 border border-[#FFE0BA]">
-      <Clock size={13} />
+      <KadaClockIcon size={13} />
       {STORE_HOURS_LABEL}
     </span>
   );
@@ -1012,7 +1026,7 @@ export function DashboardView({
       id: "admin-total-orders", 
       label: totalOrdersLabel, 
       value: totalOrders.toString(),
-      icon: Package,
+      icon: KadaPackageIcon,
       trend: totalOrders > 10 ? "+12%" : undefined,
       trendUp: true,
       description: "All confirmed orders",
@@ -1024,7 +1038,7 @@ export function DashboardView({
       id: "admin-gross-sales", 
       label: "Today's Revenue", 
       value: peso(grossIncomeSales),
-      icon: DollarSign,
+      icon: KadaMoneyIcon,
       trend: grossIncomeSales > 1000 ? "+8%" : undefined,
       trendUp: true,
       description: "Total sales today",
@@ -1036,7 +1050,7 @@ export function DashboardView({
       id: "admin-avg-order-value", 
       label: "Avg Order Value", 
       value: peso(averageOrderValue),
-      icon: Coffee,
+      icon: KadaMenuIcon,
       description: "Per customer",
       formulaTitle: "Average Order Value Formula",
       formula: "Average Order Value = Total Revenue ÷ Total Orders",
@@ -1046,7 +1060,7 @@ export function DashboardView({
       id: "admin-average-rating", 
       label: "Satisfaction", 
       value: averageRating ? averageRating.toFixed(1) : "N/A",
-      icon: Star,
+      icon: KadaStarIcon,
       trend: feedbackCount > 0 ? `${feedbackCount} reviews` : undefined,
       trendUp: averageRating >= 4,
       description: "Customer ratings",
@@ -1068,19 +1082,19 @@ export function DashboardView({
   // Build "Needs Attention" alerts
   const needsAttentionItems = [
     ...(totalOrders === 0 
-      ? [{ icon: BarChart3, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
+      ? [{ icon: KadaDemandIcon, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
       : []),
     ...(topItem && topItem.rating < 3.5
-      ? [{ icon: AlertTriangle, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
+      ? [{ icon: KadaAlertIcon, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
       : []),
     ...(busiestHour.orders > 0 && busiestHour.label
-      ? [{ icon: Flame, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
+      ? [{ icon: KadaFlameIcon, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
       : []),
     ...(trendDelta < -20
-      ? [{ icon: TrendingUp, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
+      ? [{ icon: KadaTrendIcon, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
       : []),
     ...(satisfactionLabel === "Needs review"
-      ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
+      ? [{ icon: KadaSmileIcon, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
       : []),
   ].slice(0, 3);
 
@@ -1092,7 +1106,7 @@ export function DashboardView({
         busiestHour.orders > 0
           ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
           : "Wait for more order data.",
-      icon: Clock,
+      icon: KadaClockIcon,
     },
     {
       label: "Weekly Growth",
@@ -1101,7 +1115,7 @@ export function DashboardView({
         weeklyTrendCounts.length < 2
           ? "Need more data for comparison."
           : `${latestWeek} orders vs ${previousWeek} last week.`,
-      icon: TrendingUp,
+      icon: KadaTrendIcon,
     },
     {
       label: "Top Favorite",
@@ -1109,7 +1123,7 @@ export function DashboardView({
       detail: topItem
         ? `${topItem.orders} orders. Use as recommendation signal.`
         : "Collect order data first.",
-      icon: Star,
+      icon: KadaStarIcon,
     },
     {
       label: "Satisfaction",
@@ -1118,7 +1132,7 @@ export function DashboardView({
         feedbackCount > 0
           ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
           : "Encourage customer feedback.",
-      icon: Smile,
+      icon: KadaSmileIcon,
     },
   ].filter(
     (insight) =>
@@ -1207,7 +1221,7 @@ export function DashboardView({
           className="scroll-mt-28 overflow-hidden rounded-[22px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)]"
         >
           <div className="flex items-center gap-2 mb-4">
-            <Zap size={18} className="text-[#684B35]" />
+            <KadaZapIcon size={18} className="text-[#684B35]" />
             <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
               Needs Attention
             </h3>
@@ -1355,7 +1369,7 @@ export function DashboardView({
                         {Math.max(...weekdayCounts.map(c => c.orders))} orders
                       </span>
                     </p>
-                    <ChevronUp size={16} className="text-[#8C6C48] flex-shrink-0" />
+                    <KadaChevronUpIcon size={16} className="text-[#8C6C48] flex-shrink-0" />
                   </div>
                 </div>
               </Panel>

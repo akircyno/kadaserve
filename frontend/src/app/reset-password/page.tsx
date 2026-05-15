@@ -12,6 +12,7 @@ import {
   Lock,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -27,6 +28,7 @@ function getPasswordChecks(password: string) {
 export default function ResetPasswordPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const { showToast } = useToast();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -46,7 +48,13 @@ export default function ResetPasswordPage() {
     setSuccessMessage("");
 
     if (!canSubmit) {
-      setError("Please complete the password requirements first.");
+      const message = "Please complete the password requirements first.";
+      setError(message);
+      showToast({
+        title: "Password not ready",
+        description: message,
+        variant: "error",
+      });
       return;
     }
 
@@ -58,7 +66,14 @@ export default function ResetPasswordPage() {
       });
 
       if (updateError) {
-        setError("This reset link is invalid or expired. Please request a new one.");
+        const message =
+          "This reset link is invalid or expired. Please request a new one.";
+        setError(message);
+        showToast({
+          title: "Password not updated",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -66,11 +81,23 @@ export default function ResetPasswordPage() {
         scope: "global",
       });
 
-      setSuccessMessage("Your password has been updated. You can sign in now.");
+      const message = "Your password has been updated. You can sign in now.";
+      setSuccessMessage(message);
+      showToast({
+        title: "Password updated",
+        description: message,
+        variant: "success",
+      });
       setPassword("");
       setConfirmPassword("");
     } catch {
-      setError("Unable to update password right now.");
+      const message = "Unable to update password right now.";
+      setError(message);
+      showToast({
+        title: "Password not updated",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
+<<<<<<< HEAD
 import {
   AlertCircle,
   CheckCircle2,
@@ -15,7 +16,10 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
+=======
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
 import type * as React from "react";
+import { KadaSearchIcon } from "@/components/icons/kadaserve-admin-icons";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import type { AdminMenuItem, MenuCategory } from "@/types/menu";
 
 type MenuFormState = {
@@ -222,6 +227,7 @@ export function MenuView({
   menuItems: AdminMenuItem[];
   setMenuItems: React.Dispatch<React.SetStateAction<AdminMenuItem[]>>;
 }) {
+  const { showToast } = useToast();
   const [form, setForm] = useState<MenuFormState>(emptyMenuForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -396,13 +402,26 @@ export function MenuView({
     closeCropModal();
 
     if (!allowedImageTypes.includes(file.type)) {
-      setMenuError("Please choose a JPG, PNG, or WEBP image.");
+      const message = "Please choose a JPG, PNG, or WEBP image.";
+      setMenuError(message);
+      showToast({
+        title: "Image not accepted",
+        description: message,
+        variant: "error",
+      });
       event.target.value = "";
       return;
     }
 
     if (file.size > maxInitialImageSize) {
-      setMenuError("This image is a bit too large to process. Please try a different photo.");
+      const message =
+        "This image is a bit too large to process. Please try a different photo.";
+      setMenuError(message);
+      showToast({
+        title: "Image too large",
+        description: message,
+        variant: "error",
+      });
       event.target.value = "";
       return;
     }
@@ -432,9 +451,14 @@ export function MenuView({
       );
 
       if (compressedImage.size > maxCompressedImageSize) {
-        setMenuError(
-          "This image is a bit too large to process. Please try a different photo."
-        );
+        const message =
+          "This image is a bit too large to process. Please try a different photo.";
+        setMenuError(message);
+        showToast({
+          title: "Image too large",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -453,10 +477,15 @@ export function MenuView({
       const result = await response.json();
 
       if (!response.ok) {
-        setMenuError(
+        const message =
           result.error ||
-            "This image is a bit too large to process. Please try a different photo."
-        );
+          "This image is a bit too large to process. Please try a different photo.";
+        setMenuError(message);
+        showToast({
+          title: "Image upload failed",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -466,13 +495,23 @@ export function MenuView({
       }));
 
       setMenuMessage("Image uploaded. Save the menu item to apply it.");
+      showToast({
+        title: "Image uploaded",
+        description: "Save the menu item to apply this photo.",
+        variant: "success",
+      });
       closeCropModal();
     } catch (error) {
-      setMenuError(
+      const message =
         error instanceof Error
           ? error.message
-          : "Something went wrong while uploading the image."
-      );
+          : "Something went wrong while uploading the image.";
+      setMenuError(message);
+      showToast({
+        title: "Image upload failed",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsUploadingImage(false);
     }
@@ -524,7 +563,13 @@ export function MenuView({
       const result = await response.json();
 
       if (!response.ok) {
-        setMenuError(result.error || "Failed to save menu item.");
+        const message = result.error || "Failed to save menu item.";
+        setMenuError(message);
+        showToast({
+          title: "Menu item not saved",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -532,10 +577,22 @@ export function MenuView({
         syncMenuItem(result.menuItem);
       }
 
-      setMenuMessage(form.id ? "Menu item updated." : "Menu item added.");
+      const message = form.id ? "Menu item updated." : "Menu item added.";
+      setMenuMessage(message);
+      showToast({
+        title: message,
+        description: `${form.name.trim()} is ready for the customer menu.`,
+        variant: "success",
+      });
       closeForm();
     } catch {
-      setMenuError("Something went wrong while saving the menu item.");
+      const message = "Something went wrong while saving the menu item.";
+      setMenuError(message);
+      showToast({
+        title: "Menu item not saved",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -666,6 +723,7 @@ export function MenuView({
         </div>
       ) : null}
 
+<<<<<<< HEAD
       <div className="mt-3 flex flex-wrap gap-2">
         {menuFilterOptions.map((category) => (
           <button
@@ -682,6 +740,38 @@ export function MenuView({
             <span className="ml-2 font-mono text-[10px]">{category.count}</span>
           </button>
         ))}
+=======
+      <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <label className="flex w-full items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 xl:max-w-[420px]">
+            <KadaSearchIcon size={17} className="text-[#6F7F69]" />
+            <input
+              value={menuSearch}
+              onChange={(event) => setMenuSearch(event.target.value)}
+              placeholder="Search menu items..."
+              className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8D9C87]"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            {menuFilterOptions.map((category) => (
+              <button
+                key={category.value}
+                type="button"
+                onClick={() => setMenuCategoryFilter(category.value)}
+                className={`rounded-full border px-4 py-2 font-sans text-sm font-semibold transition ${
+                  menuCategoryFilter === category.value
+                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                    : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
+                }`}
+              >
+                {category.label}
+                <span className="ml-2 opacity-70">{category.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
       </div>
 
       <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-[#FFFCF7]">

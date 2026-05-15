@@ -1,6 +1,7 @@
 "use client";
 
 import {
+<<<<<<< HEAD
   Award,
   Brain,
   CircleAlert,
@@ -12,6 +13,17 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
+=======
+  KadaAlertIcon,
+  KadaAwardIcon,
+  KadaBrainIcon,
+  KadaMessageIcon,
+  KadaSparklesIcon,
+  KadaStarIcon,
+  KadaTrendIcon,
+  KadaUsersIcon,
+} from "@/components/icons/kadaserve-admin-icons";
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
 import {
   getRecommendationsForCustomer,
   type RecommendationFeedback,
@@ -213,7 +225,7 @@ function RatingStars({ value }: { value: number }) {
   return (
     <div className="flex items-center gap-0.5" aria-label={`${value.toFixed(1)} rating`}>
       {Array.from({ length: 5 }).map((_, index) => (
-        <Star
+        <KadaStarIcon
           key={index}
           size={13}
           className={
@@ -245,19 +257,19 @@ export function ItemRankingView({
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         <MetricCard
-          icon={Award}
+          icon={KadaAwardIcon}
           label="Leader"
           value={topItem?.item ?? "None"}
           detail={topItem ? `${topItem.orders} orders` : "No ranked item"}
         />
         <MetricCard
-          icon={TrendingUp}
+          icon={KadaTrendIcon}
           label="Ranked Orders"
           value={String(totalOrders)}
           detail={`${itemRanking.length} menu signals`}
         />
         <MetricCard
-          icon={Star}
+          icon={KadaStarIcon}
           label="Avg Rating"
           value={formatRating(averageRating)}
           detail="Across ranked menu items"
@@ -333,7 +345,7 @@ export function ItemRankingView({
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
               Review Candidates
             </h2>
-            <CircleAlert size={18} className="text-[#684B35]" />
+            <KadaAlertIcon size={18} className="text-[#684B35]" />
           </div>
           <div className="mt-4 space-y-3">
             {lowPerformingItems.map((item, index) => (
@@ -427,25 +439,25 @@ export function SatisfactionView({
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-4">
         <MetricCard
-          icon={MessageSquareText}
+          icon={KadaMessageIcon}
           label="Responses"
           value={String(feedbackRows.length)}
           detail={`${itemSummaries.length} rated items`}
         />
         <MetricCard
-          icon={Star}
+          icon={KadaStarIcon}
           label="Overall"
           value={formatRating(overallAverage)}
           detail={getRatingTone(overallAverage).label}
         />
         <MetricCard
-          icon={Sparkles}
+          icon={KadaSparklesIcon}
           label="Taste"
           value={formatRating(tasteAverage)}
           detail="Flavor quality signal"
         />
         <MetricCard
-          icon={Brain}
+          icon={KadaBrainIcon}
           label="Strength"
           value={formatRating(strengthAverage)}
           detail={`${reviewCount} review candidates`}
@@ -617,6 +629,7 @@ export function CustomerPreferenceView({
 
   return (
     <div className="space-y-4">
+<<<<<<< HEAD
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
         {/* Card 1 — Profiles */}
         <div className="bg-[#0D2E18] text-[#FFF8EF] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
@@ -657,6 +670,33 @@ export function CustomerPreferenceView({
             <p className="text-xs text-[#8C7A64]">With feedback signal</p>
           </div>
         </div>
+=======
+      <div className="grid gap-3 md:grid-cols-4">
+        <MetricCard
+          icon={KadaUsersIcon}
+          label="Profiles"
+          value={String(profiles.length)}
+          detail={`${activeProfiles.length} with order signals`}
+        />
+        <MetricCard
+          icon={KadaBrainIcon}
+          label="Top Match"
+          value={topProfile?.mostOrderedItem ?? "None"}
+          detail={topProfile?.customerName ?? "No customer signal"}
+        />
+        <MetricCard
+          icon={KadaSparklesIcon}
+          label="Avg Score"
+          value={`${Math.round(averagePreference * 100)}%`}
+          detail="Preference confidence"
+        />
+        <MetricCard
+          icon={KadaStarIcon}
+          label="Rated Profiles"
+          value={String(ratedProfiles)}
+          detail="With feedback signal"
+        />
+>>>>>>> 1f4239e (Add Notification Bell and Nutrients)
       </div>
 
       <InsightCard className="overflow-hidden">

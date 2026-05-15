@@ -87,6 +87,7 @@ export type CustomerOrder = {
   total_amount: number;
   delivery_fee?: number | null;
   ordered_at: string;
+  updated_at?: string | null;
   delivery_address?: string | null;
   delivery_lat?: number | null;
   delivery_lng?: number | null;

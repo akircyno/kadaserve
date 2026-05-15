@@ -14,6 +14,7 @@ import {
   Mail,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -26,6 +27,7 @@ const emailPattern =
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const [email, setEmail] = useState("");
@@ -54,7 +56,13 @@ function LoginForm() {
     setError("");
 
     if (!isEmailValid || !isPasswordValid || isLoading) {
-      setError("Enter a valid email and password.");
+      const message = "Enter a valid email and password.";
+      setError(message);
+      showToast({
+        title: "Sign in blocked",
+        description: message,
+        variant: "error",
+      });
       return;
     }
 
@@ -72,7 +80,13 @@ function LoginForm() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "Invalid email or password.");
+        const message = result.error || "Invalid email or password.";
+        setError(message);
+        showToast({
+          title: "Sign in failed",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -92,7 +106,13 @@ function LoginForm() {
 
       router.refresh();
     } catch {
-      setError("Invalid email or password.");
+      const message = "Invalid email or password.";
+      setError(message);
+      showToast({
+        title: "Sign in failed",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -105,7 +125,7 @@ function LoginForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-4 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-4">
+    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-4 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-4">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -114,8 +134,8 @@ function LoginForm() {
         Back to KadaServe
       </Link>
 
-      <div className="mx-auto w-full max-w-md lg:max-w-5xl">
-        <section className="overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:min-h-[34.5rem] lg:grid-cols-[1.02fr_1fr]">
+      <div className="mx-auto w-[calc(100vw-2rem)] min-w-0 max-w-md lg:max-w-5xl">
+        <section className="w-full min-w-0 overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:min-h-[34.5rem] lg:grid-cols-[1.02fr_1fr]">
           <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-8">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
@@ -157,8 +177,8 @@ function LoginForm() {
           </div>
 
           <div className="px-5 py-6 sm:px-7 sm:py-7 lg:flex lg:flex-col lg:justify-center lg:px-8">
-            <div className="mb-6 flex items-center gap-4 lg:hidden">
-              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18]">
+            <div className="mb-6 flex min-w-0 items-center gap-3 sm:gap-4 lg:hidden">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18] sm:h-16 sm:w-16">
                 <Image
                   src={LOGO_SRC}
                   alt="KadaServe logo"
@@ -168,7 +188,7 @@ function LoginForm() {
                 />
               </div>
 
-              <h1 className="font-sans text-5xl font-semibold tracking-tight text-[#0D2E18]">
+              <h1 className="min-w-0 font-sans text-4xl font-semibold tracking-tight text-[#0D2E18] sm:text-5xl">
                 KadaServe
               </h1>
             </div>

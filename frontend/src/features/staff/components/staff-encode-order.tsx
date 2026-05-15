@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     AlertTriangle,
     CheckCircle2,
@@ -15,6 +15,7 @@ import {
     UserRound,
     X,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast-provider";
 import { EncodeOrderHeaderControls } from "./encode-order-header-controls";
 import type { MenuCategory, MenuFilterCategory, StaffMenuItem } from "@/types/menu";
 import type { OrderType, PaymentMethod, PaymentStatus } from "@/types/orders";
@@ -133,6 +134,7 @@ function getCategoryBadgeStyle(category: MenuCategory) {
 }
 
 export function StaffEncodeOrder() {
+    const { showToast } = useToast();
     const [menuItems, setMenuItems] = useState<StaffMenuItem[]>([]);
     const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
     const [search, setSearch] = useState("");
@@ -262,11 +264,7 @@ export function StaffEncodeOrder() {
                 : ""
         }`;
 
-    useEffect(() => {
-        loadMenuItems();
-    }, []);
-
-    async function loadMenuItems() {
+    const loadMenuItems = useCallback(async () => {
         setIsLoadingMenu(true);
         setError("");
 
@@ -279,6 +277,11 @@ export function StaffEncodeOrder() {
 
             if (!response.ok) {
                 setError(result.error || "Failed to load menu items.");
+                showToast({
+                    title: "Menu not loaded",
+                    description: result.error || "Failed to load menu items.",
+                    variant: "error",
+                });
                 return;
             }
 
@@ -287,10 +290,19 @@ export function StaffEncodeOrder() {
             setLastMenuSyncedAt(new Date());
         } catch {
             setError("Something went wrong while loading menu items.");
+            showToast({
+                title: "Menu not loaded",
+                description: "Something went wrong while loading menu items.",
+                variant: "error",
+            });
         } finally {
             setIsLoadingMenu(false);
         }
-    }
+    }, [showToast]);
+
+    useEffect(() => {
+        loadMenuItems();
+    }, [loadMenuItems]);
 
 
     function getSelectedQuantity(itemId: string) {
@@ -391,6 +403,11 @@ export function StaffEncodeOrder() {
         }));
 
         setSuccessMessage(`Added ${customizingItem.name} to cart.`);
+        showToast({
+            title: "Added to active order",
+            description: `${customizingItem.name} was added to the staff cart.`,
+            variant: "success",
+        });
         closeCustomization();
     }
 
@@ -422,11 +439,21 @@ export function StaffEncodeOrder() {
 
         if (!hasRequiredCustomerName) {
             setError("Customer name is required for walk-in pickup.");
+            showToast({
+                title: "Customer name required",
+                description: "Add the customer name before submitting pickup order.",
+                variant: "error",
+            });
             return;
         }
 
         if (!hasRequiredDeliveryInfo) {
             setError("Delivery address and phone are required.");
+            showToast({
+                title: "Delivery details required",
+                description: "Add the delivery address and phone before submitting.",
+                variant: "error",
+            });
             return;
         }
 
@@ -458,6 +485,11 @@ export function StaffEncodeOrder() {
 
             if (!response.ok) {
                 setError(result.error || "Failed to submit order.");
+                showToast({
+                    title: "Order not submitted",
+                    description: result.error || "Failed to submit order.",
+                    variant: "error",
+                });
                 return;
             }
 
@@ -474,8 +506,18 @@ export function StaffEncodeOrder() {
             setSuccessMessage(
                 `Order #${result.orderId.slice(0, 8).toUpperCase()} added to queue.`
             );
+            showToast({
+                title: "Order added to queue",
+                description: `Order #${result.orderId.slice(0, 8).toUpperCase()} is ready for staff processing.`,
+                variant: "success",
+            });
         } catch {
             setError("Something went wrong while submitting the order.");
+            showToast({
+                title: "Order not submitted",
+                description: "Something went wrong while submitting the order.",
+                variant: "error",
+            });
         } finally {
             setIsSubmitting(false);
         }
