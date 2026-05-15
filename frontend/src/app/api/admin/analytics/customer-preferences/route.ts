@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  PREFERENCE_WEIGHTS,
+  FEEDBACK_DIMENSION_WEIGHTS,
+  FEEDBACK_MIN_CONFIDENT_OBSERVATIONS,
+  FEEDBACK_SKEPTICAL_PRIOR,
+  RECENCY_HALF_LIFE_DAYS,
+} from "@/lib/recommendation-weights";
 
 type PreferenceOrderRow = {
   id: string;
@@ -38,13 +45,6 @@ type CustomerPreferenceRow = {
 
 const FINAL_ORDER_STATUSES = new Set(["completed", "delivered"]);
 const MANILA_TIME_ZONE = "Asia/Manila";
-const RECENCY_DECAY_DAYS = 30;
-const NEUTRAL_FEEDBACK_SCORE = 0.6;
-const PREFERENCE_WEIGHTS = {
-  frequency: 0.5,
-  recency: 0.3,
-  feedback: 0.2,
-} as const;
 const REQUIRED_COLUMNS =
   "customer_id, menu_item_id, frequency, recency_score, avg_rating, preference_score, last_ordered_at, updated_at";
 const CUSTOMER_PREFERENCES_MIGRATION_SQL = `alter table if exists public.customer_preferences
@@ -108,26 +108,39 @@ function getDaysSinceLastOrder(lastOrderedAt: string) {
   return Math.max(0, days);
 }
 
-function getRecencyScore(lastOrderedAt: string) {
+/**
+ * Hyperbolic recency decay: f(d) = 1 / (1 + d/τ)
+ * τ = RECENCY_HALF_LIFE_DAYS (30 days). Reference: Ding et al. (2010), CIKM '05.
+ */
+function getRecencyScore(lastOrderedAt: string): number {
   const daysSinceLastOrder = getDaysSinceLastOrder(lastOrderedAt);
-
-  return clamp01(1 / (1 + daysSinceLastOrder / RECENCY_DECAY_DAYS));
+  return clamp01(1 / (1 + daysSinceLastOrder / RECENCY_HALF_LIFE_DAYS));
 }
 
-function getFeedbackScore(row: PreferenceFeedbackRow) {
-  const ratings = [
-    row.taste_rating,
-    row.strength_rating,
-    row.overall_rating,
-  ]
-    .map((rating) => Number(rating))
-    .filter((rating) => Number.isFinite(rating) && rating > 0);
+/**
+ * Weighted feedback score using AHP sub-weights for each dimension.
+ * Returns null when no valid dimension rating is present.
+ * Dimensions: overall (0.54) > taste (0.30) > strength (0.16).
+ */
+function getFeedbackScore(row: PreferenceFeedbackRow): number | null {
+  const overall  = Number(row.overall_rating);
+  const taste    = Number(row.taste_rating);
+  const strength = Number(row.strength_rating);
 
-  if (ratings.length === 0) {
-    return null;
-  }
+  const hasOverall  = Number.isFinite(overall)  && overall  > 0;
+  const hasTaste    = Number.isFinite(taste)     && taste    > 0;
+  const hasStrength = Number.isFinite(strength)  && strength > 0;
 
-  return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+  if (!hasOverall && !hasTaste && !hasStrength) return null;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  if (hasOverall)  { weightedSum += FEEDBACK_DIMENSION_WEIGHTS.overall   * overall;  totalWeight += FEEDBACK_DIMENSION_WEIGHTS.overall; }
+  if (hasTaste)    { weightedSum += FEEDBACK_DIMENSION_WEIGHTS.taste     * taste;    totalWeight += FEEDBACK_DIMENSION_WEIGHTS.taste; }
+  if (hasStrength) { weightedSum += FEEDBACK_DIMENSION_WEIGHTS.strength  * strength; totalWeight += FEEDBACK_DIMENSION_WEIGHTS.strength; }
+
+  return totalWeight > 0 ? weightedSum / totalWeight : null;
 }
 
 function getBucketKey(customerId: string, menuItemId: string) {
@@ -243,36 +256,38 @@ function buildCustomerPreferences(
   });
 
   const updatedAt = new Date().toISOString();
-  const maxFrequencyByCustomer = Array.from(buckets.values()).reduce(
-    (map, bucket) => {
-      const currentMax = map.get(bucket.customerId) ?? 1;
-      map.set(bucket.customerId, Math.max(currentMax, bucket.frequency));
 
-      return map;
-    },
-    new Map<string, number>()
-  );
+  // Global max frequency across all customers for log-damped normalisation.
+  // Prevents self-relative normalisation where a 1-order customer == 50-order customer.
+  const globalMaxFrequency = Math.max(1, ...Array.from(buckets.values()).map((b) => b.frequency));
 
   return Array.from(buckets.values())
     .map((bucket) => {
-      const maxCustomerFrequency = maxFrequencyByCustomer.get(bucket.customerId) ?? 1;
-      const frequencyScore = clamp01(bucket.frequency / maxCustomerFrequency);
+      // Log-damped frequency normalised against global max (not customer max).
+      const logFreq       = Math.log1p(bucket.frequency);
+      const logGlobalMax  = Math.log1p(globalMaxFrequency);
+      const frequencyScore = clamp01(logFreq / logGlobalMax);
+
       const recencyScore = Number(getRecencyScore(bucket.lastOrderedAt).toFixed(4));
-      const avgRating = Number(
-        (
-          bucket.feedbackScores.length > 0
-            ? bucket.feedbackScores.reduce((sum, score) => sum + score, 0) /
-              bucket.feedbackScores.length
-            : 0
-        ).toFixed(2)
-      );
-      const feedbackScore =
-        avgRating > 0 ? clamp01(avgRating / 5) : NEUTRAL_FEEDBACK_SCORE;
+
+      // Confidence-adjusted satisfaction: Bayesian shrinkage toward skeptical prior (0.5)
+      // when observation count is below threshold — avoids silent mean imputation.
+      const n = bucket.feedbackScores.length;
+      const avgRaw = n > 0
+        ? bucket.feedbackScores.reduce((s, v) => s + v, 0) / n
+        : 0;
+      const avgRating = Number(avgRaw.toFixed(2));
+      const k = FEEDBACK_MIN_CONFIDENT_OBSERVATIONS;
+      const observedMean = n > 0 ? clamp01(avgRating / 5) : FEEDBACK_SKEPTICAL_PRIOR;
+      const feedbackScore = n > 0
+        ? clamp01((n * observedMean + k * FEEDBACK_SKEPTICAL_PRIOR) / (n + k))
+        : FEEDBACK_SKEPTICAL_PRIOR;
+
       const preferenceScore = Number(
         (
           PREFERENCE_WEIGHTS.frequency * frequencyScore +
-          PREFERENCE_WEIGHTS.recency * recencyScore +
-          PREFERENCE_WEIGHTS.feedback * feedbackScore
+          PREFERENCE_WEIGHTS.recency   * recencyScore   +
+          PREFERENCE_WEIGHTS.feedback  * feedbackScore
         ).toFixed(4)
       );
 

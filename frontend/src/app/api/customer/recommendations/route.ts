@@ -256,6 +256,8 @@ export async function GET() {
         ...normalizeFeedbackRows(customerFeedback, user.id),
       ],
       globalRanking,
+      // Provide server-local hour so time-of-day context boosts activate per request.
+      hourOfDay: new Date().getHours(),
     });
     const recommendations = profile.recommendations
       .slice(0, 3)
