@@ -12,6 +12,7 @@ type PayMongoWebhookEvent = {
         id?: string;
         attributes?: {
           metadata?: Record<string, unknown> | null;
+          payment_intent_id?: string;
           payments?: Array<{
             id?: string;
             attributes?: {
@@ -22,6 +23,10 @@ type PayMongoWebhookEvent = {
               } | null;
             };
           }>;
+          source?: {
+            type?: string;
+          } | null;
+          status?: string;
           payment_method_used?: string | null;
         };
       };
@@ -84,25 +89,32 @@ function getCheckoutSession(payload: PayMongoWebhookEvent) {
 }
 
 function getOrderId(payload: PayMongoWebhookEvent) {
-  const checkoutSession = getCheckoutSession(payload);
-  const metadataOrderId = checkoutSession?.attributes?.metadata?.order_id;
+  const resource = getCheckoutSession(payload);
+  const metadataOrderId = resource?.attributes?.metadata?.order_id;
 
   return typeof metadataOrderId === "string" ? metadataOrderId : null;
 }
 
 function getPaymentDetails(payload: PayMongoWebhookEvent) {
-  const checkoutSession = getCheckoutSession(payload);
-  const payment = checkoutSession?.attributes?.payments?.find(
+  const resource = getCheckoutSession(payload);
+  const payment = resource?.attributes?.payments?.find(
     (item) => item.attributes?.status === "paid"
   );
 
   return {
-    checkoutSessionId: checkoutSession?.id ?? null,
-    paymentId: payment?.id ?? null,
-    paymentIntentId: payment?.attributes?.payment_intent_id ?? null,
+    checkoutSessionId:
+      payload.data?.attributes?.type === "checkout_session.payment.paid"
+        ? resource?.id ?? null
+        : null,
+    paymentId: payment?.id ?? resource?.id ?? null,
+    paymentIntentId:
+      payment?.attributes?.payment_intent_id ??
+      resource?.attributes?.payment_intent_id ??
+      null,
     paymentMethodUsed:
-      checkoutSession?.attributes?.payment_method_used ??
+      resource?.attributes?.payment_method_used ??
       payment?.attributes?.source?.type ??
+      resource?.attributes?.source?.type ??
       null,
   };
 }
@@ -120,28 +132,60 @@ export async function POST(request: Request) {
     const payload = JSON.parse(rawBody) as PayMongoWebhookEvent;
     const eventType = payload.data?.attributes?.type;
 
-    if (eventType !== "checkout_session.payment.paid") {
+    if (
+      eventType !== "checkout_session.payment.paid" &&
+      eventType !== "payment.paid" &&
+      eventType !== "payment.failed" &&
+      eventType !== "qrph.expired"
+    ) {
       return NextResponse.json({ received: true, ignored: true });
     }
 
     const orderId = getOrderId(payload);
-
-    if (!orderId) {
-      return NextResponse.json(
-        { error: "Webhook is missing order metadata." },
-        { status: 400 }
-      );
-    }
-
     const {
       checkoutSessionId,
       paymentId,
       paymentIntentId,
       paymentMethodUsed,
     } = getPaymentDetails(payload);
-    const supabase = createAdminClient();
 
-    const { error } = await supabase
+    if (!orderId && !paymentIntentId) {
+      return NextResponse.json(
+        { error: "Webhook is missing order metadata or payment intent." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const paidAt = new Date().toISOString();
+
+    if (eventType === "payment.failed" || eventType === "qrph.expired") {
+      let query = supabase
+        .from("orders")
+        .update({
+          status: "cancelled",
+          payment_status: "unpaid",
+          paymongo_payment_id: paymentId,
+          paymongo_payment_intent_id: paymentIntentId,
+          paymongo_payment_method_used: paymentMethodUsed ?? "qrph",
+        })
+        .eq("payment_method", "online")
+        .eq("status", "pending_payment");
+
+      query = orderId
+        ? query.eq("id", orderId)
+        : query.eq("paymongo_payment_intent_id", paymentIntentId);
+
+      const { error } = await query;
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ received: true });
+    }
+
+    let query = supabase
       .from("orders")
       .update({
         status: "pending",
@@ -149,12 +193,17 @@ export async function POST(request: Request) {
         paymongo_checkout_session_id: checkoutSessionId,
         paymongo_payment_id: paymentId,
         paymongo_payment_intent_id: paymentIntentId,
-        paymongo_payment_method_used: paymentMethodUsed,
-        paid_at: new Date().toISOString(),
+        paymongo_payment_method_used: paymentMethodUsed ?? "qrph",
+        paid_at: paidAt,
       })
-      .eq("id", orderId)
       .eq("payment_method", "online")
       .eq("status", "pending_payment");
+
+    query = orderId
+      ? query.eq("id", orderId)
+      : query.eq("paymongo_payment_intent_id", paymentIntentId);
+
+    const { error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

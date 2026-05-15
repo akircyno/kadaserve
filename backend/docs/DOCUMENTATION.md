@@ -26,7 +26,7 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Rewards/voucher feature was removed from active code.
 - Feedback modal appears only when an order becomes delivered or completed and the customer has not submitted feedback.
 - Feedback modal does not reopen on page refresh alone.
-- PayMongo online payment foundation is implemented but disabled until the beneficiary PayMongo account is ready.
+- PayMongo online payment now uses QR Ph for accounts without GCash/Maya/card eligibility. Online orders remain `pending_payment` until the verified PayMongo webhook marks them paid.
 - Customer order tracker now auto-syncs order status from `/api/customer/orders` every 10 seconds, so customers do not need to refresh the page.
 - Staff-triggered delivery and receipt emails were removed from the order status flow; order updates and receipt details are now surfaced through KadaServe in-app notifications while account/security emails remain separate.
 - Staff dashboard now uses clear payment labels: `Pay at Cafe`, `Cash on Delivery`, `Online`, and `Awaiting Payment`.
@@ -88,13 +88,18 @@ KadaServe is a Computer Science focused cafe ordering and analytics system. The 
 - Online Payment: PayMongo-ready but feature-flagged off.
 - Staff sees paid/unpaid status separately from the payment method.
 
-To enable PayMongo later:
+PayMongo test and live use the same code. The difference is only the deployed environment variables and the PayMongo dashboard mode:
 
 ```env
 NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT=true
-PAYMONGO_SECRET_KEY=sk_test_or_live_xxx
-PAYMONGO_WEBHOOK_SECRET=whsec_xxx
+PAYMONGO_SECRET_KEY=sk_test_xxx   # test defense flow
+PAYMONGO_WEBHOOK_SECRET=whsk_test_xxx
+
+PAYMONGO_SECRET_KEY=sk_live_xxx   # live payment flow
+PAYMONGO_WEBHOOK_SECRET=whsk_live_xxx
 ```
+
+The webhook URL is `/api/paymongo/webhook`; enable `payment.paid`, `payment.failed`, `qrph.expired`, and optionally `checkout_session.payment.paid` for backward compatibility.
 
 ## Delivery Fee Model
 
