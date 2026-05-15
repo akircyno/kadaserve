@@ -278,6 +278,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
                   order_item_id: item.id,
                   menu_item_id: item.menu_items.id,
                   item_name: item.menu_items.name,
+                  ordered_at: order.ordered_at,
                 },
               ];
             })

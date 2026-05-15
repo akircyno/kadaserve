@@ -3,4 +3,5 @@ export type FeedbackItem = {
   order_item_id: string;
   menu_item_id: string;
   item_name: string;
+  ordered_at: string;
 };
