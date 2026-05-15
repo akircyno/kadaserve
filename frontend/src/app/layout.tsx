@@ -51,15 +51,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} h-full antialiased`}
-      suppressHydrationWarning
     >
-<<<<<<< HEAD
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        {children}
-=======
       <body className="min-h-full flex flex-col">
         <ToastProvider>{children}</ToastProvider>
->>>>>>> 1f4239e (Add Notification Bell and Nutrients)
         <PwaRegister />
       </body>
     </html>

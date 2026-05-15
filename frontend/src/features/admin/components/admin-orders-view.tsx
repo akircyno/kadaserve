@@ -1,24 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-<<<<<<< HEAD
-import { CalendarDays, ChevronRight, Download } from "lucide-react";
-=======
 import {
   KadaChevronRightIcon,
   KadaDownloadIcon,
 } from "@/components/icons/kadaserve-admin-icons";
->>>>>>> 1f4239e (Add Notification Bell and Nutrients)
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   getAdminOrderTotals,
-  type AdminPaymentFilter,
-  type AdminStatusFilter,
-  type AdminTypeFilter,
+  getAdminReportOrders,
+  getAdminReportRangeLabel,
+  type AdminTimeFilter,
 } from "@/lib/admin-order-totals";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
-type DateRange = "today" | "yesterday" | "custom" | "all";
+type TimeFilter = AdminTimeFilter;
 
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
@@ -116,41 +112,17 @@ function getEncodedByName(order: StaffOrder) {
   );
 }
 
-function getManilaDateKey(value: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
-}
-
-function formatDateKeyLabel(value: string) {
-  return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-PH", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function getDateRangeLabel(dateRange: DateRange, customFrom: string, customTo: string) {
-  if (dateRange === "today") {
-    return formatDateKeyLabel(getManilaDateKey(new Date()));
+function getTimeFilterLabel(timeFilter: TimeFilter) {
+  switch (timeFilter) {
+    case "today":
+      return "Today";
+    case "week":
+      return "This Week";
+    case "month":
+      return "This Month";
+    case "year":
+      return "This Year";
   }
-
-  if (dateRange === "yesterday") {
-    const today = new Date(`${getManilaDateKey(new Date())}T00:00:00+08:00`);
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    return formatDateKeyLabel(getManilaDateKey(yesterday));
-  }
-
-  if (dateRange === "custom") {
-    if (!customFrom || !customTo) return "Custom range";
-    return `${formatDateKeyLabel(customFrom)} - ${formatDateKeyLabel(customTo)}`;
-  }
-
-  return "All time";
 }
 
 function csvCell(value: string | number | null | undefined) {
@@ -189,7 +161,7 @@ function getExportRows(orders: StaffOrder[]) {
   }));
 }
 
-function downloadCsv(orders: StaffOrder[], dateRange: DateRange) {
+function downloadCsv(orders: StaffOrder[], timeFilter: TimeFilter) {
   const rows = getExportRows(orders);
   const columns = Object.keys(rows[0] ?? {
     order_id: "",
@@ -219,7 +191,7 @@ function downloadCsv(orders: StaffOrder[], dateRange: DateRange) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `kadaserve-orders-${dateRange}.csv`;
+  link.download = `kadaserve-orders-${timeFilter}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -235,11 +207,7 @@ function escapeHtml(value: string | number) {
     .replaceAll("'", "&#039;");
 }
 
-function buildPdfReportHtml(
-  orders: StaffOrder[],
-  dateRange: DateRange,
-  rangeLabel: string
-) {
+function buildPdfReportHtml(orders: StaffOrder[], timeFilter: TimeFilter) {
   const revenue = orders.reduce((sum, order) => sum + order.total_amount, 0);
   return `
     <!doctype html>
@@ -262,8 +230,8 @@ function buildPdfReportHtml(
       <body>
         <div class="brand">KadaServe</div>
         <section class="summary">
-          <h1>Sales Report: ${escapeHtml(rangeLabel)}</h1>
-          <p>Total Orders: ${orders.length} | Revenue: ${escapeHtml(peso(revenue))} | Filter: ${escapeHtml(dateRange)}</p>
+          <h1>Sales Report: ${escapeHtml(getAdminReportRangeLabel(timeFilter))}</h1>
+          <p>Total Orders: ${orders.length} | Revenue: ${escapeHtml(peso(revenue))} | Filter: ${escapeHtml(getTimeFilterLabel(timeFilter))}</p>
         </section>
         <table>
           <thead>
@@ -307,28 +275,24 @@ function buildPdfReportHtml(
   `;
 }
 
-function downloadPrintableReport(html: string, dateRange: DateRange) {
+function downloadPrintableReport(html: string, timeFilter: TimeFilter) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `kadaserve-sales-report-${dateRange}.html`;
+  link.download = `kadaserve-sales-report-${timeFilter}.html`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
 }
 
-function openPdfReport(
-  orders: StaffOrder[],
-  dateRange: DateRange,
-  rangeLabel: string
-) {
-  const html = buildPdfReportHtml(orders, dateRange, rangeLabel);
+function openPdfReport(orders: StaffOrder[], timeFilter: TimeFilter) {
+  const html = buildPdfReportHtml(orders, timeFilter);
   const reportWindow = window.open("", "_blank");
 
   if (!reportWindow) {
-    downloadPrintableReport(html, dateRange);
+    downloadPrintableReport(html, timeFilter);
     return;
   }
 
@@ -390,63 +354,27 @@ export function OrdersView({
     "all"
   );
   const [paymentFilter, setPaymentFilter] = useState<
-    "all" | "paid" | "unpaid" | "cash" | "gcash" | "online"
+    "all" | "paid" | "unpaid" | "cash" | "gcash"
   >("all");
-  const [dateRange, setDateRange] = useState<DateRange>("today");
-  const [customFrom, setCustomFrom] = useState(getManilaDateKey(new Date()));
-  const [customTo, setCustomTo] = useState(getManilaDateKey(new Date()));
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("month");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExportingReport, setIsExportingReport] = useState(false);
 
   const visibleOrders = useMemo(() => {
-    const todayKey = getManilaDateKey(new Date());
-    const yesterdayDate = new Date(`${todayKey}T00:00:00+08:00`);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayKey = getManilaDateKey(yesterdayDate);
-
-    const scopedOrders = filteredOrders.filter((order) => {
-      const orderKey = getManilaDateKey(new Date(order.ordered_at));
-
-      if (dateRange === "today") return orderKey === todayKey;
-      if (dateRange === "yesterday") return orderKey === yesterdayKey;
-      if (dateRange === "custom") {
-        if (!customFrom || !customTo) return false;
-        return orderKey >= customFrom && orderKey <= customTo;
-      }
-
-      return true;
+    return getAdminReportOrders(filteredOrders, {
+      paymentFilter,
+      statusFilter,
+      timeFilter,
+      typeFilter,
     });
-
-    return scopedOrders.filter((order) => {
-      const matchesStatus: boolean =
-        statusFilter === "all"
-          ? order.status !== "cancelled"
-          : order.status === statusFilter;
-      const matchesType: boolean =
-        typeFilter === "all" || order.order_type === typeFilter;
-      const matchesPayment: boolean =
-        paymentFilter === "all" ||
-        order.payment_status === paymentFilter ||
-        order.payment_method === paymentFilter;
-
-      return matchesStatus && matchesType && matchesPayment;
-    });
-  }, [
-    customFrom,
-    customTo,
-    dateRange,
-    filteredOrders,
-    paymentFilter,
-    statusFilter,
-    typeFilter,
-  ]);
+  }, [filteredOrders, paymentFilter, statusFilter, timeFilter, typeFilter]);
 
   const visibleTotals = useMemo(
     () => getAdminOrderTotals(visibleOrders),
     [visibleOrders]
   );
 
-  const statusOptions: Array<{ value: AdminStatusFilter; label: string }> = [
+  const statusOptions: Array<{ value: "all" | OrderStatus; label: string }> = [
     { value: "all", label: "All Active" },
     { value: "pending", label: "Pending" },
     { value: "preparing", label: "Preparing" },
@@ -457,19 +385,31 @@ export function OrdersView({
     { value: "cancelled", label: "Cancelled" },
   ];
 
-  const typeOptions: Array<{ value: AdminTypeFilter; label: string }> = [
+  const typeOptions: Array<{
+    value: "all" | StaffOrder["order_type"];
+    label: string;
+  }> = [
     { value: "all", label: "All Types" },
     { value: "pickup", label: "Pickup" },
     { value: "delivery", label: "Delivery" },
   ];
 
-  const paymentOptions: Array<{ value: AdminPaymentFilter; label: string }> = [
+  const paymentOptions: Array<{
+    value: "all" | "paid" | "unpaid" | "cash" | "gcash";
+    label: string;
+  }> = [
     { value: "all", label: "All Payments" },
     { value: "paid", label: "Paid" },
     { value: "unpaid", label: "Unpaid" },
     { value: "cash", label: "Cash" },
     { value: "gcash", label: "GCash" },
-    { value: "online", label: "Online" },
+  ];
+
+  const timeOptions: Array<{ value: TimeFilter; label: string }> = [
+    { value: "today", label: "Today" },
+    { value: "week", label: "This Week" },
+    { value: "month", label: "This Month" },
+    { value: "year", label: "This Year" },
   ];
 
   return (
@@ -484,7 +424,7 @@ export function OrdersView({
                 ORDER RECORDS
               </p>
               <p className="mt-1.5 font-sans text-sm font-medium text-[#684B35]">
-                {getDateRangeLabel(dateRange, customFrom, customTo)} · Showing {visibleTotals.totalOrders} orders · {peso(visibleTotals.totalRevenue)}
+                {getAdminReportRangeLabel(timeFilter)} · Showing {visibleTotals.totalOrders} orders · {peso(visibleTotals.totalRevenue)}
               </p>
             </div>
             
@@ -510,11 +450,7 @@ export function OrdersView({
                     type="button"
                     onClick={() => {
                       setIsExportingReport(true);
-                      openPdfReport(
-                        visibleOrders,
-                        dateRange,
-                        getDateRangeLabel(dateRange, customFrom, customTo)
-                      );
+                      openPdfReport(visibleOrders, timeFilter);
                       setIsExportOpen(false);
                       window.setTimeout(() => setIsExportingReport(false), 450);
                     }}
@@ -526,7 +462,7 @@ export function OrdersView({
                     type="button"
                     onClick={() => {
                       setIsExportingReport(true);
-                      downloadCsv(visibleOrders, dateRange);
+                      downloadCsv(visibleOrders, timeFilter);
                       setIsExportOpen(false);
                       window.setTimeout(() => setIsExportingReport(false), 450);
                     }}
@@ -541,58 +477,21 @@ export function OrdersView({
 
           {/* Time Period Filter */}
           <div className="flex flex-wrap gap-2">
-            {(["today", "yesterday", "custom", "all"] as const).map((range) => {
-              const label =
-                range === "today"
-                  ? "Today"
-                  : range === "yesterday"
-                  ? "Yesterday"
-                  : range === "custom"
-                  ? "Custom"
-                  : "All";
-
-              return (
-                <button
-                  key={range}
-                  type="button"
-                  onClick={() => setDateRange(range)}
-                  className={`rounded-full px-4 py-1.5 font-sans text-sm font-medium transition ${
-                    dateRange === range
-                      ? "bg-[#0D2E18] text-[#FFF8EF]"
-                      : "border border-[#DCCFB8] bg-transparent text-[#8C7A64] hover:bg-[#FFF8EF]"
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    {range === "custom" ? <CalendarDays size={15} /> : null}
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
+            {timeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setTimeFilter(option.value)}
+                className={`rounded-full px-4 py-1.5 font-sans text-sm font-medium transition ${
+                  timeFilter === option.value
+                    ? "bg-[#0D2E18] text-[#FFF8EF]"
+                    : "border border-[#DCCFB8] bg-transparent text-[#8C7A64] hover:bg-[#FFF8EF]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-
-          {dateRange === "custom" ? (
-            <div className="flex flex-wrap gap-3">
-              <label className="block">
-                <span className="font-sans text-xs text-[#8C7A64]">From</span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(event) => setCustomFrom(event.target.value)}
-                  className="mt-2 h-10 rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
-                />
-              </label>
-              <label className="block">
-                <span className="font-sans text-xs text-[#8C7A64]">To</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(event) => setCustomTo(event.target.value)}
-                  className="mt-2 h-10 rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
-                />
-              </label>
-            </div>
-          ) : null}
 
           {/* Filter Dropdowns */}
           <div className="grid gap-4 sm:grid-cols-3">

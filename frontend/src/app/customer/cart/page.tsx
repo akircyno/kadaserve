@@ -412,7 +412,6 @@ export default function CartPage() {
     }
 
     const phPhoneRegex = /^(09|\+639)\d{2}-?\d{3}-?\d{4}$|^(09|\+639)\d{9}$/;
-    const cleanPhone = deliveryPhone.replace(/-/g, "").trim();
     if (orderType === "delivery" && !phPhoneRegex.test(deliveryPhone.trim())) {
       setError("Please enter a valid Philippine mobile number (e.g., 0912-345-6789).");
       return;

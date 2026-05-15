@@ -483,8 +483,6 @@ function getColumnActionStyle(status: OrderStatus) {
 }
 
 function requiresPaymentBeforeNextAction(order: StaffOrder) {
-  const nextAction = getNextActionLabel(order.order_type, order.status);
-
   return (
     order.payment_status === "unpaid" &&
     ((order.order_type === "delivery" && order.status === "out_for_delivery") ||
