@@ -64,9 +64,13 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccessMessage(
-        result.message ||
-          "If this email is registered, we sent a password reset link to it."
+        "If this email is registered, we sent a 6-digit reset code to it. Please check your inbox."
       );
+      
+      // Redirect to verify-code page after a few seconds
+      setTimeout(() => {
+        router.push(`/verify-code?email=${encodeURIComponent(normalizedEmail)}`);
+      }, 3000);
     } catch {
       setError("Unable to send reset instructions right now.");
     } finally {

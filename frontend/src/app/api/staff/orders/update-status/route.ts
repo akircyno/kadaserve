@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { createClient } from "@/lib/supabase/server";
 import { getPendingExpirySetupMessage } from "@/lib/orders/expire-pending-orders";
+import { sendEmail, escapeHtml, getSmtpConfig } from "@/lib/email";
 
 type OrderStatus =
   | "pending_payment"
@@ -18,35 +18,6 @@ type PaymentStatus = "unpaid" | "paid";
 
 const pendingOrderTimeoutMinutes = 45;
 
-function getSmtpConfig() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || user;
-
-  if (!host || !user || !pass || !from) {
-    return null;
-  }
-
-  return {
-    host,
-    port,
-    secure: port === 465,
-    user,
-    pass,
-    from,
-  };
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
@@ -225,18 +196,7 @@ Thank you for ordering from Kada Cafe PH.`;
   `;
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtpConfig.host,
-      port: smtpConfig.port,
-      secure: smtpConfig.secure,
-      auth: {
-        user: smtpConfig.user,
-        pass: smtpConfig.pass,
-      },
-    });
-
-    await transporter.sendMail({
-      from: smtpConfig.from,
+    await sendEmail({
       to: customerEmail,
       subject: "Your Kada Cafe PH order is on the way",
       text,
@@ -387,18 +347,7 @@ Thank you for ordering from Kada Cafe PH.`;
   `;
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtpConfig.host,
-      port: smtpConfig.port,
-      secure: smtpConfig.secure,
-      auth: {
-        user: smtpConfig.user,
-        pass: smtpConfig.pass,
-      },
-    });
-
-    await transporter.sendMail({
-      from: smtpConfig.from,
+    await sendEmail({
       to: customerEmail,
       subject: "Payment received for your Kada Cafe PH order",
       text,

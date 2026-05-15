@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import { PwaRegister } from "@/components/pwa-register";
+import { AuthRecoveryListener } from "@/components/auth-recovery-listener";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -53,6 +54,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <AuthRecoveryListener />
         {children}
         <PwaRegister />
       </body>
