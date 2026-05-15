@@ -79,19 +79,24 @@ export async function POST(request: Request) {
     const siteOrigin = getSiteOrigin(request);
     const supabase = await createClient();
 
-    await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: `${siteOrigin}/auth/callback?next=/reset-password`,
     });
 
-      return NextResponse.json({
-        success: true,
-        message:
-          "If this email is registered, we sent a password reset link to it.",
-      });
-    } catch {
-      return NextResponse.json(
-        { error: "Unable to send password reset instructions right now." },
-        { status: 500 }
-      );
+    if (error) {
+      console.error("Supabase reset password error:", error);
     }
+
+    return NextResponse.json({
+      success: true,
+      message:
+        "If this email is registered, we sent a password reset link to it.",
+    });
+  } catch (error) {
+    console.error("Forgot password route error:", error);
+    return NextResponse.json(
+      { error: "Unable to send password reset instructions right now." },
+      { status: 500 }
+    );
   }
+}

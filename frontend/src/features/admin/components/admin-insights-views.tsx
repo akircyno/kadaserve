@@ -5,9 +5,11 @@ import {
   Brain,
   CircleAlert,
   MessageSquareText,
+  Percent,
   Sparkles,
   Star,
   TrendingUp,
+  Users,
   UsersRound,
 } from "lucide-react";
 import {
@@ -615,31 +617,46 @@ export function CustomerPreferenceView({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard
-          icon={UsersRound}
-          label="Profiles"
-          value={String(profiles.length)}
-          detail={`${activeProfiles.length} with order signals`}
-        />
-        <MetricCard
-          icon={Brain}
-          label="Top Match"
-          value={topProfile?.mostOrderedItem ?? "None"}
-          detail={topProfile?.customerName ?? "No customer signal"}
-        />
-        <MetricCard
-          icon={Sparkles}
-          label="Avg Score"
-          value={`${Math.round(averagePreference * 100)}%`}
-          detail="Preference confidence"
-        />
-        <MetricCard
-          icon={Star}
-          label="Rated Profiles"
-          value={String(ratedProfiles)}
-          detail="With feedback signal"
-        />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        {/* Card 1 — Profiles */}
+        <div className="bg-[#0D2E18] text-[#FFF8EF] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
+          <Users size={18} className="text-[#FFF8EF]/40 absolute top-4 right-4" />
+          <p className="text-[10px] uppercase tracking-[0.12em] text-[#FFF8EF]/50">Profiles</p>
+          <div>
+            <p className="text-3xl font-bold font-mono text-[#FFF8EF]">{profiles.length}</p>
+            <p className="text-xs text-[#FFF8EF]/40">{activeProfiles.length} with order signals</p>
+          </div>
+        </div>
+
+        {/* Card 2 — Top Match */}
+        <div className="bg-[#FFF8EF] border border-[#DCCFB8] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
+          <Sparkles size={18} className="text-[#684B35] absolute top-4 right-4" />
+          <p className="text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">Top Match</p>
+          <div>
+            <p className="text-xl font-bold text-[#0D2E18]">{topProfile?.mostOrderedItem ?? "None"}</p>
+            <p className="text-xs text-[#8C7A64]">{topProfile?.customerName ?? "No customer signal"}</p>
+          </div>
+        </div>
+
+        {/* Card 3 — Avg Score */}
+        <div className="bg-[#E6F2E8] border border-[#0F441D]/15 rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
+          <Percent size={18} className="text-[#0F441D]/50 absolute top-4 right-4" />
+          <p className="text-[10px] uppercase tracking-[0.12em] text-[#0F441D]/60">Avg Score</p>
+          <div>
+            <p className="text-3xl font-bold font-mono text-[#0F441D]">{Math.round(averagePreference * 100)}%</p>
+            <p className="text-xs text-[#0F441D]/50">Preference confidence</p>
+          </div>
+        </div>
+
+        {/* Card 4 — Rated Profiles */}
+        <div className="bg-[#FFF8EF] border border-[#DCCFB8] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
+          <Star size={18} className="text-[#684B35] absolute top-4 right-4" />
+          <p className="text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">Rated Profiles</p>
+          <div>
+            <p className="text-3xl font-bold font-mono text-[#0D2E18]">{ratedProfiles}</p>
+            <p className="text-xs text-[#8C7A64]">With feedback signal</p>
+          </div>
+        </div>
       </div>
 
       <InsightCard className="overflow-hidden">

@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
+  BarChart2,
+  LayoutDashboard,
   LogOut,
   Menu as MenuIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Search,
-  X,
+  ScanEye,
   Coffee,
   Clock,
   CircleAlert,
@@ -185,49 +189,49 @@ const demandViews: Array<{
   label: string;
   description: string;
 }> = [
-  {
-    key: "orders",
-    label: "Orders",
-    description: "All order records",
-  },
-  {
-    key: "time-series",
-    label: "Time Series",
-    description: "Hourly demand volume",
-  },
-  {
-    key: "peak-hours",
-    label: "Peak Hours",
-    description: "Busiest service windows",
-  },
-];
+    {
+      key: "orders",
+      label: "Orders",
+      description: "All order records",
+    },
+    {
+      key: "time-series",
+      label: "Time Series",
+      description: "Hourly demand volume",
+    },
+    {
+      key: "peak-hours",
+      label: "Peak Hours",
+      description: "Busiest service windows",
+    },
+  ];
 
 const customerIntelligenceViews: Array<{
   key: CustomerIntelligenceView;
   label: string;
   description: string;
 }> = [
-  {
-    key: "customer-pref",
-    label: "Preferences",
-    description: "Learning signals",
-  },
-  {
-    key: "item-ranking",
-    label: "Ranking",
-    description: "Best item patterns",
-  },
-  {
-    key: "satisfaction",
-    label: "Satisfaction",
-    description: "Rating quality",
-  },
-  {
-    key: "feedback",
-    label: "Feedback",
-    description: "Raw comments",
-  },
-];
+    {
+      key: "customer-pref",
+      label: "Preferences",
+      description: "Learning signals",
+    },
+    {
+      key: "item-ranking",
+      label: "Ranking",
+      description: "Best item patterns",
+    },
+    {
+      key: "satisfaction",
+      label: "Satisfaction",
+      description: "Rating quality",
+    },
+    {
+      key: "feedback",
+      label: "Feedback",
+      description: "Raw comments",
+    },
+  ];
 
 type AdminFeedbackRow = {
   id: string;
@@ -312,7 +316,7 @@ function FeedbackManagementView({
   const average =
     feedbackRows.length > 0
       ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
-        feedbackRows.length
+      feedbackRows.length
       : 0;
   const byItem = new Map<string, { count: number; total: number }>();
 
@@ -420,13 +424,12 @@ function FeedbackManagementView({
                     {item.item}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-black ${
-                      item.average >= 4
+                    className={`rounded-full px-2.5 py-1 font-sans text-xs font-black ${item.average >= 4
                         ? "bg-[#E6F2E8] text-[#0F441D]"
                         : item.average >= 3
-                        ? "bg-[#FFF0DA] text-[#684B35]"
-                        : "bg-[#FFF1EC] text-[#C55432]"
-                    }`}
+                          ? "bg-[#FFF0DA] text-[#684B35]"
+                          : "bg-[#FFF1EC] text-[#C55432]"
+                      }`}
                   >
                     {item.average.toFixed(1)}
                   </span>
@@ -531,9 +534,11 @@ export function AdminDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [error, setError] = useState("");
   const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
   const [storeOverrideStatus, setStoreOverrideStatus] =
@@ -567,24 +572,23 @@ export function AdminDashboard() {
   );
   const syncMeta = isLoading
     ? "Syncing..."
-    : `Auto-sync 15s${
-        lastSyncedAt
-          ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
-              hour: "numeric",
-              minute: "2-digit",
-            })}`
-          : ""
-      }`;
+    : `Auto-sync 15s${lastSyncedAt
+      ? ` - Last ${lastSyncedAt.toLocaleTimeString("en-PH", {
+        hour: "numeric",
+        minute: "2-digit",
+      })}`
+      : ""
+    }`;
   const activeHeaderTitle =
     activeTab === "dashboard"
       ? "Dashboard Overview"
       : activeTab === "demand"
-      ? "Demand Intelligence"
-      : activeTab === "customer-intelligence"
-      ? "Customer Intelligence"
-      : activeTab === "menu"
-      ? "Menu Management"
-      : adminTabs.find((tab) => tab.key === activeTab)?.label ?? "Admin";
+        ? "Demand Intelligence"
+        : activeTab === "customer-intelligence"
+          ? "Customer Intelligence"
+          : activeTab === "menu"
+            ? "Menu Management"
+            : adminTabs.find((tab) => tab.key === activeTab)?.label ?? "Admin";
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -595,7 +599,7 @@ export function AdminDashboard() {
   }, [search]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
 
     function syncSidebarState() {
       setIsSidebarOpen(mediaQuery.matches);
@@ -605,6 +609,11 @@ export function AdminDashboard() {
     mediaQuery.addEventListener("change", syncSidebarState);
 
     return () => mediaQuery.removeEventListener("change", syncSidebarState);
+  }, []);
+
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    setIsSidebarCollapsed(isMobile);
   }, []);
 
   const filteredOrders = useMemo(() => {
@@ -892,7 +901,7 @@ export function AdminDashboard() {
   );
   const averageRating = feedbackRows.length
     ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
-      feedbackRows.length
+    feedbackRows.length
     : 0;
   const dashboardMetrics = {
     totalOrders: dashboardOrderTotals.totalOrders,
@@ -1276,6 +1285,7 @@ export function AdminDashboard() {
       router.refresh();
     } finally {
       setIsLoggingOut(false);
+      setIsLogoutConfirmOpen(false);
     }
   }
 
@@ -1323,11 +1333,11 @@ export function AdminDashboard() {
       ) {
         setError(
           dailyResult.error ||
-            hourlyResult.error ||
-            weeklyResult.error ||
-            itemsResult.error ||
-            customerPreferencesResult.error ||
-            "Failed to refresh analytics."
+          hourlyResult.error ||
+          weeklyResult.error ||
+          itemsResult.error ||
+          customerPreferencesResult.error ||
+          "Failed to refresh analytics."
         );
         return;
       }
@@ -1423,55 +1433,52 @@ export function AdminDashboard() {
 
       <div
         className={`min-h-screen transition-all duration-300 lg:grid ${isSidebarOpen
-          ? "lg:grid-cols-[238px_minmax(0,1fr)]"
-          : "lg:grid-cols-[88px_minmax(0,1fr)]"
+          ? isSidebarCollapsed
+            ? "lg:grid-cols-[4rem_minmax(0,1fr)]"
+            : "lg:grid-cols-[14rem_minmax(0,1fr)]"
+          : ""
           }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[238px] flex-col overflow-hidden bg-[#0D2E18] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
+          className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden border-r border-[#FFF8EF]/5 bg-[#0D2E18] text-[#FFF8EF] transition-all duration-300 ease-in-out lg:sticky lg:top-0 lg:translate-x-0 ${isSidebarCollapsed ? "w-16" : "w-56"
+            } ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
         >
-          <div
-            className={`flex items-center gap-3 pt-7 ${isSidebarOpen ? "justify-between px-5" : "justify-center px-3"
-              }`}
-          >
-            <div className={`flex items-center gap-3 ${isSidebarOpen ? "" : "justify-center"}`}>
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-[#FFF0DA]/18 bg-[#FFF0DA]/12 font-sans text-sm font-black text-[#FFF8EF]">
-                KS
-              </div>
-              {isSidebarOpen ? (
-                <div>
-                  <p className="font-sans text-[1.65rem] font-black leading-none text-[#FFF8EF]">
-                    KadaServe
-                  </p>
-                  <p className="mt-1 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/78">
-                    Admin Panel
-                  </p>
-                </div>
-              ) : null}
+          <div className="flex items-start justify-between gap-3 px-3 py-5">
+            <div
+              className={`min-w-0 font-sans transition-all duration-300 ${isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
+                }`}
+            >
+              <p className="text-lg font-bold text-[#FFF8EF]">KadaServe</p>
+              <p className="text-xs text-[#8C7A64]">Admin Panel</p>
             </div>
 
             <button
               type="button"
-              onClick={() => setIsSidebarOpen((current) => !current)}
-              aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#FFF0DA]/12 bg-[#FFF0DA]/8 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/16"
+              onClick={() => setIsSidebarCollapsed((current) => !current)}
+              aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="flex shrink-0 items-center justify-center rounded-full p-1.5 text-[#8C7A64] transition hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
             >
-              {isSidebarOpen ? <X size={20} /> : <MenuIcon size={20} />}
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen size={20} />
+              ) : (
+                <PanelLeftClose size={20} />
+              )}
             </button>
           </div>
 
           <nav
-            className={`mt-12 space-y-2 ${isSidebarOpen ? "px-4" : "px-3"
-              }`}
+            className={`mb-2 mt-8 space-y-1 ${isSidebarCollapsed ? "px-2" : "px-3"}`}
           >
-            {isSidebarOpen ? (
-              <p className="px-3 pb-2 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/68">
-                Navigation
-              </p>
-            ) : null}
             {adminTabs.map((tab) => {
-              const Icon = tab.icon;
+              const Icon =
+                tab.key === "dashboard"
+                  ? LayoutDashboard
+                  : tab.key === "demand"
+                    ? BarChart2
+                    : tab.key === "customer-intelligence"
+                      ? ScanEye
+                      : Coffee;
               const isActive = activeTab === tab.key;
 
               return (
@@ -1479,34 +1486,41 @@ export function AdminDashboard() {
                   key={tab.key}
                   type="button"
                   onClick={() => handleTabSelect(tab.key)}
-                  title={tab.label}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left font-sans text-sm font-semibold leading-tight transition ${isActive
-                    ? "rounded-[18px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_14px_34px_rgba(0,0,0,0.2)]"
-                    : "rounded-[18px] text-[#FFF0DA]/82 hover:bg-[#FFF0DA]/10 hover:text-[#FFF8EF]"
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  className={`flex w-full items-center rounded-xl px-3 py-2.5 text-left font-sans text-sm transition-all duration-200 ${isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
+                    } ${isActive
+                      ? "bg-[#FFF8EF] font-medium text-[#0D2E18]"
+                      : "text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
                     }`}
                 >
                   <Icon size={20} className="shrink-0" />
-                  {isSidebarOpen ? (
-                    tab.label
-                  ) : (
-                    <span className="sr-only">{tab.label}</span>
-                  )}
+                  <span
+                    className={`text-sm transition-all duration-200 ${isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
+                      }`}
+                  >
+                    {tab.label}
+                  </span>
                 </button>
               );
             })}
           </nav>
 
-          <div className={`mt-auto pb-7 ${isSidebarOpen ? "px-4" : "px-3"}`}>
+          <div className={`mt-auto pb-5 ${isSidebarCollapsed ? "px-2" : "px-3"}`}>
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => setIsLogoutConfirmOpen(true)}
               disabled={isLoggingOut}
-              title="Logout"
-              className={`flex w-full items-center gap-3 rounded-[18px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/12 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
-                }`}
+              title={isSidebarCollapsed ? "Logout" : undefined}
+              className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 disabled:opacity-60 ${isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
+                } text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]`}
             >
               <LogOut size={20} className="shrink-0" />
-              {isSidebarOpen ? (isLoggingOut ? "Logging out..." : "Logout") : null}
+              <span
+                className={`text-sm transition-all duration-200 ${isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
+                  }`}
+              >
+                {isLoggingOut ? "Logging out..." : "Logout"}
+              </span>
             </button>
           </div>
         </aside>
@@ -1528,8 +1542,8 @@ export function AdminDashboard() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-baseline gap-2">
                       <h1 className="font-sans text-2xl font-black leading-none text-[#0D2E18]">
-                        {activeTab === "dashboard" 
-                          ? `Good ${getTimeOfDay()}, Admin` 
+                        {activeTab === "dashboard"
+                          ? `Good ${getTimeOfDay()}, Admin`
                           : activeHeaderTitle}
                       </h1>
                       {activeTab === "dashboard" && (
@@ -1606,22 +1620,20 @@ export function AdminDashboard() {
                 {/* Store Status */}
                 <div className="flex items-center gap-2.5">
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold transition ${
-                      storeStatus?.effectiveStatus === "open"
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold transition ${storeStatus?.effectiveStatus === "open"
                         ? "bg-[#E9F5E7] text-[#0D2E18]"
                         : storeStatus?.effectiveStatus === "busy"
-                        ? "bg-[#FFF0DA] text-[#684B35]"
-                        : "bg-[#FFF1EC] text-[#9C543D]"
-                    }`}
+                          ? "bg-[#FFF0DA] text-[#684B35]"
+                          : "bg-[#FFF1EC] text-[#9C543D]"
+                      }`}
                   >
                     <span
-                      className={`h-2.5 w-2.5 rounded-full animate-pulse ${
-                        storeStatus?.effectiveStatus === "open"
+                      className={`h-2.5 w-2.5 rounded-full animate-pulse ${storeStatus?.effectiveStatus === "open"
                           ? "bg-[#0F441D]"
                           : storeStatus?.effectiveStatus === "busy"
-                          ? "bg-[#684B35]"
-                          : "bg-[#9C543D]"
-                      }`}
+                            ? "bg-[#684B35]"
+                            : "bg-[#9C543D]"
+                        }`}
                     />
                     {storeStatus?.label ?? "Loading"}
                   </span>
@@ -1691,9 +1703,6 @@ export function AdminDashboard() {
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-5 py-4 shadow-[0_14px_34px_rgba(75,50,24,0.08)] sm:px-6">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                        Demand Intelligence
-                      </p>
                       <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
                         Orders, time series, and peak windows
                       </h2>
@@ -1708,11 +1717,10 @@ export function AdminDashboard() {
                               key={view.key}
                               type="button"
                               onClick={() => setDemandView(view.key)}
-                              className={`rounded-full px-4 py-2.5 text-center font-sans text-sm font-bold transition xl:min-w-[118px] ${
-                                isActive
+                              className={`rounded-full px-4 py-2.5 text-center font-sans text-sm font-bold transition xl:min-w-[118px] ${isActive
                                   ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
                                   : "text-[#684B35] hover:bg-white"
-                              }`}
+                                }`}
                             >
                               {view.label}
                             </button>
@@ -1754,9 +1762,6 @@ export function AdminDashboard() {
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
                   <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
                     <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                        Customer Intelligence
-                      </p>
                       <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
                         Preference, recommendation, and satisfaction signals
                       </h2>
@@ -1782,17 +1787,15 @@ export function AdminDashboard() {
                             key={view.key}
                             type="button"
                             onClick={() => setCustomerIntelligenceView(view.key)}
-                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[132px] ${
-                              isActive
+                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[132px] ${isActive
                                 ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
                                 : "text-[#684B35] hover:bg-white"
-                            }`}
+                              }`}
                           >
                             <span className="block leading-tight">{view.label}</span>
                             <span
-                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${
-                                isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
-                              }`}
+                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
+                                }`}
                             >
                               {view.description}
                             </span>
@@ -1846,6 +1849,44 @@ export function AdminDashboard() {
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
         />
+      ) : null}
+
+      {isLogoutConfirmOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-[#0D2E18]/45 backdrop-blur-sm"
+            onClick={() => !isLoggingOut && setIsLogoutConfirmOpen(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-[#FFF0DA] p-6 shadow-[0_20px_50px_rgba(13,46,24,0.15)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF8EF] text-[#684B35]">
+              <LogOut size={24} />
+            </div>
+            <h2 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
+              Confirm Logout
+            </h2>
+            <p className="mt-2 font-sans text-sm font-medium text-[#7D6B55]">
+              Are you sure you want to log out of the admin console? Your session will be terminated.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#143E21] disabled:opacity-60"
+              >
+                {isLoggingOut ? "Signing out..." : "Yes, Sign out"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+                className="w-full rounded-xl border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );
