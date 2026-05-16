@@ -87,10 +87,15 @@ export type CustomerOrder = {
   total_amount: number;
   delivery_fee?: number | null;
   ordered_at: string;
+  updated_at?: string | null;
   delivery_address?: string | null;
   delivery_lat?: number | null;
   delivery_lng?: number | null;
   delivery_email?: string | null;
   delivery_phone?: string | null;
+  paymongo_qr_code_id?: string | null;
+  paymongo_qr_code_image_url?: string | null;
+  paymongo_qr_code_label?: string | null;
+  paymongo_qr_expires_at?: string | null;
   order_items: CustomerOrderItem[];
 };

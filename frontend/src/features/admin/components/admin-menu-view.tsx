@@ -3,19 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Layers,
-  LayoutGrid,
-  Minus,
-  PauseCircle,
-  Search,
-  Trash2,
-  TrendingUp,
-  X,
-} from "lucide-react";
 import type * as React from "react";
+import { KadaSearchIcon } from "@/components/icons/kadaserve-admin-icons";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import type { AdminMenuItem, MenuCategory } from "@/types/menu";
 
 type MenuFormState = {
@@ -143,25 +133,41 @@ function getMenuSignal(
 function SignalChip({ signal }: { signal: MenuSignal }) {
   const classes = {
     strong: "bg-[#E6F2E8] text-[#0F441D]",
-    steady: "bg-[#FFF8EF] text-[#684B35]",
+    steady: "bg-[#FFF0DA] text-[#684B35]",
     watch: "bg-[#FFF1EC] text-[#9C543D]",
-    muted: "bg-[#FFFCF7] text-[#8C7A64] border border-[#DCCFB8]",
+    muted: "bg-[#EFE8DC] text-[#7D6B55]",
   };
-  const icons = {
-    strong: TrendingUp,
-    steady: Minus,
-    watch: AlertCircle,
-    muted: PauseCircle,
-  };
-  const Icon = icons[signal.tone];
 
   return (
     <span
-      className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 font-sans text-xs font-semibold ${classes[signal.tone]}`}
+      className={`inline-flex w-fit rounded-full px-3 py-1 font-sans text-xs font-bold ${classes[signal.tone]}`}
     >
-      <Icon size={12} />
       {signal.label}
     </span>
+  );
+}
+
+function IntelligenceCard({
+  detail,
+  label,
+  value,
+}: {
+  detail: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <article className="rounded-[22px] border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
+      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
+        {label}
+      </p>
+      <p className="mt-2 font-sans text-2xl font-black leading-tight text-[#0D2E18]">
+        {value}
+      </p>
+      <p className="mt-2 font-sans text-sm leading-relaxed text-[#6D5B48]">
+        {detail}
+      </p>
+    </article>
   );
 }
 
@@ -188,18 +194,16 @@ async function getCroppedImageFile(imageUrl: string, cropArea: Area) {
 
   canvas.width = cropArea.width;
   canvas.height = cropArea.height;
-
-  // Use Math.round to ensure we are drawing from exact pixel coordinates
   context.drawImage(
     image,
-    Math.round(cropArea.x),
-    Math.round(cropArea.y),
-    Math.round(cropArea.width),
-    Math.round(cropArea.height),
+    cropArea.x,
+    cropArea.y,
+    cropArea.width,
+    cropArea.height,
     0,
     0,
-    Math.round(cropArea.width),
-    Math.round(cropArea.height)
+    cropArea.width,
+    cropArea.height
   );
 
   const blob = await new Promise<Blob | null>((resolve) =>
@@ -222,6 +226,7 @@ export function MenuView({
   menuItems: AdminMenuItem[];
   setMenuItems: React.Dispatch<React.SetStateAction<AdminMenuItem[]>>;
 }) {
+  const { showToast } = useToast();
   const [form, setForm] = useState<MenuFormState>(emptyMenuForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -233,9 +238,6 @@ export function MenuView({
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isDeletingItem, setIsDeletingItem] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<AdminMenuItem | null>(null);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("all");
   const performanceByName = useMemo(
@@ -396,13 +398,26 @@ export function MenuView({
     closeCropModal();
 
     if (!allowedImageTypes.includes(file.type)) {
-      setMenuError("Please choose a JPG, PNG, or WEBP image.");
+      const message = "Please choose a JPG, PNG, or WEBP image.";
+      setMenuError(message);
+      showToast({
+        title: "Image not accepted",
+        description: message,
+        variant: "error",
+      });
       event.target.value = "";
       return;
     }
 
     if (file.size > maxInitialImageSize) {
-      setMenuError("This image is a bit too large to process. Please try a different photo.");
+      const message =
+        "This image is a bit too large to process. Please try a different photo.";
+      setMenuError(message);
+      showToast({
+        title: "Image too large",
+        description: message,
+        variant: "error",
+      });
       event.target.value = "";
       return;
     }
@@ -432,9 +447,14 @@ export function MenuView({
       );
 
       if (compressedImage.size > maxCompressedImageSize) {
-        setMenuError(
-          "This image is a bit too large to process. Please try a different photo."
-        );
+        const message =
+          "This image is a bit too large to process. Please try a different photo.";
+        setMenuError(message);
+        showToast({
+          title: "Image too large",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -453,10 +473,15 @@ export function MenuView({
       const result = await response.json();
 
       if (!response.ok) {
-        setMenuError(
+        const message =
           result.error ||
-            "This image is a bit too large to process. Please try a different photo."
-        );
+          "This image is a bit too large to process. Please try a different photo.";
+        setMenuError(message);
+        showToast({
+          title: "Image upload failed",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -466,13 +491,23 @@ export function MenuView({
       }));
 
       setMenuMessage("Image uploaded. Save the menu item to apply it.");
+      showToast({
+        title: "Image uploaded",
+        description: "Save the menu item to apply this photo.",
+        variant: "success",
+      });
       closeCropModal();
     } catch (error) {
-      setMenuError(
+      const message =
         error instanceof Error
           ? error.message
-          : "Something went wrong while uploading the image."
-      );
+          : "Something went wrong while uploading the image.";
+      setMenuError(message);
+      showToast({
+        title: "Image upload failed",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsUploadingImage(false);
     }
@@ -524,7 +559,13 @@ export function MenuView({
       const result = await response.json();
 
       if (!response.ok) {
-        setMenuError(result.error || "Failed to save menu item.");
+        const message = result.error || "Failed to save menu item.";
+        setMenuError(message);
+        showToast({
+          title: "Menu item not saved",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -532,123 +573,82 @@ export function MenuView({
         syncMenuItem(result.menuItem);
       }
 
-      setMenuMessage(form.id ? "Menu item updated." : "Menu item added.");
+      const message = form.id ? "Menu item updated." : "Menu item added.";
+      setMenuMessage(message);
+      showToast({
+        title: message,
+        description: `${form.name.trim()} is ready for the customer menu.`,
+        variant: "success",
+      });
       closeForm();
     } catch {
-      setMenuError("Something went wrong while saving the menu item.");
+      const message = "Something went wrong while saving the menu item.";
+      setMenuError(message);
+      showToast({
+        title: "Menu item not saved",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSaving(false);
     }
   }
 
-  async function handleDeleteMenuItem() {
-    if (!itemToDelete) return;
-
-    setIsDeletingItem(true);
-    setMenuMessage("");
-    setMenuError("");
-
-    try {
-      const response = await fetch(`/api/admin/menu?id=${itemToDelete.id}`, {
-        method: "DELETE",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setMenuError(result.error || "Failed to delete menu item.");
-        return;
-      }
-
-      setMenuItems((current) => current.filter((i) => i.id !== itemToDelete.id));
-      setMenuMessage(`"${itemToDelete.name}" has been removed from the menu.`);
-      setIsDeleteConfirmOpen(false);
-      setItemToDelete(null);
-    } catch {
-      setMenuError("Something went wrong while deleting the menu item.");
-    } finally {
-      setIsDeletingItem(false);
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-[#DCCFB8] bg-[#FFFCF7]">
-        <div className="px-5 py-4">
-          <p className="font-sans text-base font-semibold text-[#0D2E18]">
-            Recommendation, category, review, and coverage
-          </p>
+    <div className="space-y-5">
+      <section className="rounded-[26px] border border-[#D8C8AA] bg-white/88 p-4 shadow-[0_16px_38px_rgba(75,50,24,0.08)]">
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
+              Menu Intelligence
+            </p>
+            <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+              Recommendation, category, review, and coverage
+            </h2>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 divide-x divide-[#EFE3CF] border-t border-[#EFE3CF] sm:grid-cols-4">
-          {[
-            {
-              label: "Recommendation Candidate",
-              value:
-                menuIntelligence.recommendationCandidate?.item.name ?? "No item yet",
-              detail: menuIntelligence.recommendationCandidate
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <IntelligenceCard
+            label="Recommendation Candidate"
+            value={menuIntelligence.recommendationCandidate?.item.name ?? "No item yet"}
+            detail={
+              menuIntelligence.recommendationCandidate
                 ? `${menuIntelligence.recommendationCandidate.signal.orders} orders and ${menuIntelligence.recommendationCandidate.signal.rating.toFixed(1)} rating.`
-                : "Waiting for order data.",
-              icon: TrendingUp,
-            },
-            {
-              label: "Strongest Category",
-              value: menuIntelligence.strongestCategory?.label ?? "No category yet",
-              detail: menuIntelligence.strongestCategory
+                : "Waiting for order data."
+            }
+          />
+          <IntelligenceCard
+            label="Strongest Category"
+            value={menuIntelligence.strongestCategory?.label ?? "No category yet"}
+            detail={
+              menuIntelligence.strongestCategory
                 ? `${menuIntelligence.strongestCategory.orders} orders across ${menuIntelligence.strongestCategory.available} available items.`
-                : "No category demand has been detected yet.",
-              icon: Layers,
-            },
-            {
-              label: "Review Candidate",
-              value: menuIntelligence.reviewCandidate?.item.name ?? "No item yet",
-              detail: menuIntelligence.reviewCandidate
+                : "No category demand has been detected yet."
+            }
+          />
+          <IntelligenceCard
+            label="Review Candidate"
+            value={menuIntelligence.reviewCandidate?.item.name ?? "No item yet"}
+            detail={
+              menuIntelligence.reviewCandidate
                 ? `${menuIntelligence.reviewCandidate.signal.orders} orders. ${menuIntelligence.reviewCandidate.signal.rating.toFixed(1)} rating.`
-                : "No available item needs review yet.",
-              icon: AlertCircle,
-            },
-            {
-              label: "Active Coverage",
-              value: `${menuIntelligence.availableCount}/${menuItems.length}`,
-              detail: `${menuIntelligence.categoryCount} categories currently have available items for ordering.`,
-              icon: LayoutGrid,
-            },
-          ].map((card) => {
-            const Icon = card.icon;
-
-            return (
-              <div key={card.label} className="relative px-5 py-4">
-                <Icon size={15} className="absolute right-4 top-4 text-[#8C7A64]" />
-                <p className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">
-                  {card.label}
-                </p>
-                <p className="mt-2 font-sans text-lg font-bold text-[#0D2E18]">
-                  {card.value}
-                </p>
-                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-                  {card.detail}
-                </p>
-              </div>
-            );
-          })}
+                : "No available item needs review yet."
+            }
+          />
+          <IntelligenceCard
+            label="Active Coverage"
+            value={`${menuIntelligence.availableCount}/${menuItems.length}`}
+            detail={`${menuIntelligence.categoryCount} categories currently have available items for ordering.`}
+          />
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex w-full items-center gap-3 rounded-xl border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-2 sm:max-w-[420px]">
-          <Search size={17} className="text-[#8C7A64]" />
-          <input
-            value={menuSearch}
-            onChange={(event) => setMenuSearch(event.target.value)}
-            placeholder="Search menu items..."
-            className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8C7A64]"
-          />
-        </label>
-
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-xl bg-[#0D2E18] px-4 py-2 font-sans text-sm font-semibold text-[#FFF8EF] transition hover:bg-[#0F441D]"
+          className="rounded-full bg-[#0D2E18] px-8 py-3 font-sans text-base font-bold text-[#FFF0DA]"
         >
           + Add New
         </button>
@@ -666,113 +666,109 @@ export function MenuView({
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {menuFilterOptions.map((category) => (
-          <button
-            key={category.value}
-            type="button"
-            onClick={() => setMenuCategoryFilter(category.value)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-              menuCategoryFilter === category.value
-                ? "bg-[#0D2E18] text-[#FFF8EF]"
-                : "border border-[#DCCFB8] bg-[#FFFCF7] text-[#684B35] hover:border-[#0D2E18]"
-            }`}
-          >
-            {category.label}
-            <span className="ml-2 font-mono text-[10px]">{category.count}</span>
-          </button>
-        ))}
+      <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <label className="flex w-full items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 xl:max-w-[420px]">
+            <KadaSearchIcon size={17} className="text-[#6F7F69]" />
+            <input
+              value={menuSearch}
+              onChange={(event) => setMenuSearch(event.target.value)}
+              placeholder="Search menu items..."
+              className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#8D9C87]"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            {menuFilterOptions.map((category) => (
+              <button
+                key={category.value}
+                type="button"
+                onClick={() => setMenuCategoryFilter(category.value)}
+                className={`rounded-full border px-4 py-2 font-sans text-sm font-semibold transition ${
+                  menuCategoryFilter === category.value
+                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
+                    : "border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]"
+                }`}
+              >
+                {category.label}
+                <span className="ml-2 opacity-70">{category.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-[#FFFCF7]">
+      <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-white">
         <div className="min-w-[940px]">
-          <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-3 font-sans text-[10px] font-medium uppercase tracking-[0.12em] text-[#8C7A64]">
-            <span>Item</span>
-            <span>Category</span>
-            <span>Price</span>
-            <span>Status</span>
-            <span>Signal</span>
-            <span>Action</span>
-          </div>
+        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+          <span>Item</span>
+          <span>Category</span>
+          <span>Price</span>
+          <span>Status</span>
+          <span>Signal</span>
+          <span>Action</span>
+        </div>
 
-          <div className="divide-y divide-[#EFE3CF]">
-            {filteredMenuItems.map((item) => {
-              const signal =
-                menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
+        <div className="divide-y divide-[#EFE3CF]">
+          {filteredMenuItems.map((item) => {
+            const signal = menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
 
-              return (
-                <div
-                  key={item.id}
-                  className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-3 font-sans text-sm transition hover:bg-[#FFF8EF]/60"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex aspect-square h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#E6F2E8]">
-                      {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="aspect-square h-full w-full rounded-xl object-cover"
-                        />
-                      ) : (
-                        <div className="h-4 w-4 rounded-full bg-[#D9D9D9]" />
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-[#0D2E18]">
-                      {item.name}
-                    </p>
-                  </div>
-
-                  <span className="text-sm text-[#8C7A64]">
-                    {formatCategory(item.category)}
-                  </span>
-                  <span className="text-sm text-[#8C7A64]">
-                    {peso(item.price)}
-                  </span>
-
-                  <span
-                    className={`w-fit rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                      item.isAvailable
-                        ? "border-[#C2DFC7] bg-[#E6F2E8] text-[#0F441D]"
-                        : "border-[#F5C5BC] bg-[#FFF1EC] text-[#C55432]"
-                    }`}
-                  >
-                    {item.isAvailable ? "Available" : "Not Available"}
-                  </span>
-                  <div>
-                    <SignalChip signal={signal} />
-                    <p className="mt-0.5 font-mono text-xs text-[#8C7A64]">
-                      {signal.orders} orders
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEditForm(item)}
-                      className="rounded-lg border border-[#DCCFB8] bg-[#FFFCF7] px-3 py-1.5 text-xs font-bold text-[#684B35] transition hover:border-[#0D2E18] hover:text-[#0D2E18]"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setItemToDelete(item);
-                        setIsDeleteConfirmOpen(true);
-                      }}
-                      className="rounded-lg border border-[#F5C5BC] bg-[#FFF1EC] px-3 py-1.5 text-xs font-bold text-[#C55432] transition hover:border-[#C55432] hover:bg-[#F5C5BC]/20"
-                    >
-                      Delete
-                    </button>
-                  </div>
+            return (
+              <div
+                key={item.id}
+                className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
+              >
+              <div className="flex items-center gap-3">
+                <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="aspect-square h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-5 w-5 rounded-full bg-[#D9D9D9]" />
+                  )}
                 </div>
-              );
-            })}
+                <p className="font-semibold text-[#0D2E18]">{item.name}</p>
+              </div>
 
-            {filteredMenuItems.length === 0 ? (
-              <EmptyState label="No matching menu items" />
-            ) : null}
-          </div>
+              <span>{formatCategory(item.category)}</span>
+              <span>{peso(item.price)}</span>
+
+              <span
+                className={`w-fit rounded-full px-4 py-1 font-semibold ${item.isAvailable
+                  ? "bg-[#E6F2E8] text-[#0F441D]"
+                  : "bg-[#FFF1EC] text-[#9C543D]"
+                  }`}
+              >
+                {item.isAvailable ? "Available" : "Not Available"}
+              </span>
+              <div>
+                <SignalChip signal={signal} />
+                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
+                  {signal.orders} orders
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openEditForm(item)}
+                  className="rounded-full bg-[#F4EEE6] px-5 py-2 font-semibold text-[#0D2E18]"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+            );
+          })}
+
+          {filteredMenuItems.length === 0 ? (
+            <EmptyState label="No matching menu items" />
+          ) : null}
+        </div>
         </div>
       </div>
 
@@ -799,7 +795,13 @@ export function MenuView({
                 </h2>
               </div>
 
-
+              <button
+                type="button"
+                onClick={closeForm}
+                className="rounded-full border border-[#D6C6AC] px-4 py-2 font-sans text-sm font-semibold text-[#684B35] transition hover:bg-[#FFF8EF]"
+              >
+                Cancel
+              </button>
             </div>
 
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -994,7 +996,6 @@ export function MenuView({
                   aspect={1}
                   cropShape="round"
                   showGrid={false}
-                  restrictPosition={true}
                   onCropChange={setCrop}
                   onZoomChange={setZoom}
                   onCropComplete={handleCropComplete}
@@ -1075,43 +1076,6 @@ export function MenuView({
           `}</style>
         </DialogContent>
       </Dialog>
-      {isDeleteConfirmOpen && itemToDelete ? (
-        <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
-          <DialogContent className="max-w-md rounded-[26px] border border-[#DCCFB8] bg-white p-6 shadow-[0_24px_70px_rgba(13,46,24,0.24)]">
-            <DialogHeader>
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF1EC] text-[#C55432]">
-                <Trash2 size={24} />
-              </div>
-              <DialogTitle className="mt-4 font-sans text-2xl font-black text-[#0D2E18]">
-                Delete Menu Item?
-              </DialogTitle>
-              <DialogDescription className="font-sans text-sm text-[#8C7A64]">
-                Are you sure you want to delete <span className="font-bold text-[#0D2E18]">"{itemToDelete.name}"</span>? 
-                This action cannot be undone and will remove it from all customer views.
-              </DialogDescription>
-            </DialogHeader>
-
-            <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => setIsDeleteConfirmOpen(false)}
-                disabled={isDeletingItem}
-                className="flex-1 rounded-xl border border-[#D6C6AC] px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-50"
-              >
-                Keep Item
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteMenuItem}
-                disabled={isDeletingItem}
-                className="flex-1 rounded-xl bg-[#C55432] px-4 py-3 font-sans text-sm font-bold text-white transition hover:bg-[#A84328] disabled:opacity-50"
-              >
-                {isDeletingItem ? <LoadingSpinner label="Deleting..." /> : "Yes, Delete"}
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      ) : null}
     </div>
   );
 }

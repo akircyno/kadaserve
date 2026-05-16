@@ -19,12 +19,19 @@ import {
   X,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import { DeliveryLocationPicker } from "@/features/customer/components/delivery-location-picker";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
 import {
   getDistanceBasedDeliveryFee,
   hasDeliveryCoordinates,
 } from "@/lib/delivery-fee";
+import {
+  formatNutritionMetric,
+  getCartNutritionSummary,
+  getMenuItemNutrition,
+  nutritionMetricLabels,
+} from "@/lib/nutrition";
 import type { StoreStatusPayload } from "@/lib/store-status";
 
 type CustomerAddress = {
@@ -33,6 +40,15 @@ type CustomerAddress = {
   delivery_lat: number | null;
   delivery_lng: number | null;
   is_default: boolean;
+};
+
+type QrPhPayment = {
+  orderId: string;
+  paymongoMode: "test" | "live";
+  qrCodeImageUrl: string;
+  qrCodeLabel: string;
+  totalAmount: number;
+  expiresInMinutes: number;
 };
 
 const isPayMongoCheckoutEnabled =
@@ -77,6 +93,7 @@ function formatSweetnessLevel(value: number) {
 
 export default function CartPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { items, removeItem, updateItem, clearCart } = useCart();
   const deliveryAddressRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -98,6 +115,7 @@ export default function CartPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isReturningToMenu, setIsReturningToMenu] = useState(false);
+  const [qrPhPayment, setQrPhPayment] = useState<QrPhPayment | null>(null);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -195,6 +213,7 @@ export default function CartPage() {
       : 0;
   const grandTotal = Math.max(0, subtotal + deliveryFee);
   const cupCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const nutritionSummary = getCartNutritionSummary(selectedItems);
   const selectedSavedAddress =
     savedAddresses.find((address) => address.id === selectedAddressId) ?? null;
   const isCheckoutBlocked =
@@ -249,7 +268,13 @@ export default function CartPage() {
     setAddressMessage("");
 
     if (!deliveryAddress.trim()) {
-      setAddressMessage("Type or pin an address first.");
+      const message = "Type or pin an address first.";
+      setAddressMessage(message);
+      showToast({
+        title: "Address needed",
+        description: message,
+        variant: "error",
+      });
       return;
     }
 
@@ -271,7 +296,13 @@ export default function CartPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setAddressMessage(result.error || "Failed to save address.");
+        const message = result.error || "Failed to save address.";
+        setAddressMessage(message);
+        showToast({
+          title: "Address not saved",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -286,8 +317,21 @@ export default function CartPage() {
       ]);
       selectSavedAddress(savedAddress);
       setAddressMessage("Address saved.");
+      showToast({
+        title: "Address saved",
+        description: isDefault
+          ? "This is now your default delivery address."
+          : "You can reuse this address on future delivery orders.",
+        variant: "success",
+      });
     } catch {
-      setAddressMessage("Something went wrong while saving address.");
+      const message = "Something went wrong while saving address.";
+      setAddressMessage(message);
+      showToast({
+        title: "Address not saved",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSavingAddress(false);
     }
@@ -311,7 +355,13 @@ export default function CartPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setAddressMessage(result.error || "Failed to set default address.");
+        const message = result.error || "Failed to set default address.";
+        setAddressMessage(message);
+        showToast({
+          title: "Default address not updated",
+          description: message,
+          variant: "error",
+        });
         return;
       }
 
@@ -324,8 +374,19 @@ export default function CartPage() {
       );
       selectSavedAddress(updatedAddress);
       setAddressMessage("Default address updated.");
+      showToast({
+        title: "Default address updated",
+        description: "This address will be selected first for delivery orders.",
+        variant: "success",
+      });
     } catch {
-      setAddressMessage("Something went wrong while updating address.");
+      const message = "Something went wrong while updating address.";
+      setAddressMessage(message);
+      showToast({
+        title: "Default address not updated",
+        description: message,
+        variant: "error",
+      });
     } finally {
       setIsSavingAddress(false);
     }
@@ -337,11 +398,21 @@ export default function CartPage() {
 
     if (selectedItems.length === 0) {
       setError("Select at least one item before placing your order.");
+      showToast({
+        title: "No items selected",
+        description: "Select at least one item before placing your order.",
+        variant: "error",
+      });
       return;
     }
 
     if (orderType === "delivery" && !deliveryAddress.trim()) {
       setError("Delivery address is required.");
+      showToast({
+        title: "Delivery address required",
+        description: "Add your delivery address before checkout.",
+        variant: "error",
+      });
       return;
     }
 
@@ -351,7 +422,6 @@ export default function CartPage() {
     }
 
     const phPhoneRegex = /^(09|\+639)\d{2}-?\d{3}-?\d{4}$|^(09|\+639)\d{9}$/;
-    const cleanPhone = deliveryPhone.replace(/-/g, "").trim();
     if (orderType === "delivery" && !phPhoneRegex.test(deliveryPhone.trim())) {
       setError("Please enter a valid Philippine mobile number (e.g., 0912-345-6789).");
       return;
@@ -359,6 +429,11 @@ export default function CartPage() {
 
     if (orderType === "delivery" && !hasDeliveryCoordinates(deliveryLat, deliveryLng)) {
       setError("Pin your delivery location on the map to calculate the delivery fee.");
+      showToast({
+        title: "Pin your location",
+        description: "Pin your delivery location on the map to calculate the fee.",
+        variant: "error",
+      });
       return;
     }
 
@@ -366,6 +441,11 @@ export default function CartPage() {
       setError(
         `Delivery is available within ${deliveryFeeQuote.maxDeliveryDistanceKm} km of the cafe.`
       );
+      showToast({
+        title: "Outside delivery range",
+        description: `Delivery is available within ${deliveryFeeQuote.maxDeliveryDistanceKm} km of the cafe.`,
+        variant: "error",
+      });
       return;
     }
 
@@ -374,12 +454,24 @@ export default function CartPage() {
         storeStatus?.checkoutBlockedMessage ||
           "Kada Cafe PH is not accepting orders right now."
       );
+      showToast({
+        title: "Checkout unavailable",
+        description:
+          storeStatus?.checkoutBlockedMessage ||
+          "Kada Cafe PH is not accepting orders right now.",
+        variant: "error",
+      });
       return;
     }
 
     if (paymentMethod === "online" && !isPayMongoCheckoutEnabled) {
       setError("Online payment is coming soon. Please choose cash for now.");
       setPaymentMethod("cash");
+      showToast({
+        title: "Online payment unavailable",
+        description: "Please choose cash for now.",
+        variant: "info",
+      });
       return;
     }
 
@@ -406,28 +498,78 @@ export default function CartPage() {
 
       if (!response.ok) {
         setError(result.error || "Checkout failed.");
+        showToast({
+          title: "Checkout failed",
+          description: result.error || "Please review your order and try again.",
+          variant: "error",
+        });
         return;
       }
 
       const orderId = result.orderId as string;
       const checkoutUrl =
         typeof result.checkoutUrl === "string" ? result.checkoutUrl : "";
+      const qrCodeImageUrl =
+        typeof result.qrCodeImageUrl === "string" ? result.qrCodeImageUrl : "";
 
       if (checkoutUrl) {
         setSuccessMessage("Redirecting to PayMongo checkout...");
+        showToast({
+          title: "Redirecting to payment",
+          description: "PayMongo checkout is opening now.",
+          variant: "info",
+        });
         clearCart();
         window.location.assign(checkoutUrl);
+        return;
+      }
+
+      if (qrCodeImageUrl && result.paymentFlow === "qrph") {
+        setQrPhPayment({
+          orderId,
+          paymongoMode: result.paymongoMode === "live" ? "live" : "test",
+          qrCodeImageUrl,
+          qrCodeLabel:
+            typeof result.qrCodeLabel === "string"
+              ? result.qrCodeLabel
+              : "KadaServe QR Ph",
+          totalAmount:
+            typeof result.totalAmount === "number" ? result.totalAmount : grandTotal,
+          expiresInMinutes:
+            typeof result.qrCodeExpiresInMinutes === "number"
+              ? result.qrCodeExpiresInMinutes
+              : 30,
+        });
+        setSuccessMessage(
+          `Scan the QR Ph code to pay order ${orderId.slice(0, 8).toUpperCase()}.`
+        );
+        showToast({
+          title: "QR Ph ready",
+          description: "Scan the PayMongo QR to complete payment.",
+          variant: "info",
+        });
+        clearCart();
         return;
       }
 
       setSuccessMessage(
         `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
       );
+      showToast({
+        title: "Order placed",
+        description: `Order ${orderId.slice(0, 8).toUpperCase()} is now in your tracker.`,
+        variant: "success",
+      });
       clearCart();
 
       router.replace(`/customer?tab=orders&orderId=${orderId}`);
     } catch {
       setError("Something went wrong during checkout.");
+      showToast({
+        title: "Checkout failed",
+        description: "Something went wrong during checkout.",
+        variant: "error",
+      });
     } finally {
       setIsCheckingOut(false);
     }
@@ -438,6 +580,15 @@ export default function CartPage() {
     setIsReturningToMenu(true);
     window.sessionStorage.setItem("kadaserve_skip_customer_splash", "true");
     router.push("/customer?tab=menu");
+  }
+
+  function closeQrPhPayment() {
+    const orderId = qrPhPayment?.orderId;
+    setQrPhPayment(null);
+
+    if (orderId) {
+      router.replace(`/customer?tab=orders&orderId=${orderId}&payment=processing`);
+    }
   }
 
   return (
@@ -657,6 +808,12 @@ export default function CartPage() {
                     >
                       {(() => {
                         const isPastry = item.category === "pastries";
+                        const itemNutrition = getMenuItemNutrition(item, {
+                          sugarLevel: item.sugar_level,
+                          size: item.size,
+                          addons: item.addons,
+                          quantity: item.quantity,
+                        });
 
                         return (
                           <>
@@ -696,6 +853,19 @@ export default function CartPage() {
                               <p className="mt-2 font-sans text-sm text-[#684B35]">
                                 Add-ons: {item.addons.map(formatAddonLabel).join(", ")}
                               </p>
+                            ) : null}
+                            {itemNutrition ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
+                                  {itemNutrition.calories} cal est.
+                                </span>
+                                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
+                                  Sugar {itemNutrition.sugar}g
+                                </span>
+                                <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
+                                  Sodium {itemNutrition.sodium}mg
+                                </span>
+                              </div>
                             ) : null}
                           </div>
                         </div>
@@ -809,6 +979,43 @@ export default function CartPage() {
                     </div>
                   </div>
 
+                  {nutritionSummary ? (
+                    <div className="mt-5 rounded-[18px] border border-[#D8C8A7] bg-white/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#684B35]">
+                            Nutrition estimate
+                          </p>
+                          <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                            Selected items only, calculated from staff recipes.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
+                          {nutritionSummary.servingSizeMl} ml
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {nutritionMetricLabels.map((metric) => (
+                          <div
+                            key={metric.key}
+                            className="rounded-[14px] bg-[#FFF8EF] px-3 py-2 font-sans"
+                          >
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                              {metric.label}
+                            </p>
+                            <p className="mt-0.5 text-base font-black text-[#0D2E18]">
+                              {formatNutritionMetric(
+                                metric.key,
+                                nutritionSummary[metric.key]
+                              )}
+                              {metric.unit ? ` ${metric.unit}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="mt-5">
                     <p className="font-sans text-sm font-bold text-[#684B35]">
                       Payment Method
@@ -851,7 +1058,7 @@ export default function CartPage() {
                         disabled={!isPayMongoCheckoutEnabled}
                         title={
                           isPayMongoCheckoutEnabled
-                            ? "Pay with GCash, Maya, or card"
+                            ? "Pay with QR Ph through PayMongo"
                             : "Online payment is coming soon"
                         }
                         className={`flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
@@ -863,18 +1070,18 @@ export default function CartPage() {
                         <WalletCards className="h-5 w-5 shrink-0" />
                         <span>
                           <span className="block text-sm font-black">
-                            Online Payment
+                            QR Ph Online Payment
                           </span>
                           <span className="mt-0.5 block text-xs font-semibold opacity-75">
-                            GCash, Maya, or card through PayMongo.
+                            Scan a PayMongo QR using any QR Ph-supported wallet.
                           </span>
                         </span>
                       </button>
                     </div>
                     {paymentMethod === "online" ? (
                       <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                        You will pay through PayMongo using GCash, Maya, or card.
-                        Your order stays pending until payment is confirmed.
+                        KadaServe will generate a PayMongo QR Ph code. Your order
+                        stays pending until PayMongo confirms payment.
                       </p>
                     ) : !isPayMongoCheckoutEnabled ? (
                       <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
@@ -1065,6 +1272,62 @@ export default function CartPage() {
                 Use another
               </button>
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {qrPhPayment ? (
+        <div className="fixed inset-0 z-[95] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
+          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                  PayMongo QR Ph
+                </p>
+                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Scan to pay {peso(qrPhPayment.totalAmount)}
+                </h2>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 font-sans text-xs font-black uppercase ${
+                  qrPhPayment.paymongoMode === "live"
+                    ? "bg-[#E6F2E8] text-[#0F441D]"
+                    : "bg-[#FFF0DA] text-[#684B35]"
+                }`}
+              >
+                {qrPhPayment.paymongoMode}
+              </span>
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrPhPayment.qrCodeImageUrl}
+                alt="PayMongo QR Ph payment code"
+                className="mx-auto aspect-square w-full max-w-[280px] rounded-[18px] bg-white object-contain p-3"
+              />
+              <p className="mt-3 font-sans text-sm font-black text-[#0D2E18]">
+                Order #{qrPhPayment.orderId.slice(0, 8).toUpperCase()}
+              </p>
+              <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                Pay with any QR Ph-supported wallet or banking app. This QR
+                expires in about {qrPhPayment.expiresInMinutes} minutes.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
+              KadaServe will move this order to the staff queue after PayMongo
+              sends the paid webhook.
+            </div>
+
+            <button
+              type="button"
+              onClick={closeQrPhPayment}
+              className="mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+            >
+              View Order Tracker
+            </button>
           </section>
         </div>
       ) : null}

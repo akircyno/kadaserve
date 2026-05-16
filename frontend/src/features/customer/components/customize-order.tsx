@@ -4,7 +4,13 @@ import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Minus, Plus, ShoppingCart } from "lucide-react";
+import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
+import {
+  formatNutritionMetric,
+  getMenuItemNutrition,
+  nutritionMetricLabels,
+} from "@/lib/nutrition";
 import type { CustomizableMenuItem } from "@/types/menu";
 
 type CustomizeOrderProps = {
@@ -63,6 +69,7 @@ function getEmoji(name: string, category: string) {
 export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const { addItem, updateItem, getItemById } = useCart();
   const isPastry = menuItem.category === "pastries";
 
@@ -109,6 +116,16 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
     return (menuItem.base_price + addonTotal + sizeCharge) * quantity;
   }, [addonTotal, isPastry, menuItem.base_price, quantity, sizeCharge]);
 
+  const selectedNutrition = useMemo(
+    () =>
+      getMenuItemNutrition(menuItem, {
+        sugarLevel: isPastry || !menuItem.has_sugar_level ? 100 : sugarLevel,
+        size: isPastry ? "medium" : size,
+        addons: isPastry ? [] : selectedAddons,
+      }),
+    [isPastry, menuItem, selectedAddons, size, sugarLevel]
+  );
+
   function toggleAddon(value: string) {
     setSelectedAddons((current) =>
       current.includes(value)
@@ -137,9 +154,19 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
     if (isEditing && cartItemId) {
       updateItem(cartItemId, payload);
       setAddedMessage("Cart item updated successfully.");
+      showToast({
+        title: "Cart item updated",
+        description: `${menuItem.name} changes were saved.`,
+        variant: "success",
+      });
     } else {
       addItem(payload);
       setAddedMessage("Added to cart successfully.");
+      showToast({
+        title: "Added to cart",
+        description: `${menuItem.name} is ready for checkout.`,
+        variant: "success",
+      });
     }
 
     setTimeout(() => {
@@ -392,6 +419,40 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   </span>
                 </div>
               </div>
+
+              {selectedNutrition ? (
+                <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
+                        Nutrition estimate
+                      </p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[#684B35]">
+                        Per selected serving, calculated from KadaServe staff recipe.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-[#E9F5E7] px-3 py-1 text-xs font-black text-[#2D7A40]">
+                      {selectedNutrition.servingSizeMl} ml
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {nutritionMetricLabels.map((metric) => (
+                      <div key={metric.key} className="rounded-[14px] bg-white px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                          {metric.label}
+                        </p>
+                        <p className="mt-0.5 text-base font-black text-[#0D2E18]">
+                          {formatNutritionMetric(
+                            metric.key,
+                            selectedNutrition[metric.key]
+                          )}
+                          {metric.unit ? ` ${metric.unit}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <button
                 type="button"

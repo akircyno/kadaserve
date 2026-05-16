@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
@@ -65,6 +66,7 @@ function isValidEmail(value: string) {
 }
 
 export default function SignupPage() {
+  const { showToast } = useToast();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -118,6 +120,25 @@ export default function SignupPage() {
         : "",
   };
 
+  function showSignupError(message: string) {
+    setError(message);
+    showToast({
+      title: "Account not created",
+      description: message,
+      variant: "error",
+    });
+  }
+
+  function showSignupSuccess(title: string, message: string) {
+    setSuccessTitle(title);
+    setSuccessMessage(message);
+    showToast({
+      title,
+      description: message,
+      variant: "success",
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -126,32 +147,32 @@ export default function SignupPage() {
     setSuccessActionLabel("");
 
     if (!hasAgreedToPolicies) {
-      setError(consentErrorMessage);
+      showSignupError(consentErrorMessage);
       return;
     }
 
     if (!fullName.trim()) {
-      setError("Full name is required.");
+      showSignupError("Full name is required.");
       return;
     }
 
     if (!isValidName(fullName)) {
-      setError("Full name can only include letters, spaces, hyphens, and dots.");
+      showSignupError("Full name can only include letters, spaces, hyphens, and dots.");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError("Please enter a valid email address.");
+      showSignupError("Please enter a valid email address.");
       return;
     }
 
     if (!isPasswordValid) {
-      setError("Please complete all password requirements.");
+      showSignupError("Please complete all password requirements.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      showSignupError("Passwords do not match.");
       return;
     }
 
@@ -173,26 +194,26 @@ export default function SignupPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "Account creation failed.");
+        showSignupError(result.error || "Account creation failed.");
         return;
       }
 
       if (result.needsEmailConfirmation) {
-        setSuccessTitle("Check your email");
-        setSuccessMessage(
+        showSignupSuccess(
+          "Check your email",
           "Verification email sent. Open the link in your inbox to finish creating this account."
         );
         setSuccessActionLabel("Go to sign in after verification");
         return;
       }
 
-      setSuccessTitle("Account created");
-      setSuccessMessage(
+      showSignupSuccess(
+        "Account created",
         "Your account was created. Email verification is not active in Supabase yet, so no verification email was required. You can sign in now."
       );
       setSuccessActionLabel("Go to sign in");
     } catch {
-      setError("Something went wrong. Please try again.");
+      showSignupError("Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +226,7 @@ export default function SignupPage() {
     setSuccessActionLabel("");
 
     if (!hasAgreedToPolicies) {
-      setError(consentErrorMessage);
+      showSignupError(consentErrorMessage);
       return;
     }
 
@@ -213,7 +234,7 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-3 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-3">
+    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,68,29,0.18),_transparent_32%),linear-gradient(180deg,_#FFF0DA_0%,_#FFF8EF_52%,_#0F441D_100%)] px-4 pb-3 pt-20 sm:pt-24 lg:flex lg:items-center lg:justify-center lg:px-8 lg:py-3">
       <Link
         href="/"
         className="fixed left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-[#DCCFB8] bg-white/85 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white sm:left-6 sm:top-6"
@@ -222,8 +243,8 @@ export default function SignupPage() {
         Back to KadaServe
       </Link>
 
-      <div className="mx-auto w-full max-w-md lg:max-w-5xl">
-        <section className="overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:max-h-[calc(100vh-2rem)] lg:min-h-[34rem] lg:grid-cols-[1.02fr_1fr]">
+      <div className="mx-auto w-[calc(100vw-2rem)] min-w-0 max-w-md lg:max-w-5xl">
+        <section className="w-full min-w-0 overflow-hidden rounded-[1.75rem] bg-[#FFF8EF] shadow-[0_18px_44px_rgba(13,46,24,0.18)] lg:grid lg:max-h-[calc(100vh-2rem)] lg:min-h-[34rem] lg:grid-cols-[1.02fr_1fr]">
           <div className="hidden bg-[#0D2E18] text-white lg:flex lg:flex-col lg:justify-between lg:p-7">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-lg shadow-black/20">
@@ -288,8 +309,8 @@ export default function SignupPage() {
           </div>
 
           <div className="overflow-y-auto px-5 py-5 sm:px-7 lg:flex lg:flex-col lg:justify-center lg:px-8">
-            <div className="mb-6 flex items-center gap-4 lg:hidden">
-              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18]">
+            <div className="mb-6 flex min-w-0 items-center gap-3 sm:gap-4 lg:hidden">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#0D2E18] sm:h-16 sm:w-16">
                 <Image
                   src={LOGO_SRC}
                   alt="KadaServe logo"
@@ -299,7 +320,7 @@ export default function SignupPage() {
                 />
               </div>
 
-              <h1 className="font-sans text-5xl font-semibold tracking-tight text-[#0D2E18]">
+              <h1 className="min-w-0 font-sans text-4xl font-semibold tracking-tight text-[#0D2E18] sm:text-5xl">
                 KadaServe
               </h1>
             </div>

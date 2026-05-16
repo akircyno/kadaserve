@@ -25,15 +25,34 @@ type CheckoutItem = {
   image_url: string | null;
 };
 
-type PayMongoCheckoutSession = {
+type PayMongoPaymentIntent = {
   id: string;
   attributes?: {
-    checkout_url?: string;
+    client_key?: string;
+    next_action?: {
+      code?: {
+        amount?: number;
+        id?: string;
+        image_url?: string;
+        label?: string;
+      };
+      type?: string;
+    } | null;
+    status?: string;
   };
 };
 
-type PayMongoCheckoutResponse = {
-  data?: PayMongoCheckoutSession;
+type PayMongoPaymentMethod = {
+  id: string;
+};
+
+type PayMongoPaymentIntentResponse = {
+  data?: PayMongoPaymentIntent;
+  errors?: Array<{ detail?: string; message?: string }>;
+};
+
+type PayMongoPaymentMethodResponse = {
+  data?: PayMongoPaymentMethod;
   errors?: Array<{ detail?: string; message?: string }>;
 };
 
@@ -71,27 +90,43 @@ function toPayMongoAmount(value: number) {
   return Math.max(0, Math.round(value * 100));
 }
 
-function getAbsoluteUrl(requestUrl: URL, path: string) {
-  return new URL(path, requestUrl.origin).toString();
-}
-
 function getPayMongoSecretKey() {
   return process.env.PAYMONGO_SECRET_KEY?.trim() || "";
 }
 
-async function createPayMongoCheckoutSession({
-  requestUrl,
+function getPayMongoMode(secretKey: string) {
+  return secretKey.startsWith("sk_live_") ? "live" : "test";
+}
+
+function getPayMongoErrorMessage(
+  result:
+    | PayMongoPaymentIntentResponse
+    | PayMongoPaymentMethodResponse,
+  fallback: string
+) {
+  return result.errors?.[0]?.detail || result.errors?.[0]?.message || fallback;
+}
+
+function getPayMongoHeaders(secretKey: string) {
+  return {
+    Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function createPayMongoQrPhPayment({
   orderId,
   customerEmail,
-  deliveryFee,
-  items,
+  customerName,
+  customerPhone,
+  deliveryAddress,
   totalAmount,
 }: {
-  requestUrl: URL;
   orderId: string;
   customerEmail: string | null;
-  deliveryFee: number;
-  items: CheckoutItem[];
+  customerName: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
   totalAmount: number;
 }) {
   const secretKey = getPayMongoSecretKey();
@@ -100,73 +135,109 @@ async function createPayMongoCheckoutSession({
     throw new Error("PayMongo secret key is not configured.");
   }
 
-  const lineItems = [
-    ...items.map((item) => ({
-      currency: "PHP",
-      amount: toPayMongoAmount(item.base_price + item.addon_price),
-      name: item.name,
-      quantity: item.quantity,
-      description: item.special_instructions || undefined,
-    })),
-    ...(deliveryFee > 0
-      ? [
-          {
+  const headers = getPayMongoHeaders(secretKey);
+  const paymentIntentResponse = await fetch(
+    "https://api.paymongo.com/v1/payment_intents",
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            amount: toPayMongoAmount(totalAmount),
             currency: "PHP",
-            amount: toPayMongoAmount(deliveryFee),
-            name: "Delivery Fee",
-            quantity: 1,
-            description: "Distance-based delivery fee",
+            description: `KadaServe order ${orderId.slice(0, 8).toUpperCase()}`,
+            metadata: {
+              order_id: orderId,
+            },
+            payment_method_allowed: ["qrph"],
           },
-        ]
-      : []),
-  ];
-
-  const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      data: {
-        attributes: {
-          billing: customerEmail ? { email: customerEmail } : undefined,
-          description: `KadaServe order ${orderId.slice(0, 8).toUpperCase()}`,
-          line_items: lineItems,
-          metadata: {
-            order_id: orderId,
-          },
-          payment_method_types: ["gcash", "paymaya", "card"],
-          send_email_receipt: true,
-          show_description: true,
-          show_line_items: true,
-          success_url: getAbsoluteUrl(
-            requestUrl,
-            `/customer?tab=orders&orderId=${orderId}&payment=processing`
-          ),
-          cancel_url: getAbsoluteUrl(
-            requestUrl,
-            `/customer/cart?payment=cancelled&orderId=${orderId}`
-          ),
         },
-      },
-    }),
-  });
+      }),
+    }
+  );
+  const paymentIntentResult =
+    (await paymentIntentResponse.json()) as PayMongoPaymentIntentResponse;
+  const paymentIntent = paymentIntentResult.data;
 
-  const result = (await response.json()) as PayMongoCheckoutResponse;
+  if (!paymentIntentResponse.ok || !paymentIntent?.id) {
+    throw new Error(
+      getPayMongoErrorMessage(
+        paymentIntentResult,
+        "PayMongo QR Ph payment intent could not be created."
+      )
+    );
+  }
 
-  if (!response.ok || !result.data?.attributes?.checkout_url) {
-    const errorMessage =
-      result.errors?.[0]?.detail ||
-      result.errors?.[0]?.message ||
-      "PayMongo checkout could not be created.";
+  const paymentMethodResponse = await fetch(
+    "https://api.paymongo.com/v1/payment_methods",
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            billing: {
+              address: deliveryAddress ? { line1: deliveryAddress } : undefined,
+              email: customerEmail ?? undefined,
+              name: customerName || "KadaServe Customer",
+              phone: customerPhone || undefined,
+            },
+            type: "qrph",
+          },
+        },
+      }),
+    }
+  );
+  const paymentMethodResult =
+    (await paymentMethodResponse.json()) as PayMongoPaymentMethodResponse;
+  const paymentMethod = paymentMethodResult.data;
 
-    throw new Error(errorMessage);
+  if (!paymentMethodResponse.ok || !paymentMethod?.id) {
+    throw new Error(
+      getPayMongoErrorMessage(
+        paymentMethodResult,
+        "PayMongo QR Ph payment method could not be created."
+      )
+    );
+  }
+
+  const attachResponse = await fetch(
+    `https://api.paymongo.com/v1/payment_intents/${paymentIntent.id}/attach`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            client_key: paymentIntent.attributes?.client_key,
+            payment_method: paymentMethod.id,
+          },
+        },
+      }),
+    }
+  );
+  const attachResult =
+    (await attachResponse.json()) as PayMongoPaymentIntentResponse;
+  const attachedIntent = attachResult.data;
+  const qrCode = attachedIntent?.attributes?.next_action?.code;
+
+  if (!attachResponse.ok || !attachedIntent?.id || !qrCode?.image_url) {
+    throw new Error(
+      getPayMongoErrorMessage(
+        attachResult,
+        "PayMongo QR Ph code could not be generated."
+      )
+    );
   }
 
   return {
-    checkoutSessionId: result.data.id,
-    checkoutUrl: result.data.attributes.checkout_url,
+    mode: getPayMongoMode(secretKey),
+    paymentIntentId: attachedIntent.id,
+    paymentMethodId: paymentMethod.id,
+    qrCodeId: qrCode.id ?? null,
+    qrCodeImageUrl: qrCode.image_url,
+    qrCodeLabel: qrCode.label ?? "KadaServe",
     totalAmount,
   };
 }
@@ -216,7 +287,6 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const requestUrl = new URL(request.url);
 
     const items = body.items as CheckoutItem[];
     const orderType = body.orderType as "pickup" | "delivery";
@@ -230,7 +300,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("email, phone")
+      .select("full_name, email, phone")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -355,20 +425,28 @@ export async function POST(request: Request) {
 
     if (paymentMethod === "online") {
       try {
-        const payMongoCheckout = await createPayMongoCheckoutSession({
-          requestUrl,
+        const payMongoQrPh = await createPayMongoQrPhPayment({
           orderId: order.id,
           customerEmail: profile?.email || user.email || null,
-          deliveryFee,
-          items,
+          customerName: profile?.full_name ?? null,
+          customerPhone:
+            orderType === "delivery"
+              ? deliveryPhone || profile?.phone || null
+              : profile?.phone ?? null,
+          deliveryAddress: orderType === "delivery" ? deliveryAddress : null,
           totalAmount,
         });
+        const qrExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
         const { error: paymentUpdateError } = await supabase
           .from("orders")
           .update({
-            paymongo_checkout_session_id:
-              payMongoCheckout.checkoutSessionId,
+            paymongo_payment_intent_id: payMongoQrPh.paymentIntentId,
+            paymongo_payment_method_used: "qrph",
+            paymongo_qr_code_id: payMongoQrPh.qrCodeId,
+            paymongo_qr_code_image_url: payMongoQrPh.qrCodeImageUrl,
+            paymongo_qr_code_label: payMongoQrPh.qrCodeLabel,
+            paymongo_qr_expires_at: qrExpiresAt,
           })
           .eq("id", order.id);
 
@@ -381,8 +459,16 @@ export async function POST(request: Request) {
           orderId: order.id,
           orderType,
           deliveryFee,
-          checkoutUrl: payMongoCheckout.checkoutUrl,
+          paymentProvider: "paymongo",
+          paymentFlow: "qrph",
+          paymongoMode: payMongoQrPh.mode,
+          qrCodeExpiresInMinutes: 30,
+          qrCodeId: payMongoQrPh.qrCodeId,
+          qrCodeImageUrl: payMongoQrPh.qrCodeImageUrl,
+          qrCodeLabel: payMongoQrPh.qrCodeLabel,
+          qrCodeExpiresAt: qrExpiresAt,
           paymentStatus: "pending_payment",
+          totalAmount,
         });
       } catch (payMongoError) {
         await supabase.from("order_items").delete().eq("order_id", order.id);
@@ -393,7 +479,7 @@ export async function POST(request: Request) {
             error:
               payMongoError instanceof Error
                 ? payMongoError.message
-                : "PayMongo checkout could not be created.",
+                : "PayMongo QR Ph payment could not be created.",
           },
           { status: 502 }
         );

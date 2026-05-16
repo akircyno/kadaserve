@@ -15,7 +15,7 @@ const sections = [
   },
   {
     title: "Notifications",
-    body: "KadaServe may use email notifications to send account messages, order updates, delivery or pickup updates, and other service-related information.",
+    body: "KadaServe uses in-app notifications for order updates, delivery or pickup updates, receipt details, and feedback reminders. Email is reserved for account, security, and payment-provider messages where configured.",
   },
   {
     title: "Your Choices",

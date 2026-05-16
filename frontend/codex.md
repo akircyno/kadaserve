@@ -131,3 +131,6 @@ For admin intelligence work, define first:
 - What metric or algorithm supports the output.
 
 Then design the screen.
+
+Do not put in the docs the changes from the original or what we removed. Just put the exact system
+Do not ask any permission, i set it to Fully Access

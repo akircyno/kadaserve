@@ -1,17 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import {
-  Award,
-  Brain,
-  CircleAlert,
-  MessageSquareText,
-  Percent,
-  Sparkles,
-  Star,
-  TrendingUp,
-  Users,
-  UsersRound,
-} from "lucide-react";
+  KadaAlertIcon,
+  KadaAwardIcon,
+  KadaStarIcon,
+} from "@/components/icons/kadaserve-admin-icons";
 import {
   getRecommendationsForCustomer,
   type RecommendationFeedback,
@@ -84,16 +78,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function average(values: number[]) {
-  return values.length
-    ? values.reduce((sum, value) => sum + value, 0) / values.length
-    : 0;
-}
-
-function formatRating(value: number) {
-  return value ? value.toFixed(1) : "N/A";
-}
-
 function getRatingTone(value: number) {
   if (value >= 4) {
     return {
@@ -160,35 +144,6 @@ function InsightCard({
   );
 }
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-[#EFE3CF] bg-white px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-          {label}
-        </p>
-        <Icon size={16} className="text-[#7D6B55]" />
-      </div>
-      <p className="mt-3 font-sans text-2xl font-black text-[#0D2E18]">
-        {value}
-      </p>
-      <p className="mt-1 font-sans text-xs font-semibold text-[#8C7A64]">
-        {detail}
-      </p>
-    </div>
-  );
-}
-
 function ProgressBar({
   max,
   tone = "green",
@@ -213,7 +168,7 @@ function RatingStars({ value }: { value: number }) {
   return (
     <div className="flex items-center gap-0.5" aria-label={`${value.toFixed(1)} rating`}>
       {Array.from({ length: 5 }).map((_, index) => (
-        <Star
+        <KadaStarIcon
           key={index}
           size={13}
           className={
@@ -234,34 +189,57 @@ export function ItemRankingView({
   itemRanking: RankedItem[];
   maxItemOrders: number;
 }) {
-  const topItems = itemRanking.slice(0, 3);
-  const rankedItems = itemRanking.slice(0, 8);
-  const lowPerformingItems = [...itemRanking].slice(-4).reverse();
-  const totalOrders = itemRanking.reduce((sum, item) => sum + item.orders, 0);
-  const topItem = topItems[0];
-  const averageRating = average(itemRanking.map((item) => item.rating).filter(Number.isFinite));
+  const [rankMode, setRankMode] = useState<"orders" | "revenue" | "rating">("orders");
+  const sortedRanking = [...itemRanking].sort((first, second) => {
+    if (rankMode === "revenue") return second.revenue - first.revenue;
+    if (rankMode === "rating") return second.rating - first.rating;
+    return second.orders - first.orders;
+  });
+  const rankMax =
+    rankMode === "revenue"
+      ? Math.max(1, ...sortedRanking.map((item) => item.revenue))
+      : rankMode === "rating"
+      ? 5
+      : maxItemOrders;
+  const topItems = sortedRanking.slice(0, 3);
+  const rankedItems = sortedRanking.slice(0, 8);
+  const lowPerformingItems = [...itemRanking]
+    .sort((first, second) => first.rating - second.rating || first.orders - second.orders)
+    .slice(0, 4);
+  const getRankValue = (item: RankedItem) => {
+    if (rankMode === "revenue") return peso(item.revenue);
+    if (rankMode === "rating") return item.rating.toFixed(1);
+    return String(item.orders);
+  };
+  const getRankBarValue = (item: RankedItem) => {
+    if (rankMode === "revenue") return item.revenue;
+    if (rankMode === "rating") return item.rating;
+    return item.orders;
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        <MetricCard
-          icon={Award}
-          label="Leader"
-          value={topItem?.item ?? "None"}
-          detail={topItem ? `${topItem.orders} orders` : "No ranked item"}
-        />
-        <MetricCard
-          icon={TrendingUp}
-          label="Ranked Orders"
-          value={String(totalOrders)}
-          detail={`${itemRanking.length} menu signals`}
-        />
-        <MetricCard
-          icon={Star}
-          label="Avg Rating"
-          value={formatRating(averageRating)}
-          detail="Across ranked menu items"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
+        <div className="flex items-center gap-2">
+          <KadaAwardIcon size={18} className="text-[#684B35]" />
+          <p className="font-sans text-sm font-black text-[#0D2E18]">Ranking view</p>
+        </div>
+        <div className="grid grid-cols-3 gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1">
+          {(["orders", "revenue", "rating"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setRankMode(mode)}
+              className={`rounded-full px-3 py-2 font-sans text-xs font-black capitalize transition ${
+                rankMode === mode
+                  ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
+                  : "text-[#684B35] hover:bg-white"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
 
       {topItems.length > 0 ? (
@@ -281,14 +259,14 @@ export function ItemRankingView({
                     </h2>
                   </div>
                   <p className="font-sans text-2xl font-black tabular-nums text-[#0D2E18]">
-                    {item.orders}
+                    {getRankValue(item)}
                   </p>
                 </div>
                 <div className="mt-4">
-                  <ProgressBar value={item.orders} max={maxItemOrders} tone={tone} />
+                  <ProgressBar value={getRankBarValue(item)} max={rankMax} tone={tone} />
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-3 font-sans text-xs font-semibold text-[#684B35]">
-                  <span>{peso(item.revenue)}</span>
+                  <span>{rankMode === "revenue" ? `${item.orders} orders` : peso(item.revenue)}</span>
                   <span>{item.rating.toFixed(1)} rating</span>
                 </div>
               </InsightCard>
@@ -303,8 +281,8 @@ export function ItemRankingView({
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
               Ranked Menu Signals
             </h2>
-            <span className="rounded-full bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-              Orders
+            <span className="rounded-full bg-white px-3 py-1 font-sans text-xs font-bold capitalize text-[#684B35]">
+              {rankMode}
             </span>
           </div>
           <div className="divide-y divide-[#EFE3CF]">
@@ -317,11 +295,11 @@ export function ItemRankingView({
                 <div className="min-w-0">
                   <p className="truncate font-bold">{item.item}</p>
                   <p className="text-xs font-semibold text-[#8C7A64]">
-                    {peso(item.revenue)} · {item.rating.toFixed(1)} rating
+                    {peso(item.revenue)} - {item.rating.toFixed(1)} rating
                   </p>
                 </div>
-                <span className="font-black tabular-nums">{item.orders}</span>
-                <ProgressBar value={item.orders} max={maxItemOrders} />
+                <span className="font-black tabular-nums">{getRankValue(item)}</span>
+                <ProgressBar value={getRankBarValue(item)} max={rankMax} />
               </div>
             ))}
             {rankedItems.length === 0 ? <EmptyState label="No ranked items yet" /> : null}
@@ -333,7 +311,7 @@ export function ItemRankingView({
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
               Review Candidates
             </h2>
-            <CircleAlert size={18} className="text-[#684B35]" />
+            <KadaAlertIcon size={18} className="text-[#684B35]" />
           </div>
           <div className="mt-4 space-y-3">
             {lowPerformingItems.map((item, index) => (
@@ -350,10 +328,10 @@ export function ItemRankingView({
                   </span>
                 </div>
                 <div className="mt-2">
-                  <ProgressBar value={item.orders} max={maxItemOrders} tone="brown" />
+                  <ProgressBar value={item.rating} max={5} tone="brown" />
                 </div>
                 <p className="mt-2 font-sans text-xs font-semibold text-[#8C7A64]">
-                  {item.orders} orders · {item.rating.toFixed(1)} rating
+                  {item.orders} orders - {item.rating.toFixed(1)} rating
                 </p>
               </div>
             ))}
@@ -372,15 +350,7 @@ export function SatisfactionView({
 }: {
   feedbackRows: AdminPreferenceFeedbackRow[];
 }) {
-  const overallAverage = average(
-    feedbackRows.map((row) => Number(row.overall_rating)).filter(Number.isFinite)
-  );
-  const tasteAverage = average(
-    feedbackRows.map((row) => Number(row.taste_rating)).filter(Number.isFinite)
-  );
-  const strengthAverage = average(
-    feedbackRows.map((row) => Number(row.strength_rating)).filter(Number.isFinite)
-  );
+  const [ratingFilter, setRatingFilter] = useState<"all" | "strong" | "watch" | "review">("all");
   const byItem = new Map<
     string,
     {
@@ -421,35 +391,35 @@ export function SatisfactionView({
       latestComment: value.latestComment,
     }))
     .sort((first, second) => second.overall - first.overall);
-  const reviewCount = itemSummaries.filter((item) => item.overall < 3).length;
+  const filteredItemSummaries = itemSummaries.filter((item) => {
+    if (ratingFilter === "strong") return item.overall >= 4;
+    if (ratingFilter === "watch") return item.overall >= 3 && item.overall < 4;
+    if (ratingFilter === "review") return item.overall < 3;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard
-          icon={MessageSquareText}
-          label="Responses"
-          value={String(feedbackRows.length)}
-          detail={`${itemSummaries.length} rated items`}
-        />
-        <MetricCard
-          icon={Star}
-          label="Overall"
-          value={formatRating(overallAverage)}
-          detail={getRatingTone(overallAverage).label}
-        />
-        <MetricCard
-          icon={Sparkles}
-          label="Taste"
-          value={formatRating(tasteAverage)}
-          detail="Flavor quality signal"
-        />
-        <MetricCard
-          icon={Brain}
-          label="Strength"
-          value={formatRating(strengthAverage)}
-          detail={`${reviewCount} review candidates`}
-        />
+      <div className="flex flex-wrap items-center gap-2 rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
+        {([
+          ["all", "All"],
+          ["strong", "Strong"],
+          ["watch", "Watch"],
+          ["review", "Review"],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setRatingFilter(key)}
+            className={`rounded-full px-4 py-2 font-sans text-xs font-black transition ${
+              ratingFilter === key
+                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
+                : "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:bg-white"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <InsightCard className="p-4">
@@ -463,7 +433,7 @@ export function SatisfactionView({
         </div>
 
         <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {itemSummaries.map((item) => {
+          {filteredItemSummaries.map((item) => {
             const tone = getRatingTone(item.overall);
 
             return (
@@ -516,7 +486,7 @@ export function SatisfactionView({
               </article>
             );
           })}
-          {itemSummaries.length === 0 ? <EmptyState label="No feedback data yet" /> : null}
+          {filteredItemSummaries.length === 0 ? <EmptyState label="No matching ratings" /> : null}
         </div>
       </InsightCard>
     </div>
@@ -606,79 +576,76 @@ export function CustomerPreferenceView({
   const profiles = customers.sort(
     (first, second) => second.preferenceScore - first.preferenceScore
   );
-  const activeProfiles = profiles.filter((profile) => !profile.isNewCustomer);
-  const topProfile = profiles[0];
-  const averagePreference = average(
-    profiles.map((profile) => profile.preferenceScore).filter(Number.isFinite)
-  );
-  const ratedProfiles = profiles.filter(
-    (profile) => typeof profile.averageFeedbackRating === "number"
-  ).length;
+  const visibleProfiles = profiles.slice(0, 6);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const selectedProfile =
+    visibleProfiles.find((profile) => profile.customerId === selectedCustomerId) ??
+    visibleProfiles[0];
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-        {/* Card 1 — Profiles */}
-        <div className="bg-[#0D2E18] text-[#FFF8EF] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
-          <Users size={18} className="text-[#FFF8EF]/40 absolute top-4 right-4" />
-          <p className="text-[10px] uppercase tracking-[0.12em] text-[#FFF8EF]/50">Profiles</p>
-          <div>
-            <p className="text-3xl font-bold font-mono text-[#FFF8EF]">{profiles.length}</p>
-            <p className="text-xs text-[#FFF8EF]/40">{activeProfiles.length} with order signals</p>
+      {selectedProfile ? (
+        <InsightCard className="overflow-hidden">
+          <div className="grid gap-4 p-4 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-[#0D2E18] font-sans text-xl font-black text-[#FFF0DA]">
+                {getInitials(selectedProfile.customerName)}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-sans text-xl font-black text-[#0D2E18]">
+                  {selectedProfile.customerName}
+                </p>
+                <p className="mt-1 font-sans text-sm font-bold text-[#684B35]">
+                  {Math.round(selectedProfile.preferenceScore * 100)}% score
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {selectedProfile.recommendations.map((recommendation) => (
+                <div
+                  key={`spotlight-${recommendation.label}-${recommendation.item.id}`}
+                  className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-3"
+                >
+                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
+                    {recommendation.label}
+                  </p>
+                  <p className="mt-1 line-clamp-2 font-sans text-sm font-black leading-tight text-[#0D2E18]">
+                    {recommendation.item.name}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Card 2 — Top Match */}
-        <div className="bg-[#FFF8EF] border border-[#DCCFB8] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
-          <Sparkles size={18} className="text-[#684B35] absolute top-4 right-4" />
-          <p className="text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">Top Match</p>
-          <div>
-            <p className="text-xl font-bold text-[#0D2E18]">{topProfile?.mostOrderedItem ?? "None"}</p>
-            <p className="text-xs text-[#8C7A64]">{topProfile?.customerName ?? "No customer signal"}</p>
-          </div>
-        </div>
-
-        {/* Card 3 — Avg Score */}
-        <div className="bg-[#E6F2E8] border border-[#0F441D]/15 rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
-          <Percent size={18} className="text-[#0F441D]/50 absolute top-4 right-4" />
-          <p className="text-[10px] uppercase tracking-[0.12em] text-[#0F441D]/60">Avg Score</p>
-          <div>
-            <p className="text-3xl font-bold font-mono text-[#0F441D]">{Math.round(averagePreference * 100)}%</p>
-            <p className="text-xs text-[#0F441D]/50">Preference confidence</p>
-          </div>
-        </div>
-
-        {/* Card 4 — Rated Profiles */}
-        <div className="bg-[#FFF8EF] border border-[#DCCFB8] rounded-2xl p-4 relative flex flex-col justify-between min-h-[100px]">
-          <Star size={18} className="text-[#684B35] absolute top-4 right-4" />
-          <p className="text-[10px] uppercase tracking-[0.12em] text-[#8C7A64]">Rated Profiles</p>
-          <div>
-            <p className="text-3xl font-bold font-mono text-[#0D2E18]">{ratedProfiles}</p>
-            <p className="text-xs text-[#8C7A64]">With feedback signal</p>
-          </div>
-        </div>
-      </div>
+        </InsightCard>
+      ) : null}
 
       <InsightCard className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3">
           <div>
             <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-              Preference Engine
+              Profiles
             </p>
             <h2 className="mt-1 font-sans text-lg font-black text-[#0D2E18]">
-              Customer Profiles + Top-N Recommendations
+              Top recommendations
             </h2>
           </div>
           <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
-            50% frequency · 30% recency · 20% feedback
+            Top 6
           </span>
         </div>
 
         <div className="divide-y divide-[#EFE3CF]">
-          {profiles.slice(0, 6).map((profile, index) => (
-            <article
+          {visibleProfiles.map((profile, index) => {
+            const isSelected = selectedProfile?.customerId === profile.customerId;
+
+            return (
+            <button
               key={profile.customerId}
-              className="grid gap-4 px-4 py-4 xl:grid-cols-[42px_64px_minmax(180px,0.9fr)_minmax(280px,1.35fr)_92px]"
+              type="button"
+              onClick={() => setSelectedCustomerId(profile.customerId)}
+              className={`grid w-full gap-4 px-4 py-4 text-left transition hover:bg-[#FFF8EF] xl:grid-cols-[42px_64px_minmax(180px,0.9fr)_minmax(280px,1fr)_92px] ${
+                isSelected ? "bg-[#E6F2E8]" : ""
+              }`}
             >
               <span className="font-sans text-sm font-black text-[#8C7A64]">
                 #{index + 1}
@@ -737,8 +704,9 @@ export function CustomerPreferenceView({
                   Pref Score
                 </p>
               </div>
-            </article>
-          ))}
+            </button>
+            );
+          })}
           {profiles.length === 0 ? <EmptyState label="No customer order data yet" /> : null}
         </div>
       </InsightCard>

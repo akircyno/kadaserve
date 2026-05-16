@@ -1,5 +1,5 @@
-const fallbackStoreLat = 14.5995;
-const fallbackStoreLng = 120.9842;
+const fallbackStoreLat = 14.851595;
+const fallbackStoreLng = 120.288585;
 
 function parseCoordinate(value: string | undefined, fallback: number) {
   if (!value?.trim()) {

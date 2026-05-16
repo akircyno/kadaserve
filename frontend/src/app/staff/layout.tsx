@@ -240,7 +240,7 @@ export default function StaffLayout({
                 </h1>
                 <p className="mt-0.5 max-w-[42rem] truncate font-sans text-sm font-medium text-[#7D6B55]">
                   {isEncodeOrder
-                    ? "Create walk-in pickup or delivery orders"
+                    ? "Create walk-in counter orders"
                     : isOrderHistory
                     ? "View past orders, search, and manage historical records"
                     : "Manage and monitor customer orders in real time"}

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bell,
   Camera,
   ChevronDown,
   ChevronLeft,
@@ -21,7 +22,6 @@ import {
   History,
   House,
   Languages,
-  MessageSquareText,
   Search,
   Settings,
   ShoppingCart,
@@ -29,7 +29,6 @@ import {
   Sparkles,
   Star,
   ShieldCheck,
-  LogOut,
   X,
   Minus,
   Plus,
@@ -37,6 +36,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
@@ -46,6 +46,11 @@ import {
   type RecommendationMenuItem,
   type RecommendationOrder,
 } from "@/lib/recommendations";
+import {
+  formatNutritionMetric,
+  getMenuItemNutrition,
+  nutritionMetricLabels,
+} from "@/lib/nutrition";
 import type { CustomerMenuItem } from "@/types/menu";
 import type { CustomerOrder } from "@/types/orders";
 import type { FeedbackItem } from "@/types/feedback";
@@ -120,48 +125,71 @@ type MenuRecommendationCard = {
   score: number;
 };
 
+type CustomerNotification = {
+  id: string;
+  kind: "order" | "receipt" | "feedback";
+  typeLabel: string;
+  timestamp: string;
+  title: string;
+  body: string;
+  actionLabel: string;
+  orderId: string;
+  receipt?: {
+    itemsTotal: number;
+    deliveryFee: number;
+    grandTotal: number;
+    paymentMethod: string;
+    itemLines: string[];
+  };
+};
+
+type ReopenableQrPhPayment = {
+  orderId: string;
+  qrCodeImageUrl: string;
+  qrCodeLabel: string;
+  totalAmount: number;
+  expiresInMinutes: number;
+};
 
 const sections: Array<{
   id: Section;
   label: string;
   icon: typeof CupSoda;
 }> = [
-    { id: "home", label: "Home", icon: House },
-    { id: "menu", label: "Menu", icon: CupSoda },
-    { id: "orders", label: "My Orders", icon: ClipboardList },
-    { id: "feedback", label: "Feedback", icon: MessageSquareText },
-  ];
+  { id: "home", label: "Home", icon: House },
+  { id: "menu", label: "Menu", icon: CupSoda },
+  { id: "orders", label: "My Orders", icon: ClipboardList },
+];
 
 const mobileTabs: Array<
   | {
-    kind: "section";
-    id: Section;
-    label: string;
-    icon: typeof CupSoda;
-  }
+      kind: "section";
+      id: Section;
+      label: string;
+      icon: typeof CupSoda;
+    }
   | {
-    kind: "profile";
-    label: string;
-    icon: typeof UserRound;
-  }
+      kind: "profile";
+      label: string;
+      icon: typeof UserRound;
+    }
 > = [
-    { kind: "section", id: "home", label: "Home", icon: House },
-    { kind: "section", id: "menu", label: "Menu", icon: CupSoda },
-    { kind: "section", id: "orders", label: "Orders", icon: ClipboardList },
-    { kind: "section", id: "feedback", label: "Feedback", icon: MessageSquareText },
-    { kind: "profile", label: "Profile", icon: UserRound },
-  ];
+  { kind: "section", id: "home", label: "Home", icon: House },
+  { kind: "section", id: "menu", label: "Menu", icon: CupSoda },
+  { kind: "section", id: "orders", label: "Orders", icon: ClipboardList },
+  { kind: "profile", label: "Profile", icon: UserRound },
+];
 
 const menuFilters: Array<{
   value: Exclude<Filter, "latte-series" | "premium-blends">;
   label: string;
 }> = [
-    { value: "all", label: "All" },
-    { value: "coffee", label: "Coffee" },
-    { value: "non-coffee", label: "Non-Coffee" },
-    { value: "pastries", label: "Pastries" },
-    { value: "best-deals", label: "Best Deals" },
-  ];
+  { value: "all", label: "All" },
+  { value: "coffee", label: "Coffee" },
+  { value: "non-coffee", label: "Non-Coffee" },
+  { value: "pastries", label: "Pastries" },
+  { value: "best-deals", label: "Best Deals" },
+];
 
 const sugarLevels = [
   { label: "0%", value: 0 },
@@ -194,33 +222,22 @@ const customerSplashSessionKey = "kadaserve_show_customer_splash";
 const feedbackDismissedOrdersStorageKey =
   "kadaserve_feedback_dismissed_orders";
 const feedbackMaybeLaterStorageKey = "kadaserve_feedback_maybe_later_orders";
+const notificationsReadStorageKey = "kadaserve_read_notifications";
 const feedbackMaybeLaterDelayMs = 30 * 60 * 1000;
 const promotionImages = [
   "/images/promotions/promotion1.png",
   "/images/promotions/promotion2.png",
 ];
 
-const addonCategories = [
-  {
-    title: "Extras",
-    items: [
-      { label: "Extra Coffee", value: "extra_coffee", price: 20 },
-      { label: "Extra Milk", value: "extra_milk", price: 15 },
-      { label: "Extra Sugar", value: "extra_sugar", price: 10 },
-    ],
-  },
-  {
-    title: "Syrups",
-    items: [
-      { label: "Vanilla Syrup", value: "vanilla_syrup", price: 15 },
-      { label: "Caramel Syrup", value: "caramel_syrup", price: 15 },
-      { label: "Hazelnut Syrup", value: "hazelnut_syrup", price: 15 },
-      { label: "Chocolate Syrup", value: "chocolate_syrup", price: 15 },
-    ],
-  },
+const addons = [
+  { label: "Extra Sugar", value: "extra_sugar", price: 10 },
+  { label: "Extra Coffee", value: "extra_coffee", price: 20 },
+  { label: "Extra Milk", value: "extra_milk", price: 15 },
+  { label: "Vanilla Syrup", value: "vanilla_syrup", price: 15 },
+  { label: "Caramel Syrup", value: "caramel_syrup", price: 15 },
+  { label: "Hazelnut Syrup", value: "hazelnut_syrup", price: 15 },
+  { label: "Chocolate Syrup", value: "chocolate_syrup", price: 15 },
 ];
-
-const addons = addonCategories.flatMap((category) => category.items);
 
 function formatPrice(value: number) {
   return `₱${Math.round(value)}`;
@@ -235,6 +252,39 @@ function formatTime(value: string) {
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatNotificationTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Just now";
+  }
+
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const time = date.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (isToday) {
+    return `Today, ${time}`;
+  }
+
+  if (isYesterday) {
+    return `Yesterday, ${time}`;
+  }
+
+  return date.toLocaleString("en-PH", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -373,6 +423,168 @@ function formatStatus(status: CustomerOrder["status"]) {
     default:
       return status;
   }
+}
+
+function getOrderNotificationTitle(order: CustomerOrder) {
+  switch (order.status) {
+    case "pending_payment":
+      return "Payment is pending";
+    case "pending":
+      return "Order received";
+    case "preparing":
+      return "Your order is being prepared";
+    case "ready":
+      return order.order_type === "pickup"
+        ? "Ready for pickup"
+        : "Order is ready";
+    case "out_for_delivery":
+      return "Order is out for delivery";
+    default:
+      return `${formatStatus(order.status)} order`;
+  }
+}
+
+function getOrderNotificationBody(order: CustomerOrder) {
+  const itemSummary = formatOrderItemSummary(
+    order.order_items
+      .map((item) => item.menu_items?.name)
+      .filter(Boolean) as string[]
+  );
+
+  if (order.status === "ready" && order.order_type === "pickup") {
+    return `${formatOrderCode(order.id)} is ready at the cafe counter. ${itemSummary}`;
+  }
+
+  if (order.status === "out_for_delivery") {
+    return `${formatOrderCode(order.id)} is on the way. ${itemSummary}`;
+  }
+
+  return `${formatOrderCode(order.id)} is ${formatStatus(
+    order.status
+  ).toLowerCase()}. ${itemSummary}`;
+}
+
+function getCustomerPaymentMethodLabel(method?: CustomerOrder["payment_method"]) {
+  switch (method) {
+    case "cash":
+      return "Cash";
+    case "gcash":
+      return "GCash";
+    case "online":
+      return "Online Payment";
+    default:
+      return "Payment";
+  }
+}
+
+function getNotificationTimestamp(order: CustomerOrder) {
+  return order.updated_at || order.ordered_at;
+}
+
+function getOrderReceipt(order: CustomerOrder) {
+  const deliveryFee =
+    order.order_type === "delivery" ? Number(order.delivery_fee ?? 0) : 0;
+  const itemLines = order.order_items.map((item) => {
+    const name = item.menu_items?.name ?? "Menu item";
+    const total = Number(item.unit_price ?? 0) * item.quantity;
+
+    return `${name} x ${item.quantity} - ${formatPrice(total)}`;
+  });
+  const itemsTotal =
+    order.order_items.length > 0
+      ? order.order_items.reduce(
+          (sum, item) => sum + Number(item.unit_price ?? 0) * item.quantity,
+          0
+        )
+      : Math.max(0, Number(order.total_amount ?? 0) - deliveryFee);
+
+  return {
+    itemsTotal,
+    deliveryFee,
+    grandTotal: Number(order.total_amount ?? 0),
+    paymentMethod: getCustomerPaymentMethodLabel(order.payment_method),
+    itemLines,
+  };
+}
+
+function getReopenableQrPhPayment(order: CustomerOrder | null) {
+  if (
+    !order ||
+    order.status !== "pending_payment" ||
+    order.payment_method !== "online" ||
+    order.payment_status !== "unpaid" ||
+    !order.paymongo_qr_code_image_url
+  ) {
+    return null;
+  }
+
+  const expiresAt = order.paymongo_qr_expires_at
+    ? new Date(order.paymongo_qr_expires_at).getTime()
+    : 0;
+
+  if (expiresAt && expiresAt <= Date.now()) {
+    return null;
+  }
+
+  return {
+    orderId: order.id,
+    qrCodeImageUrl: order.paymongo_qr_code_image_url,
+    qrCodeLabel: order.paymongo_qr_code_label || "KadaServe QR Ph",
+    totalAmount: order.total_amount,
+    expiresInMinutes: expiresAt
+      ? Math.max(1, Math.ceil((expiresAt - Date.now()) / 60000))
+      : 30,
+  };
+}
+
+function hasExpiredQrPhPayment(order: CustomerOrder | null) {
+  if (
+    !order ||
+    order.status !== "pending_payment" ||
+    order.payment_method !== "online" ||
+    order.payment_status !== "unpaid" ||
+    !order.paymongo_qr_expires_at
+  ) {
+    return false;
+  }
+
+  return new Date(order.paymongo_qr_expires_at).getTime() <= Date.now();
+}
+
+function isAwaitingOnlinePayment(order: CustomerOrder | null) {
+  return (
+    order?.status === "pending_payment" &&
+    order.payment_method === "online" &&
+    order.payment_status === "unpaid"
+  );
+}
+
+function canCustomerCancelOrder(order: CustomerOrder | null) {
+  if (!order || order.payment_status === "paid") {
+    return false;
+  }
+
+  return order.status === "pending" || order.status === "pending_payment";
+}
+
+function getCustomerCancelHelp(order: CustomerOrder) {
+  if (order.status === "pending_payment") {
+    return "You can cancel this unpaid online order before payment is confirmed.";
+  }
+
+  return "You can cancel this order before staff starts preparing it.";
+}
+
+function getCustomerCancelUnavailableMessage(order: CustomerOrder) {
+  if (["cancelled", "expired", "completed", "delivered"].includes(order.status)) {
+    return "";
+  }
+
+  if (order.payment_status === "paid") {
+    return "Paid orders cannot be cancelled here. Please contact staff for assistance.";
+  }
+
+  return "Cancellation closes once staff starts preparing the order.";
 }
 
 function getEmoji(item: CustomerMenuItem) {
@@ -677,6 +889,7 @@ export function CustomerDashboard({
 }: CustomerDashboardProps) {
 
   const router = useRouter();
+  const { showToast } = useToast();
   const { addItem, cartCount, items: cartItems } = useCart();
   const [customerOrders, setCustomerOrders] = useState(orders);
   const [isOrderSyncing, setIsOrderSyncing] = useState(false);
@@ -687,7 +900,6 @@ export function CustomerDashboard({
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [activePromotionIndex, setActivePromotionIndex] = useState(0);
-  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCartTrayOpen, setIsCartTrayOpen] = useState(false);
   const [quickAddFeedback, setQuickAddFeedback] = useState<{
@@ -713,6 +925,9 @@ export function CustomerDashboard({
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [selectedCurrentOrderId, setSelectedCurrentOrderId] = useState<string | null>(null);
   const [trackingActionMessage, setTrackingActionMessage] = useState("");
+  const [qrPhPayment, setQrPhPayment] = useState<ReopenableQrPhPayment | null>(
+    null
+  );
   const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
@@ -751,6 +966,14 @@ export function CustomerDashboard({
   const [openProfileFaq, setOpenProfileFaq] = useState<ProfileFaq | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSettingsMessage, setProfileSettingsMessage] = useState("");
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return readStoredOrderIds(notificationsReadStorageKey);
+  });
   const profileInitials = getInitials(displayProfileName);
   const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
@@ -1055,10 +1278,20 @@ export function CustomerDashboard({
 
       if (!response.ok) {
         setFeedbackMessage(result.error || "Failed to submit feedback.");
+        showToast({
+          title: "Feedback not sent",
+          description: result.error || "Please try again.",
+          variant: "error",
+        });
         return;
       }
 
       setFeedbackMessage("Feedback submitted successfully.");
+      showToast({
+        title: "Feedback submitted",
+        description: "Thanks. Your rating will improve future recommendations.",
+        variant: "success",
+      });
       markFeedbackOrderDismissed(selectedFeedbackItem.order_id);
       setIsFeedbackPromptOpen(false);
       setSelectedFeedbackOrderId(null);
@@ -1069,6 +1302,11 @@ export function CustomerDashboard({
       router.refresh();
     } catch {
       setFeedbackMessage("Something went wrong while submitting feedback.");
+      showToast({
+        title: "Feedback not sent",
+        description: "Something went wrong while submitting feedback.",
+        variant: "error",
+      });
     } finally {
       setIsSubmittingFeedback(false);
     }
@@ -1175,6 +1413,13 @@ export function CustomerDashboard({
         : null,
     [customerOrders, trackingOrderId]
   );
+  const trackingQrPhPayment = getReopenableQrPhPayment(trackingOrder);
+  const isTrackingQrPhExpired = hasExpiredQrPhPayment(trackingOrder);
+  const isTrackingOnlinePaymentPending = isAwaitingOnlinePayment(trackingOrder);
+  const canCancelTrackingOrder = canCustomerCancelOrder(trackingOrder);
+  const cancelUnavailableMessage = trackingOrder
+    ? getCustomerCancelUnavailableMessage(trackingOrder)
+    : "";
   const trackingOrderStep = trackingOrder
     ? getOrderStepIndex(trackingOrder.status)
     : 0;
@@ -1189,18 +1434,18 @@ export function CustomerDashboard({
           name: menuItem?.name ?? "Menu item",
           imageUrl: menuItem
             ? getMenuImage({
-              id: menuItem.id ?? item.id,
-              name: menuItem.name,
-              description: menuItem.description ?? null,
-              category: menuItem.category ?? "",
-              base_price: Number(menuItem.base_price ?? item.unit_price ?? 0),
-              image_url: menuItem.image_url ?? null,
-              is_available: menuItem.is_available ?? true,
-              has_sugar_level: menuItem.has_sugar_level,
-              has_ice_level: menuItem.has_ice_level,
-              has_size_option: menuItem.has_size_option,
-              has_temp_option: menuItem.has_temp_option,
-            })
+                id: menuItem.id ?? item.id,
+                name: menuItem.name,
+                description: menuItem.description ?? null,
+                category: menuItem.category ?? "",
+                base_price: Number(menuItem.base_price ?? item.unit_price ?? 0),
+                image_url: menuItem.image_url ?? null,
+                is_available: menuItem.is_available ?? true,
+                has_sugar_level: menuItem.has_sugar_level,
+                has_ice_level: menuItem.has_ice_level,
+                has_size_option: menuItem.has_size_option,
+                has_temp_option: menuItem.has_temp_option,
+              })
             : null,
         };
       })
@@ -1208,25 +1453,109 @@ export function CustomerDashboard({
   const orderSyncLabel = isOrderSyncing
     ? "Syncing order status..."
     : lastOrderSyncAt
-      ? `Last updated ${lastOrderSyncAt.toLocaleTimeString("en-PH", {
+    ? `Last updated ${lastOrderSyncAt.toLocaleTimeString("en-PH", {
         hour: "numeric",
         minute: "2-digit",
       })}`
-      : "Automatic updates enabled";
+    : "Automatic updates enabled";
   const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
   const hasOrderAttention = currentOrders.some((order) =>
     ["preparing", "ready", "out_for_delivery"].includes(order.status)
   );
+  const notifications = useMemo<CustomerNotification[]>(() => {
+    if (!isAuthenticated) {
+      return [];
+    }
+
+    const orderNotifications = currentOrders.map((order) => ({
+      id: `order:${order.id}:${order.status}`,
+      kind: "order" as const,
+      typeLabel: formatStatus(order.status),
+      timestamp: getNotificationTimestamp(order),
+      title: getOrderNotificationTitle(order),
+      body: getOrderNotificationBody(order),
+      actionLabel: "Track order",
+      orderId: order.id,
+    }));
+    const receiptNotifications = orderHistory
+      .filter((order) => ["completed", "delivered"].includes(order.status))
+      .map((order) => {
+        const receipt = getOrderReceipt(order);
+
+        return {
+          id: `receipt:${order.id}:${order.status}:${order.payment_status ?? "unpaid"}`,
+          kind: "receipt" as const,
+          typeLabel: "Receipt",
+          timestamp: getNotificationTimestamp(order),
+          title: "Receipt and order details",
+          body: `${formatOrderCode(order.id)} is ${formatStatus(
+            order.status
+          ).toLowerCase()}. Total ${formatPrice(receipt.grandTotal)} via ${
+            receipt.paymentMethod
+          }.`,
+          actionLabel: "View order",
+          orderId: order.id,
+          receipt,
+        };
+      });
+    const feedbackOrderIds = Array.from(
+      new Set(feedbackItems.map((item) => item.order_id))
+    );
+    const feedbackNotifications = feedbackOrderIds
+      .filter((orderId) => isFeedbackPromptAllowed(orderId))
+      .map((orderId) => {
+        const feedbackItem = getFeedbackItemForOrder(orderId);
+
+        return {
+          id: `feedback:${orderId}`,
+          kind: "feedback" as const,
+          typeLabel: "Feedback",
+          timestamp:
+            customerOrders.find((order) => order.id === orderId)?.updated_at ||
+            customerOrders.find((order) => order.id === orderId)?.ordered_at ||
+            new Date().toISOString(),
+          title: "Rate your recent order",
+          body: feedbackItem
+            ? `Tell us how ${feedbackItem.item_name} tasted so recommendations improve.`
+            : "Your feedback helps improve future recommendations.",
+          actionLabel: "Give feedback",
+          orderId,
+        };
+      });
+
+    return [...orderNotifications, ...receiptNotifications, ...feedbackNotifications]
+      .sort(
+        (first, second) =>
+          new Date(second.timestamp).getTime() -
+          new Date(first.timestamp).getTime()
+      );
+  }, [
+    customerOrders,
+    currentOrders,
+    feedbackItems,
+    getFeedbackItemForOrder,
+    isAuthenticated,
+    isFeedbackPromptAllowed,
+    orderHistory,
+  ]);
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !readNotificationIds.includes(notification.id)
+  ).length;
+
+  useEffect(() => {
+    writeStoredOrderIds(notificationsReadStorageKey, readNotificationIds);
+  }, [readNotificationIds]);
 
   useEffect(() => {
     document.body.style.overflow =
       selectedMenuItem ||
-        isProfileOpen ||
-        isFeedbackPromptOpen ||
-        trackingOrder ||
-        isSplashVisible ||
-        isTaglineVisible ||
-        isOnboardingOpen
+      isProfileOpen ||
+      isNotificationsOpen ||
+      isFeedbackPromptOpen ||
+      trackingOrder ||
+      isSplashVisible ||
+      isTaglineVisible ||
+      isOnboardingOpen
         ? "hidden"
         : "";
 
@@ -1235,6 +1564,7 @@ export function CustomerDashboard({
     };
   }, [
     isFeedbackPromptOpen,
+    isNotificationsOpen,
     isOnboardingOpen,
     isProfileOpen,
     isSplashVisible,
@@ -1313,19 +1643,19 @@ export function CustomerDashboard({
   const recommendedItems = recommendationProfile.recommendations.reduce<
     MenuRecommendationCard[]
   >((items, recommendation) => {
-    const item = uniqueMenuItems.find(
-      (menuItem) => menuItem.id === recommendation.item.id
-    );
+      const item = uniqueMenuItems.find(
+        (menuItem) => menuItem.id === recommendation.item.id
+      );
 
-    if (item) {
-      items.push({
-        ...recommendation,
-        item,
-      });
-    }
+      if (item) {
+        items.push({
+          ...recommendation,
+          item,
+        });
+      }
 
-    return items;
-  }, []);
+      return items;
+    }, []);
   const persistedRecommendedItems: MenuRecommendationCard[] = topRecommendations.map((recommendation) => {
     const item =
       uniqueMenuItems.find((menuItem) => menuItem.id === recommendation.item_id) ??
@@ -1389,8 +1719,8 @@ export function CustomerDashboard({
     currentHour < 12
       ? "Good morning"
       : currentHour < 18
-        ? "Good afternoon"
-        : "Good evening";
+      ? "Good afternoon"
+      : "Good evening";
   const feedbackMissionAvailable = feedbackItems.length > 0;
   const activePromotionImage =
     promotionImages[activePromotionIndex] ?? promotionImages[0];
@@ -1532,6 +1862,14 @@ export function CustomerDashboard({
   const customizeTotal = selectedMenuItem
     ? (selectedMenuItem.base_price + addonTotal + sizeCharge) * quantity
     : 0;
+  const selectedNutrition = selectedMenuItem
+    ? getMenuItemNutrition(selectedMenuItem, {
+        sugarLevel:
+          selectedMenuItem.has_sugar_level === false ? 100 : sugarLevel,
+        size,
+        addons: selectedAddons,
+      })
+    : null;
 
   useEffect(() => {
     if (
@@ -1597,6 +1935,11 @@ export function CustomerDashboard({
     }
 
     setGuestActionMessage(message);
+    showToast({
+      title: "Login required",
+      description: message,
+      variant: "info",
+    });
     const callbackUrl = `${window.location.pathname}${window.location.search}`;
     router.push(
       `/login?callbackUrl=${encodeURIComponent(
@@ -1672,6 +2015,11 @@ export function CustomerDashboard({
 
     navigator.vibrate?.(18);
     setCustomizeMessage("Added to cart.");
+    showToast({
+      title: "Added to cart",
+      description: `${selectedMenuItem.name} is ready for checkout.`,
+      variant: "success",
+    });
 
     window.setTimeout(() => {
       closeCustomizeModal();
@@ -1786,8 +2134,17 @@ export function CustomerDashboard({
     setTrackingActionMessage("");
   }
 
+  function openTrackedQrPhPayment() {
+    if (!trackingQrPhPayment) {
+      setTrackingActionMessage("QR expired. Please place a new order.");
+      return;
+    }
+
+    setQrPhPayment(trackingQrPhPayment);
+  }
+
   async function handleCancelTrackedOrder() {
-    if (!trackingOrder || trackingOrder.status !== "pending") {
+    if (!trackingOrder || !canCancelTrackingOrder) {
       return;
     }
 
@@ -1809,6 +2166,11 @@ export function CustomerDashboard({
 
       if (!response.ok || !result.order) {
         setTrackingActionMessage(result.error || "Failed to cancel order.");
+        showToast({
+          title: "Order not cancelled",
+          description: result.error || "Failed to cancel order.",
+          variant: "error",
+        });
         return;
       }
 
@@ -1817,12 +2179,25 @@ export function CustomerDashboard({
           order.id === trackingOrder.id ? { ...order, status: "cancelled" } : order
         )
       );
+      setQrPhPayment((current) =>
+        current?.orderId === trackingOrder.id ? null : current
+      );
       setTrackingActionMessage("Order cancelled. Staff and admin are updated.");
+      showToast({
+        title: "Order cancelled",
+        description: `${formatOrderCode(trackingOrder.id)} moved out of the active queue.`,
+        variant: "success",
+      });
       window.setTimeout(() => {
         closeTrackingModal();
       }, 650);
     } catch {
       setTrackingActionMessage("Something went wrong while cancelling the order.");
+      showToast({
+        title: "Order not cancelled",
+        description: "Something went wrong while cancelling the order.",
+        variant: "error",
+      });
     } finally {
       setIsCancellingTrackedOrder(false);
     }
@@ -1838,11 +2213,21 @@ export function CustomerDashboard({
 
     if (!file.type.startsWith("image/")) {
       setAvatarMessage("Please choose an image file.");
+      showToast({
+        title: "Invalid file",
+        description: "Please choose an image file.",
+        variant: "error",
+      });
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
       setAvatarMessage("Profile picture must be 2MB or smaller.");
+      showToast({
+        title: "Image too large",
+        description: "Profile picture must be 2MB or smaller.",
+        variant: "error",
+      });
       return;
     }
 
@@ -1862,14 +2247,28 @@ export function CustomerDashboard({
 
       if (!response.ok) {
         setAvatarMessage(result.error || "Failed to upload profile picture.");
+        showToast({
+          title: "Photo not updated",
+          description: result.error || "Failed to upload profile picture.",
+          variant: "error",
+        });
         return;
       }
 
       setProfileAvatarUrl(result.avatarUrl ?? "");
       setAvatarMessage("Profile picture updated.");
+      showToast({
+        title: "Profile photo updated",
+        variant: "success",
+      });
       router.refresh();
     } catch {
       setAvatarMessage("Something went wrong while uploading your photo.");
+      showToast({
+        title: "Photo not updated",
+        description: "Something went wrong while uploading your photo.",
+        variant: "error",
+      });
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -1901,15 +2300,30 @@ export function CustomerDashboard({
         setProfileSettingsMessage(
           result.error || "Failed to save profile changes."
         );
+        showToast({
+          title: "Profile not saved",
+          description: result.error || "Failed to save profile changes.",
+          variant: "error",
+        });
         return;
       }
 
       setDisplayProfileName(result.profile?.fullName ?? normalizedProfileName);
       setProfilePhoneDraft(formatProfilePhone(result.profile?.phone ?? ""));
       setProfileSettingsMessage("Profile changes saved.");
+      showToast({
+        title: "Profile saved",
+        description: "Your customer details were updated.",
+        variant: "success",
+      });
       router.refresh();
     } catch {
       setProfileSettingsMessage("Something went wrong while saving profile.");
+      showToast({
+        title: "Profile not saved",
+        description: "Something went wrong while saving profile.",
+        variant: "error",
+      });
     } finally {
       setIsSavingProfile(false);
     }
@@ -1927,7 +2341,6 @@ export function CustomerDashboard({
       router.refresh();
     } finally {
       setIsLoggingOut(false);
-      setIsLogoutConfirmOpen(false);
     }
   }
 
@@ -1947,6 +2360,38 @@ export function CustomerDashboard({
 
     setActiveSection(section);
     setIsSidebarOpen(false);
+  }
+
+  function openNotifications() {
+    if (!requireCustomerAccount("Login to view notifications.")) {
+      return;
+    }
+
+    setIsNotificationsOpen(true);
+    setReadNotificationIds((current) => [
+      ...new Set([...current, ...notifications.map((item) => item.id)]),
+    ]);
+  }
+
+  function closeNotifications() {
+    setIsNotificationsOpen(false);
+  }
+
+  function handleNotificationAction(notification: CustomerNotification) {
+    setReadNotificationIds((current) => [
+      ...new Set([...current, notification.id]),
+    ]);
+    setIsNotificationsOpen(false);
+
+    if (notification.kind === "feedback") {
+      if (!openFeedbackPromptForOrder(notification.orderId)) {
+        handleSectionClick("orders");
+      }
+
+      return;
+    }
+
+    openTrackingModal(notification.orderId);
   }
 
   function finishOnboarding() {
@@ -2014,6 +2459,11 @@ export function CustomerDashboard({
 
     if (!feedbackItem) {
       setFeedbackMessage("Feedback for this order is already complete.");
+      showToast({
+        title: "Feedback already complete",
+        description: "There is no pending feedback item for this order.",
+        variant: "info",
+      });
       return;
     }
 
@@ -2059,21 +2509,19 @@ export function CustomerDashboard({
   return (
     <main className="min-h-screen bg-[#F8EBCF] text-[#123E26]">
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-[72px] shrink-0 flex-col items-center justify-between rounded-r-[24px] bg-[#083C1F] px-2 py-5 text-white sm:w-[82px] md:flex">
-          <div className="flex w-full flex-col items-center gap-3">
+        <aside className="hidden w-[72px] shrink-0 flex-col items-center rounded-r-[24px] bg-[#083C1F] px-2 py-4 text-white sm:w-[82px] md:flex">
+          <div className="flex w-full flex-col items-center gap-4">
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0F4A27] transition-all duration-300 hover:bg-[#145C32] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0F4A27]"
             >
-              <span className="space-y-1.5">
-                <span className="block h-0.5 w-4 rounded-full bg-current transition-all duration-300" />
-                <span className="block h-0.5 w-5 rounded-full bg-current transition-all duration-300" />
-                <span className="block h-0.5 w-3 rounded-full bg-current transition-all duration-300" />
+              <span className="space-y-1">
+                <span className="block h-0.5 w-4 rounded bg-current" />
+                <span className="block h-0.5 w-6 rounded bg-current" />
+                <span className="block h-0.5 w-3 rounded bg-current" />
               </span>
             </button>
-
-            <div className="my-1 h-px w-8 rounded-full bg-white/10" />
 
             {sections.map(({ id, icon: Icon, label }) => {
               const isActive = activeSection === id;
@@ -2084,10 +2532,11 @@ export function CustomerDashboard({
                   type="button"
                   title={label}
                   onClick={() => handleSectionClick(id)}
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300 ${isActive
-                    ? "bg-[#FFF0D8] text-[#0B3F22] shadow-[0_4px_16px_rgba(255,240,216,0.25)]"
-                    : "text-[#F7EED8]/70 hover:bg-[#0F4A27] hover:text-[#F7EED8]"
-                    }`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition ${
+                    isActive
+                      ? "bg-[#FFF0D8] text-[#0B3F22]"
+                      : "text-[#F7EED8] hover:bg-[#0F4A27]"
+                  }`}
                 >
                   <Icon size={21} />
                 </button>
@@ -2095,23 +2544,14 @@ export function CustomerDashboard({
             })}
           </div>
 
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-px w-8 rounded-full bg-white/10" />
-            <button
-              type="button"
-              onClick={() => {
-                if (!requireCustomerAccount("Login to open your profile.")) {
-                  return;
-                }
-                setIsSidebarOpen(false);
-                setIsProfileOpen(true);
-              }}
-              className="flex h-12 w-12 items-center justify-center rounded-2xl text-[#F7EED8]/70 transition-all duration-300 hover:bg-[#0F4A27] hover:text-[#F7EED8]"
-              title="Profile"
-            >
-              <UserRound size={21} />
-            </button>
-          </div>
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            className="hidden"
+          >
+            ←
+          </button>
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col">
@@ -2129,40 +2569,56 @@ export function CustomerDashboard({
               <span aria-hidden="true" className="h-11 w-11" />
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                if (!requireCustomerAccount("Login to open your profile.")) {
-                  return;
-                }
-
-                setIsSidebarOpen(false);
-                setIsProfileOpen(true);
-              }}
-              className="hidden max-w-[210px] items-center gap-3 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:bg-[#FFF0DA] sm:flex"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#123E26] font-sans text-sm font-black text-[#FFF0D8]">
-                {profileAvatarUrl ? (
-                  <span
-                    aria-hidden="true"
-                    className="h-full w-full bg-cover bg-center"
-                    style={{ backgroundImage: `url(${profileAvatarUrl})` }}
-                  />
-                ) : (
-                  profileInitials
-                )}
-              </span>
-              <span className="hidden min-w-0 sm:block">
-                <span className="block truncate font-sans text-sm font-bold leading-tight text-[#123E26]">
-                  {displayProfileName}
-                </span>
-                {profileEmail ? (
-                  <span className="block truncate font-sans text-[11px] leading-tight text-[#8A755D]">
-                    {profileEmail}
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={openNotifications}
+                aria-label="Open notifications"
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-[#FFF0DA]"
+              >
+                <Bell size={19} />
+                {unreadNotificationCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
                   </span>
                 ) : null}
-              </span>
-            </button>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!requireCustomerAccount("Login to open your profile.")) {
+                    return;
+                  }
+
+                  setIsSidebarOpen(false);
+                  setIsProfileOpen(true);
+                }}
+                className="hidden max-w-[210px] items-center gap-3 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:bg-[#FFF0DA] sm:flex"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#123E26] font-sans text-sm font-black text-[#FFF0D8]">
+                  {profileAvatarUrl ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-full w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${profileAvatarUrl})` }}
+                    />
+                  ) : (
+                    profileInitials
+                  )}
+                </span>
+                  <span className="hidden min-w-0 sm:block">
+                  <span className="block truncate font-sans text-sm font-bold leading-tight text-[#123E26]">
+                    {displayProfileName}
+                  </span>
+                  {profileEmail ? (
+                    <span className="block truncate font-sans text-[11px] leading-tight text-[#8A755D]">
+                      {profileEmail}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </div>
           </header>
 
           {isSearchOpen ? (
@@ -2201,9 +2657,26 @@ export function CustomerDashboard({
                       Menu
                     </h1>
                   </div>
-                  <span className="shrink-0 rounded-full border border-[#0D2E18] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.14)]">
-                    {filteredMenu.length} item{filteredMenu.length === 1 ? "" : "s"}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openNotifications}
+                      aria-label="Open notifications"
+                      className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-white sm:hidden"
+                    >
+                      <Bell size={18} />
+                      {unreadNotificationCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+                          {unreadNotificationCount > 9
+                            ? "9+"
+                            : unreadNotificationCount}
+                        </span>
+                      ) : null}
+                    </button>
+                    <span className="rounded-full border border-[#0D2E18] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.14)]">
+                      {filteredMenu.length} item{filteredMenu.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
                 <div className="mb-3 flex items-center gap-2 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5 shadow-sm transition focus-within:border-[#0D2E18] focus-within:ring-2 focus-within:ring-[#0D2E18]/10">
                   <Search size={17} className="shrink-0 text-[#0D2E18]" />
@@ -2233,17 +2706,19 @@ export function CustomerDashboard({
                       aria-current={
                         activeMenuFilter === item.value ? "true" : undefined
                       }
-                      className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${activeMenuFilter === item.value
-                        ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
-                        : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
-                        }`}
+                      className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
+                        activeMenuFilter === item.value
+                          ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                          : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
+                      }`}
                     >
                       <span>{item.label}</span>
                       <span
-                        className={`ml-2 rounded-full px-2 py-0.5 text-xs ${activeMenuFilter === item.value
-                          ? "bg-[#FFF0DA]/18 text-[#FFF0DA]"
-                          : "bg-white text-[#0D2E18]"
-                          }`}
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                          activeMenuFilter === item.value
+                            ? "bg-[#FFF0DA]/18 text-[#FFF0DA]"
+                            : "bg-white text-[#0D2E18]"
+                        }`}
                       >
                         {menuFilterCounts.get(item.value) ?? 0}
                       </span>
@@ -2516,104 +2991,113 @@ export function CustomerDashboard({
                       ) : null}
                     </div>
                   ) : null}
-                  {menuGroups.map((group) => (
-                    <section
-                      key={group.value}
-                      className="scroll-mt-4"
-                    >
-                      <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
-                        {group.label}
-                      </h2>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
-                        {group.items.length === 0 ? (
-                          <div className="col-span-full rounded-[20px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center font-sans text-sm font-semibold text-[#684B35]">
-                            No items in this category yet.
+                    {menuGroups.map((group) => (
+                      <section
+                        key={group.value}
+                        className="scroll-mt-4"
+                      >
+                        <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
+                          {group.label}
+                        </h2>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+                          {group.items.length === 0 ? (
+                            <div className="col-span-full rounded-[20px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center font-sans text-sm font-semibold text-[#684B35]">
+                              No items in this category yet.
+                            </div>
+                          ) : null}
+                          {group.items.map((item) => {
+                            const menuImage = getMenuImage(item);
+                            const isQuickAdded = quickAddFeedback?.itemId === item.id;
+                            const itemNutrition = getMenuItemNutrition(item);
+
+                            return (
+                      <article
+                        key={item.id}
+                        className="relative min-w-0 text-center"
+                      >
+                        {isQuickAdded ? (
+                          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 animate-bounce items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
+                            <CheckCircle2 size={14} />
+                            Added
                           </div>
                         ) : null}
-                        {group.items.map((item) => {
-                          const menuImage = getMenuImage(item);
-                          const isQuickAdded = quickAddFeedback?.itemId === item.id;
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!item.is_available) {
+                              return;
+                            }
 
-                          return (
-                            <article
-                              key={item.id}
-                              className="relative min-w-0 text-center"
-                            >
-                              {isQuickAdded ? (
-                                <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 animate-bounce items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
-                                  <CheckCircle2 size={14} />
-                                  Added
-                                </div>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!item.is_available) {
-                                    return;
-                                  }
+                            if (isPastryMenuItem(item)) {
+                              handleQuickAdd(item);
+                              return;
+                            }
 
-                                  if (isPastryMenuItem(item)) {
-                                    handleQuickAdd(item);
-                                    return;
-                                  }
+                            openCustomizeModal(item);
+                          }}
+                          disabled={!item.is_available}
+                          className="group w-full disabled:cursor-not-allowed"
+                          aria-label={`${
+                            !item.is_available
+                              ? "Unavailable"
+                              : isPastryMenuItem(item)
+                              ? "Add"
+                              : "Customize"
+                          } ${item.name}`}
+                        >
+                          <div className="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center overflow-hidden rounded-full bg-[#F1E7D2] p-2 text-4xl transition group-hover:bg-[#E7F1E6]">
+                            {menuImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={menuImage}
+                                alt={item.name}
+                              className="aspect-square h-full w-full rounded-full object-cover"
+                              />
+                            ) : (
+                              getEmoji(item)
+                            )}
+                          </div>
 
-                                  openCustomizeModal(item);
-                                }}
-                                disabled={!item.is_available}
-                                className="group w-full disabled:cursor-not-allowed"
-                                aria-label={`${!item.is_available
-                                  ? "Unavailable"
-                                  : isPastryMenuItem(item)
-                                    ? "Add"
-                                    : "Customize"
-                                  } ${item.name}`}
-                              >
-                                <div className="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center overflow-hidden rounded-full bg-[#F1E7D2] p-2 text-4xl transition group-hover:bg-[#E7F1E6]">
-                                  {menuImage ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={menuImage}
-                                      alt={item.name}
-                                      className="aspect-square h-full w-full rounded-full object-cover"
-                                    />
-                                  ) : (
-                                    getEmoji(item)
-                                  )}
-                                </div>
-
-                                <span
-                                  className={`mt-3 inline-flex rounded-full px-2 py-1 font-sans text-[9px] font-bold uppercase tracking-[0.12em] ${item.is_available
-                                    ? "bg-[#E9F5E7] text-[#2D7A40]"
-                                    : "bg-[#FBE9E2] text-[#9C543D]"
-                                    }`}
-                                >
-                                  {item.is_available ? "Available" : "Sold out"}
-                                </span>
-                                <h2 className="mx-auto mt-2 line-clamp-2 max-w-[150px] font-sans text-sm font-black leading-tight text-[#123E26]">
-                                  {item.name}
-                                </h2>
-                                <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
-                                  {formatPrice(item.base_price)}
-                                </p>
-                                <span
-                                  className={`mx-auto mt-3 inline-flex h-9 items-center justify-center rounded-full px-4 font-sans text-xs font-black transition ${item.is_available
-                                    ? "bg-[#0D2E18] text-[#FFF0DA] group-hover:bg-[#0F441D]"
-                                    : "bg-[#E7D7BE] text-[#8A755D]"
-                                    }`}
-                                >
-                                  {!item.is_available
-                                    ? "Sold Out"
-                                    : isPastryMenuItem(item)
-                                      ? "Add"
-                                      : "Customize"}
-                                </span>
-                              </button>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
+                          <span
+                            className={`mt-3 inline-flex rounded-full px-2 py-1 font-sans text-[9px] font-bold uppercase tracking-[0.12em] ${
+                              item.is_available
+                                ? "bg-[#E9F5E7] text-[#2D7A40]"
+                                : "bg-[#FBE9E2] text-[#9C543D]"
+                            }`}
+                          >
+                            {item.is_available ? "Available" : "Sold out"}
+                          </span>
+                          <h2 className="mx-auto mt-2 line-clamp-2 max-w-[150px] font-sans text-sm font-black leading-tight text-[#123E26]">
+                            {item.name}
+                          </h2>
+                          <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
+                            {formatPrice(item.base_price)}
+                          </p>
+                          {itemNutrition ? (
+                            <p className="mx-auto mt-1 w-fit rounded-full bg-white/75 px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
+                              {itemNutrition.calories} cal est.
+                            </p>
+                          ) : null}
+                          <span
+                            className={`mx-auto mt-3 inline-flex h-9 items-center justify-center rounded-full px-4 font-sans text-xs font-black transition ${
+                              item.is_available
+                                ? "bg-[#0D2E18] text-[#FFF0DA] group-hover:bg-[#0F441D]"
+                                : "bg-[#E7D7BE] text-[#8A755D]"
+                            }`}
+                          >
+                            {!item.is_available
+                              ? "Sold Out"
+                              : isPastryMenuItem(item)
+                              ? "Add"
+                              : "Customize"}
+                          </span>
+                        </button>
+                      </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
                 </div>
               </div>
             )}
@@ -2683,14 +3167,15 @@ export function CustomerDashboard({
                         </p>
                       </div>
                       <span
-                        className={`rounded-full px-3 py-1.5 text-xs font-black ${activeOrder.status === "ready"
-                          ? "bg-[#E9F5E7] text-[#2D7A40]"
-                          : activeOrder.status === "preparing"
+                        className={`rounded-full px-3 py-1.5 text-xs font-black ${
+                          activeOrder.status === "ready"
+                            ? "bg-[#E9F5E7] text-[#2D7A40]"
+                            : activeOrder.status === "preparing"
                             ? "bg-[#FFF0DA] text-[#B76522]"
                             : activeOrder.status === "out_for_delivery"
-                              ? "bg-[#FFF0E5] text-[#B76522]"
-                              : "bg-[#EEF2F6] text-[#516274]"
-                          }`}
+                            ? "bg-[#FFF0E5] text-[#B76522]"
+                            : "bg-[#EEF2F6] text-[#516274]"
+                        }`}
                       >
                         {formatStatus(activeOrder.status)}
                       </span>
@@ -2711,12 +3196,14 @@ export function CustomerDashboard({
                         return (
                           <div key={step}>
                             <div
-                              className={`h-2 rounded-full transition ${isReached ? "bg-[#123E26]" : "bg-[#E6D8BE]"
-                                } ${isCurrent ? "animate-pulse" : ""}`}
+                              className={`h-2 rounded-full transition ${
+                                isReached ? "bg-[#123E26]" : "bg-[#E6D8BE]"
+                              } ${isCurrent ? "animate-pulse" : ""}`}
                             />
                             <p
-                              className={`mt-2 font-sans text-[10px] font-bold leading-tight ${isReached ? "text-[#123E26]" : "text-[#9A856C]"
-                                }`}
+                              className={`mt-2 font-sans text-[10px] font-bold leading-tight ${
+                                isReached ? "text-[#123E26]" : "text-[#9A856C]"
+                              }`}
                             >
                               {step}
                             </p>
@@ -2776,61 +3263,62 @@ export function CustomerDashboard({
                     <>
                       <div className="space-y-3 md:hidden">
                         {orderHistory.map((order) => {
-                          const itemNames = order.order_items
-                            .map((item) => item.menu_items?.name)
-                            .filter(Boolean) as string[];
-                          const canGiveFeedback = feedbackItems.some(
-                            (item) => item.order_id === order.id
-                          );
+                      const itemNames = order.order_items
+                        .map((item) => item.menu_items?.name)
+                        .filter(Boolean) as string[];
+                      const canGiveFeedback = feedbackItems.some(
+                        (item) => item.order_id === order.id
+                      );
 
-                          return (
-                            <article
-                              key={order.id}
-                              className="rounded-[22px] bg-white p-4 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                      return (
+                        <article
+                          key={order.id}
+                          className="rounded-[22px] bg-white p-4 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-sans text-lg font-black text-[#123E26]">
+                                {formatOrderCode(order.id)}
+                              </p>
+                              <p className="mt-1 line-clamp-1 text-base font-bold text-[#1F1711]">
+                                {formatOrderItemSummary(itemNames)}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${
+                                order.status === "cancelled"
+                                  ? "bg-[#FBE9E2] text-[#9C543D]"
+                                  : isFinalOrder(order.status)
+                                  ? "bg-[#E8F4E4] text-[#2D7A40]"
+                                  : "bg-[#F5EAD7] text-[#8C5C2A]"
+                              }`}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-sans text-lg font-black text-[#123E26]">
-                                    {formatOrderCode(order.id)}
-                                  </p>
-                                  <p className="mt-1 line-clamp-1 text-base font-bold text-[#1F1711]">
-                                    {formatOrderItemSummary(itemNames)}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${order.status === "cancelled"
-                                    ? "bg-[#FBE9E2] text-[#9C543D]"
-                                    : isFinalOrder(order.status)
-                                      ? "bg-[#E8F4E4] text-[#2D7A40]"
-                                      : "bg-[#F5EAD7] text-[#8C5C2A]"
-                                    }`}
-                                >
-                                  {formatStatus(order.status)}
-                                </span>
-                              </div>
+                              {formatStatus(order.status)}
+                            </span>
+                          </div>
 
-                              <div className="mt-4 flex items-end justify-between gap-4 border-t border-[#EEE2C8] pt-4">
-                                <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8A755D]">
-                                    {formatOrderType(order.order_type)} •{" "}
-                                    {formatTime(order.ordered_at)}
-                                  </p>
-                                  <p className="mt-1 text-xl font-black text-[#9D6D48]">
-                                    {formatPrice(order.total_amount)}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => openFeedbackForOrder(order)}
-                                  disabled={!canGiveFeedback}
-                                  className="shrink-0 rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
-                                >
-                                  Feedback
-                                </button>
-                              </div>
-                            </article>
-                          );
-                        })}
+                          <div className="mt-4 flex items-end justify-between gap-4 border-t border-[#EEE2C8] pt-4">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                                {formatOrderType(order.order_type)} •{" "}
+                                {formatTime(order.ordered_at)}
+                              </p>
+                              <p className="mt-1 text-xl font-black text-[#9D6D48]">
+                                {formatPrice(order.total_amount)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openFeedbackForOrder(order)}
+                              disabled={!canGiveFeedback}
+                              className="shrink-0 rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                            >
+                              Feedback
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
                       </div>
 
                       <div className="hidden overflow-hidden rounded-[22px] bg-white shadow-[0_8px_20px_rgba(0,0,0,0.08)] md:block">
@@ -2871,12 +3359,13 @@ export function CustomerDashboard({
                                 {formatOrderType(order.order_type)}
                               </span>
                               <span
-                                className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${order.status === "cancelled"
-                                  ? "bg-[#FBE9E2] text-[#9C543D]"
-                                  : isFinalOrder(order.status)
+                                className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${
+                                  order.status === "cancelled"
+                                    ? "bg-[#FBE9E2] text-[#9C543D]"
+                                    : isFinalOrder(order.status)
                                     ? "bg-[#E8F4E4] text-[#2D7A40]"
                                     : "bg-[#F5EAD7] text-[#8C5C2A]"
-                                  }`}
+                                }`}
                               >
                                 {formatStatus(order.status)}
                               </span>
@@ -2902,199 +3391,215 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "feedback" && (
-              <div className="mx-auto w-full max-w-[900px] space-y-6 px-1 py-1">
-                <header className="mb-8">
-                  <h1 className="font-sans text-3xl font-bold tracking-tight text-[#0D2E18] sm:text-4xl">
-                    Order Feedback
+              <div className="space-y-5">
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
+                    Feedback
                   </h1>
-                  <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
-                    Your reviews help us tailor KadaServe specifically to your taste.
-                    Share your experience with recent orders below.
+                  <p className="mt-1 text-sm text-[#6F634E]">
+                    Share feedback for delivered or completed orders.
                   </p>
-                </header>
+                </div>
 
                 {feedbackItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-[#DCCFB8] bg-white/45 py-20 text-center">
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#FFF8EF] text-[#DCCFB8]">
-                      <MessageSquareText size={40} />
-                    </div>
-                    <h2 className="mt-6 font-sans text-2xl font-bold text-[#0D2E18]">
-                      No pending reviews
-                    </h2>
-                    <p className="mt-2 max-w-xs font-sans text-sm text-[#8C7A64]">
-                      Complete an order to share your thoughts. Your feedback will appear here once ready.
+                  <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
+                    <p className="text-2xl font-bold text-[#123E26]">
+                      No feedback pending
+                    </p>
+                    <p className="mt-2 text-[#5D694F]">
+                      Once you complete an order that has not been reviewed yet,
+                      it will appear here.
                     </p>
                   </div>
                 ) : (
-                  <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-                    {/* Left: Item Selection */}
-                    <div className="space-y-4">
-                      <h3 className="font-sans text-xs font-bold uppercase tracking-widest text-[#684B35]">
-                        Select an item
-                      </h3>
-                      <div className="flex flex-col gap-2">
-                        {feedbackItems.map((item) => {
-                          const isSelected = selectedFeedbackItemId === item.order_item_id;
-                          return (
-                            <button
-                              key={item.order_item_id}
-                              type="button"
-                              onClick={() => setSelectedFeedbackItemId(item.order_item_id)}
-                              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${
-                                isSelected
-                                  ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8] shadow-md"
-                                  : "border-[#DCCFB8] bg-white/80 text-[#684B35] hover:border-[#0D2E18]/40 hover:bg-white"
-                              }`}
-                            >
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-xl">
-                                {getFeedbackEmoji(item.item_name)}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate font-sans text-sm font-bold">
-                                  {item.item_name}
-                                </p>
-                                <p className={`truncate font-sans text-[10px] ${isSelected ? "text-[#FFF0D8]/70" : "text-[#8A755D]"}`}>
-                                  {new Date(item.ordered_at).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
+                  <div className="rounded-[28px] bg-white p-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)] sm:p-6">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#E9F1E6] text-4xl shadow-[0_8px_18px_rgba(12,58,30,0.10)]">
+                        {selectedFeedbackItem
+                          ? getFeedbackEmoji(selectedFeedbackItem.item_name)
+                          : "☕"}
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#7D7767]">
+                          How was your order?
+                        </p>
+                        <h2 className="mt-1 text-3xl font-bold text-[#123E26]">
+                          {selectedFeedbackItem?.item_name ?? "Select an item"}
+                        </h2>
+                        <p className="mt-1 text-sm text-[#5D694F]">
+                          Your feedback helps improve the customer experience.
+                        </p>
                       </div>
                     </div>
 
-                    {/* Right: Feedback Form */}
-                    <div className="rounded-[32px] border border-[#DCCFB8] bg-white p-6 shadow-[0_12px_24px_rgba(13,46,24,0.04)] sm:p-8">
-                      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#FFF8EF] text-3xl shadow-sm">
-                          {selectedFeedbackItem
-                            ? getFeedbackEmoji(selectedFeedbackItem.item_name)
-                            : "☕"}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-sans text-[10px] font-bold uppercase tracking-widest text-[#8A755D]">
-                            Reviewing
-                          </p>
-                          <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
-                            {selectedFeedbackItem?.item_name ?? "Select an item"}
-                          </h2>
-                        </div>
-                      </div>
+                    <div className="mt-6">
+                      <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
+                        Select Order Item
+                      </label>
+                      <select
+                        value={selectedFeedbackItemId}
+                        onChange={(event) =>
+                          setSelectedFeedbackItemId(event.target.value)
+                        }
+                        className="w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFFCF7] px-4 py-3 outline-none"
+                      >
+                        {feedbackItems.map((item) => (
+                          <option
+                            key={item.order_item_id}
+                            value={item.order_item_id}
+                          >
+                            {item.item_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                      <div className="space-y-8">
-                        {/* Rating Fields */}
-                        <div className="grid gap-6 sm:grid-cols-2">
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <p className="font-sans text-sm font-bold text-[#0D2E18]">Taste Quality</p>
-                              <span className="font-sans text-xs font-bold text-[#C96A12]">
-                                {tasteRating > 0 ? `${tasteRating}/5` : "Tap to rate"}
-                              </span>
-                            </div>
-                            <div className="flex gap-1">
-                              {[1, 2, 3, 4, 5].map((score) => (
-                                <button
-                                  key={score}
-                                  type="button"
-                                  onClick={() => handleRatingChange(setTasteRating, score)}
-                                  className={`flex h-10 w-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-110 ${
-                                    score <= tasteRating ? "text-[#C96A12]" : "text-[#DCCFB8] hover:text-[#C96A12]/40"
-                                  }`}
-                                >
-                                  ★
-                                </button>
-                              ))}
-                            </div>
+                    <div className="mt-6 space-y-6">
+                      {(
+                        [
+                          ["Taste Quality", tasteRating, setTasteRating],
+                        ] as const
+                      ).map(([label, value, setValue]) => (
+                        <div
+                          key={label}
+                          className="rounded-[20px] bg-[#FFF8EE] p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-lg font-bold text-[#123E26]">
+                              {label}
+                            </p>
+                            <span className="text-sm font-semibold text-[#8A755D]">
+                              {value > 0 ? `${value}/5` : "Select"}
+                            </span>
                           </div>
 
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <p className="font-sans text-sm font-bold text-[#0D2E18]">Overall Experience</p>
-                              <span className="font-sans text-xs font-bold text-[#C96A12]">
-                                {overallRating > 0 ? `${overallRating}/5` : "Tap to rate"}
-                              </span>
-                            </div>
-                            <div className="flex gap-1">
-                              {[1, 2, 3, 4, 5].map((score) => (
-                                <button
-                                  key={score}
-                                  type="button"
-                                  onClick={() => handleRatingChange(setOverallRating, score)}
-                                  className={`flex h-10 w-10 items-center justify-center rounded-xl text-2xl transition-all hover:scale-110 ${
-                                    score <= overallRating ? "text-[#C96A12]" : "text-[#DCCFB8] hover:text-[#C96A12]/40"
-                                  }`}
-                                >
-                                  ★
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <p className="font-sans text-sm font-bold text-[#0D2E18]">Drink Strength</p>
-                          <div className="grid grid-cols-3 gap-2">
-                            {[
-                              ["Mild", 2],
-                              ["Balanced", 3],
-                              ["Strong", 5],
-                            ].map(([label, value]) => (
+                          <div className="mt-3 flex gap-2">
+                            {[1, 2, 3, 4, 5].map((score) => (
                               <button
-                                key={label}
+                                key={score}
                                 type="button"
-                                onClick={() => handleRatingChange(setStrengthRating, Number(value))}
-                                className={`rounded-2xl border py-3.5 font-sans text-xs font-bold transition-all duration-200 ${
-                                  strengthRating === value
-                                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8] shadow-md"
-                                    : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18]/40"
+                                onClick={() => handleRatingChange(setValue, score)}
+                                className={`text-4xl transition hover:text-[#C96A12] ${
+                                  score <= value
+                                    ? "text-[#C96A12]"
+                                    : "text-[#D8C8A7]"
                                 }`}
                               >
-                                {label}
+                                ★
                               </button>
                             ))}
                           </div>
                         </div>
+                      ))}
 
-                        <div className="space-y-3">
-                          <p className="font-sans text-sm font-bold text-[#0D2E18]">Your Thoughts</p>
-                          <textarea
-                            value={feedbackComment}
-                            onChange={(event) => setFeedbackComment(event.target.value)}
-                            placeholder="Tell us what you liked or how we can improve..."
-                            className="min-h-[120px] w-full rounded-2xl border border-[#DCCFB8] bg-[#FFF8EF]/30 px-4 py-4 font-sans text-sm text-[#0D2E18] outline-none transition-all placeholder:text-[#A49175] focus:border-[#0D2E18] focus:bg-white"
-                          />
+                      <div className="rounded-[20px] bg-[#FFF8EE] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-lg font-bold text-[#123E26]">
+                            Drink Strength
+                          </p>
+                          <span className="text-sm font-semibold text-[#8A755D]">
+                            {strengthRating === 2
+                              ? "Mild"
+                              : strengthRating === 5
+                              ? "Strong"
+                              : "Balanced"}
+                          </span>
                         </div>
 
-                        {feedbackMessage && (
-                          <div
-                            className={`flex items-center gap-3 rounded-2xl px-4 py-4 font-sans text-sm font-bold ${
-                              feedbackMessage.toLowerCase().includes("success")
-                                ? "bg-[#EEF8EC] text-[#2D7A40]"
-                                : "bg-[#FFF1EC] text-[#9C543D]"
-                            }`}
-                          >
-                            {feedbackMessage.toLowerCase().includes("success") ? (
-                              <CheckCircle2 size={18} className="shrink-0" />
-                            ) : (
-                              <X size={18} className="shrink-0" />
-                            )}
-                            {feedbackMessage}
-                          </div>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={handleSubmitFeedback}
-                          disabled={!canSubmitFeedback || isSubmittingFeedback}
-                          className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-[#0D2E18] px-6 font-sans text-base font-bold text-[#FFF0D8] shadow-lg shadow-[#0D2E18]/10 transition-all hover:scale-[1.01] hover:bg-[#0F441D] disabled:scale-100 disabled:opacity-40 disabled:grayscale"
-                        >
-                          {isSubmittingFeedback ? (
-                            <LoadingSpinner label="Submitting..." />
-                          ) : (
-                            "Submit Review"
-                          )}
-                        </button>
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                          {[
+                            ["Mild", 2],
+                            ["Balanced", 3],
+                            ["Strong", 5],
+                          ].map(([label, value]) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() =>
+                                handleRatingChange(setStrengthRating, Number(value))
+                              }
+                              className={`rounded-full border px-3 py-3 font-sans text-sm font-bold transition ${
+                                strengthRating === value
+                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
+                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#5D694F]">
+                          Comment
+                        </label>
+                        <textarea
+                          value={feedbackComment}
+                          onChange={(event) =>
+                            setFeedbackComment(event.target.value)
+                          }
+                          placeholder="Tell us about your order"
+                          className="min-h-28 w-full rounded-[18px] border border-[#D8C8A7] bg-[#FFFCF7] px-4 py-3 outline-none placeholder:text-[#A49175]"
+                        />
+                      </div>
+
+                      <div className="rounded-[20px] bg-[#FFF8EE] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-lg font-bold text-[#123E26]">
+                            Overall Experience
+                          </p>
+                          <span className="text-sm font-semibold text-[#8A755D]">
+                            {overallRating > 0 ? `${overallRating}/5` : "Select"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex gap-2">
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              onClick={() =>
+                                handleRatingChange(setOverallRating, score)
+                              }
+                              className={`text-4xl transition hover:text-[#C96A12] ${
+                                score <= overallRating
+                                  ? "text-[#C96A12]"
+                                  : "text-[#D8C8A7]"
+                              }`}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {feedbackMessage ? (
+                        <p
+                          className={`rounded-xl px-4 py-3 text-sm font-medium ${
+                            feedbackMessage.toLowerCase().includes("success")
+                              ? "bg-[#EEF8EC] text-[#2D7A40]"
+                              : "bg-[#FFF1EC] text-[#9C543D]"
+                          }`}
+                        >
+                          {feedbackMessage}
+                        </p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={handleSubmitFeedback}
+                        disabled={!canSubmitFeedback}
+                        className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white disabled:opacity-60"
+                      >
+                        {isSubmittingFeedback ? (
+                          <LoadingSpinner label="Submitting feedback" />
+                        ) : null}
+                        {isSubmittingFeedback
+                          ? "Submitting..."
+                          : "Submit Feedback"}
+                      </button>
                     </div>
                   </div>
                 )}
@@ -3370,10 +3875,11 @@ export function CustomerDashboard({
                         behavior: "smooth",
                       });
                     }}
-                    className={`h-2 rounded-full transition-all ${index === onboardingStep
-                      ? "w-8 bg-[#0D2E18]"
-                      : "w-2 bg-[#DCCFB8]"
-                      }`}
+                    className={`h-2 rounded-full transition-all ${
+                      index === onboardingStep
+                        ? "w-8 bg-[#0D2E18]"
+                        : "w-2 bg-[#DCCFB8]"
+                    }`}
                   />
                 ))}
               </div>
@@ -3412,8 +3918,28 @@ export function CustomerDashboard({
         </div>
       ) : null}
 
-      <nav className="fixed inset-x-3 bottom-3 z-50 rounded-[1.75rem] bg-[#0D2E18]/95 px-2 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_8px_32px_rgba(13,46,24,0.3)] backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5 gap-0.5">
+      {!isSearchOpen &&
+      activeSection !== "menu" &&
+      !isSplashVisible &&
+      !isTaglineVisible &&
+      !isOnboardingOpen ? (
+        <button
+          type="button"
+          onClick={openNotifications}
+          aria-label="Open notifications"
+          className="fixed right-4 top-4 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-[#DCCFB8] bg-white/95 text-[#0D2E18] shadow-[0_12px_26px_rgba(13,46,24,0.18)] backdrop-blur transition hover:bg-[#FFF8EF] md:hidden"
+        >
+          <Bell size={20} />
+          {unreadNotificationCount > 0 ? (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C96A12] px-1 font-sans text-[10px] font-black text-white ring-2 ring-white">
+              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+
+      <nav className="fixed inset-x-3 bottom-3 z-50 rounded-[24px] bg-[#0D2E18] px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_14px_34px_rgba(13,46,24,0.28)] md:hidden">
+        <div className="grid grid-cols-4 gap-1">
           {mobileTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive =
@@ -3438,36 +3964,183 @@ export function CustomerDashboard({
 
                   handleSectionClick(tab.id);
                 }}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl py-2 font-sans text-[10px] font-semibold transition-all duration-300 ${isActive
-                  ? "text-[#FFF0D8]"
-                  : "text-[#FFF0D8]/45 active:scale-95"
-                  }`}
+                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-[18px] font-sans text-[11px] font-bold transition ${
+                  isActive
+                    ? "bg-[#FFF0D8] text-[#0D2E18]"
+                    : "text-[#FFF0D8]/76 hover:bg-[#0F441D]"
+                }`}
               >
-                <span className={`flex h-8 w-8 items-center justify-center rounded-[14px] transition-all duration-300 ${isActive ? "bg-[#FFF0D8]/15 shadow-[0_0_12px_rgba(255,240,216,0.1)]" : ""}`}>
-                  {tab.kind === "profile" && profileAvatarUrl ? (
-                    <span
-                      aria-hidden="true"
-                      className={`h-5 w-5 rounded-full bg-cover bg-center ring-2 transition-all duration-300 ${isActive ? "ring-[#FFF0D8]/40" : "ring-transparent"}`}
-                      style={{ backgroundImage: `url(${profileAvatarUrl})` }}
-                    />
-                  ) : (
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
-                  )}
-                </span>
-                <span className={`transition-all duration-300 ${isActive ? "font-bold" : ""}`}>{tab.label}</span>
-                {isActive && (
-                  <span className="absolute top-0.5 left-1/2 h-[3px] w-5 -translate-x-1/2 rounded-full bg-[#FFF0D8] shadow-[0_0_8px_rgba(255,240,216,0.4)]" />
+                {tab.kind === "profile" && profileAvatarUrl ? (
+                  <span
+                    aria-hidden="true"
+                    className="h-5 w-5 rounded-full bg-cover bg-center"
+                    style={{ backgroundImage: `url(${profileAvatarUrl})` }}
+                  />
+                ) : (
+                  <Icon size={20} />
                 )}
+                <span>{tab.label}</span>
                 {tab.kind === "section" &&
-                  tab.id === "orders" &&
-                  hasOrderAttention ? (
-                  <span className="absolute right-[22%] top-1.5 h-2 w-2 rounded-full bg-[#E8913A] ring-[1.5px] ring-[#0D2E18]" />
+                tab.id === "orders" &&
+                hasOrderAttention ? (
+                  <span className="absolute right-4 top-2 h-2.5 w-2.5 animate-pulse rounded-full bg-[#C96A12] ring-2 ring-[#FFF0D8]" />
                 ) : null}
               </button>
             );
           })}
         </div>
       </nav>
+
+      {isNotificationsOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-start md:justify-end md:p-5">
+          <button
+            type="button"
+            aria-label="Close notifications"
+            className="absolute inset-0 cursor-default"
+            onClick={closeNotifications}
+          />
+          <section className="relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:mt-14 md:rounded-[26px] md:shadow-[0_18px_44px_rgba(13,46,24,0.18)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA]">
+                  <Bell className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                    Notifications
+                  </p>
+                  <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
+                    Updates
+                  </h2>
+                  <p className="mt-0.5 font-sans text-xs font-semibold text-[#8A755D]">
+                    {notifications.length} update
+                    {notifications.length === 1 ? "" : "s"} synced from KadaServe
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeNotifications}
+                aria-label="Close notifications"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F3E6D1] text-[#123E26] transition hover:bg-[#E8D9BE]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              {notifications.length === 0 ? (
+                <div className="rounded-[22px] border border-dashed border-[#D8C8A7] bg-white px-5 py-8 text-center">
+                  <Bell className="mx-auto h-8 w-8 text-[#684B35]" />
+                  <p className="mt-3 font-sans text-lg font-black text-[#0D2E18]">
+                    No notifications yet
+                  </p>
+                  <p className="mx-auto mt-1 max-w-xs font-sans text-sm font-semibold leading-6 text-[#684B35]">
+                    Order updates, receipt details, and feedback reminders will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map((notification) => {
+                    const isUnread = !readNotificationIds.includes(notification.id);
+
+                    return (
+                      <article
+                        key={notification.id}
+                        className={`rounded-[20px] border p-4 ${
+                          isUnread
+                            ? "border-[#C96A12]/40 bg-[#FFF0DA]"
+                            : "border-[#E8D9BE] bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                              notification.kind === "feedback"
+                                ? "bg-[#2D7A40]"
+                                : notification.kind === "receipt"
+                                ? "bg-[#0D2E18]"
+                                : "bg-[#C96A12]"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-[#F3E6D1] px-2.5 py-1 font-sans text-[10px] font-black uppercase tracking-[0.12em] text-[#684B35]">
+                                {notification.typeLabel}
+                              </span>
+                              <time
+                                dateTime={notification.timestamp}
+                                className="font-sans text-xs font-bold text-[#8A755D]"
+                              >
+                                {formatNotificationTime(notification.timestamp)}
+                              </time>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-sans text-base font-black text-[#0D2E18]">
+                                {notification.title}
+                              </h3>
+                              {isUnread ? (
+                                <span className="rounded-full bg-white px-2 py-0.5 font-sans text-[10px] font-black uppercase tracking-[0.12em] text-[#C96A12]">
+                                  New
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 font-sans text-sm font-semibold leading-6 text-[#684B35]">
+                              {notification.body}
+                            </p>
+                            {notification.receipt ? (
+                              <div className="mt-3 rounded-[16px] border border-[#E8D9BE] bg-[#FFF8EF] p-3 font-sans text-xs font-semibold text-[#684B35]">
+                                <div className="space-y-1.5">
+                                  {notification.receipt.itemLines.map((line) => (
+                                    <p key={line}>{line}</p>
+                                  ))}
+                                </div>
+                                <div className="mt-3 space-y-1.5 border-t border-[#DCCFB8] pt-3">
+                                  <div className="flex justify-between gap-3">
+                                    <span>Items Total</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.itemsTotal)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span>Delivery Fee</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.deliveryFee)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-sm">
+                                    <span>Total</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {formatPrice(notification.receipt.grandTotal)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span>Payment</span>
+                                    <strong className="text-[#0D2E18]">
+                                      {notification.receipt.paymentMethod}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleNotificationAction(notification)}
+                              className="mt-3 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-xs font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+                            >
+                              {notification.actionLabel}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {isFeedbackPromptOpen && selectedFeedbackItem ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-center md:p-6">
@@ -3543,8 +4216,9 @@ export function CustomerDashboard({
                         key={score}
                         type="button"
                         onClick={() => handleRatingChange(setValue, score)}
-                        className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${score <= value ? "text-[#C96A12]" : "text-[#D8C8A7]"
-                          }`}
+                        className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${
+                          score <= value ? "text-[#C96A12]" : "text-[#D8C8A7]"
+                        }`}
                       >
                         ★
                       </button>
@@ -3569,10 +4243,11 @@ export function CustomerDashboard({
                       key={score}
                       type="button"
                       onClick={() => handleRatingChange(setOverallRating, score)}
-                      className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${score <= overallRating
-                        ? "text-[#C96A12]"
-                        : "text-[#D8C8A7]"
-                        }`}
+                      className={`flex h-11 w-11 items-center justify-center rounded-full text-3xl transition hover:bg-white hover:text-[#C96A12] ${
+                        score <= overallRating
+                          ? "text-[#C96A12]"
+                          : "text-[#D8C8A7]"
+                      }`}
                     >
                       ★
                     </button>
@@ -3589,8 +4264,8 @@ export function CustomerDashboard({
                     {strengthRating === 2
                       ? "Mild"
                       : strengthRating === 5
-                        ? "Strong"
-                        : "Balanced"}
+                      ? "Strong"
+                      : "Balanced"}
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
@@ -3605,10 +4280,11 @@ export function CustomerDashboard({
                       onClick={() =>
                         handleRatingChange(setStrengthRating, Number(value))
                       }
-                      className={`min-h-11 rounded-full border px-3 py-2 font-sans text-sm font-bold transition ${strengthRating === value
-                        ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8]"
-                        : "border-[#D8C8A7] bg-white text-[#684B35]"
-                        }`}
+                      className={`min-h-11 rounded-full border px-3 py-2 font-sans text-sm font-bold transition ${
+                        strengthRating === value
+                          ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8]"
+                          : "border-[#D8C8A7] bg-white text-[#684B35]"
+                      }`}
                     >
                       {label}
                     </button>
@@ -3625,10 +4301,11 @@ export function CustomerDashboard({
 
               {feedbackMessage ? (
                 <p
-                  className={`rounded-xl px-4 py-3 text-sm font-bold ${feedbackMessage.toLowerCase().includes("success")
-                    ? "bg-[#EEF8EC] text-[#2D7A40]"
-                    : "bg-[#FFF1EC] text-[#9C543D]"
-                    }`}
+                  className={`rounded-xl px-4 py-3 text-sm font-bold ${
+                    feedbackMessage.toLowerCase().includes("success")
+                      ? "bg-[#EEF8EC] text-[#2D7A40]"
+                      : "bg-[#FFF1EC] text-[#9C543D]"
+                  }`}
                 >
                   {feedbackMessage}
                 </p>
@@ -3726,10 +4403,11 @@ export function CustomerDashboard({
                               key={item.value}
                               type="button"
                               onClick={() => setTemperature(item.value)}
-                              className={`rounded-full px-4 py-2.5 font-sans text-sm font-bold transition ${temperature === item.value
-                                ? "bg-[#123E26] text-[#FFF0D8]"
-                                : "text-[#684B35] hover:bg-[#F5EAD7]"
-                                }`}
+                              className={`rounded-full px-4 py-2.5 font-sans text-sm font-bold transition ${
+                                temperature === item.value
+                                  ? "bg-[#123E26] text-[#FFF0D8]"
+                                  : "text-[#684B35] hover:bg-[#F5EAD7]"
+                              }`}
                             >
                               {item.label}
                             </button>
@@ -3749,10 +4427,11 @@ export function CustomerDashboard({
                               key={item.value}
                               type="button"
                               onClick={() => setSugarLevel(item.value)}
-                              className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${sugarLevel === item.value
-                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                : "border-[#D8C8A7] bg-white text-[#684B35]"
-                                }`}
+                              className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${
+                                sugarLevel === item.value
+                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
+                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
+                              }`}
                             >
                               {item.label}
                             </button>
@@ -3772,10 +4451,11 @@ export function CustomerDashboard({
                               key={item.value}
                               type="button"
                               onClick={() => setIceLevel(item.value)}
-                              className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${iceLevel === item.value
-                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                : "border-[#D8C8A7] bg-white text-[#684B35]"
-                                }`}
+                              className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${
+                                iceLevel === item.value
+                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
+                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
+                              }`}
                             >
                               {item.label}
                             </button>
@@ -3795,10 +4475,11 @@ export function CustomerDashboard({
                               key={item.value}
                               type="button"
                               onClick={() => setSize(item.value)}
-                              className={`rounded-[18px] border p-4 text-left font-sans transition ${size === item.value
-                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                : "border-[#D8C8A7] bg-white text-[#684B35]"
-                                }`}
+                              className={`rounded-[18px] border p-4 text-left font-sans transition ${
+                                size === item.value
+                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
+                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
+                              }`}
                             >
                               <p className="font-black">{item.label}</p>
                               <p className="mt-1 text-xs">
@@ -3842,40 +4523,74 @@ export function CustomerDashboard({
                     </div>
                   </div>
 
-                  <div className="mt-6 flex flex-col gap-5">
-                    {addonCategories.map((category) => (
-                      <div key={category.title}>
-                        <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
-                          {category.title}
-                        </p>
-                        <div className="mt-3 grid gap-2">
-                          {category.items.map((item) => {
-                            const selected = selectedAddons.includes(item.value);
+                  <div className="mt-5">
+                    <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                      Add-ons
+                    </p>
+                    <div className="mt-3 grid gap-2">
+                      {addons.map((item) => {
+                        const selected = selectedAddons.includes(item.value);
 
-                            return (
-                              <button
-                                key={item.value}
-                                type="button"
-                                onClick={() => toggleAddon(item.value)}
-                                className={`flex items-center justify-between rounded-[16px] border px-4 py-3 font-sans text-sm font-bold transition ${selected
-                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
-                                  }`}
-                              >
-                                <span>{item.label}</span>
-                                <span>+{formatPrice(item.price)}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                        return (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => toggleAddon(item.value)}
+                            className={`flex items-center justify-between rounded-[16px] border px-4 py-3 font-sans text-sm font-bold transition ${
+                              selected
+                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
+                                : "border-[#D8C8A7] bg-white text-[#684B35]"
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <span>+{formatPrice(item.price)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {customizeMessage ? (
                     <p className="mt-4 rounded-xl bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-bold text-[#0F7A40]">
                       {customizeMessage}
                     </p>
+                  ) : null}
+
+                  {selectedNutrition ? (
+                    <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
+                            Nutrition estimate
+                          </p>
+                          <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                            Per selected serving, calculated from KadaServe staff recipe.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
+                          {selectedNutrition.servingSizeMl} ml
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {nutritionMetricLabels.map((metric) => (
+                          <div
+                            key={metric.key}
+                            className="rounded-[14px] bg-white px-3 py-2 font-sans"
+                          >
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                              {metric.label}
+                            </p>
+                            <p className="mt-0.5 text-base font-black text-[#0D2E18]">
+                              {formatNutritionMetric(
+                                metric.key,
+                                selectedNutrition[metric.key]
+                              )}
+                              {metric.unit ? ` ${metric.unit}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
 
                   <button
@@ -3993,25 +4708,28 @@ export function CustomerDashboard({
                         <div key={step} className="min-w-0">
                           <div className="flex items-center">
                             <span
-                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-black transition ${isCurrent
-                                ? "animate-pulse border-[#684B35] bg-[#684B35] text-[#FFF0DA]"
-                                : isCompleted
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-black transition ${
+                                isCurrent
+                                  ? "animate-pulse border-[#684B35] bg-[#684B35] text-[#FFF0DA]"
+                                  : isCompleted
                                   ? "border-[#0F441D] bg-[#0F441D] text-[#FFF0DA]"
                                   : "border-[#DCCFB8] bg-white text-[#9A856C]"
-                                }`}
+                              }`}
                             >
                               {index + 1}
                             </span>
                             {index < 4 ? (
                               <span
-                                className={`h-1 flex-1 rounded-full ${isCompleted ? "bg-[#0F441D]" : "bg-[#DCCFB8]"
-                                  }`}
+                                className={`h-1 flex-1 rounded-full ${
+                                  isCompleted ? "bg-[#0F441D]" : "bg-[#DCCFB8]"
+                                }`}
                               />
                             ) : null}
                           </div>
                           <p
-                            className={`mt-2 line-clamp-2 font-sans text-[10px] font-bold leading-tight md:text-xs ${isReached ? "text-[#0D2E18]" : "text-[#9A856C]"
-                              }`}
+                            className={`mt-2 line-clamp-2 font-sans text-[10px] font-bold leading-tight md:text-xs ${
+                              isReached ? "text-[#0D2E18]" : "text-[#9A856C]"
+                            }`}
                           >
                             {step}
                           </p>
@@ -4084,10 +4802,11 @@ export function CustomerDashboard({
                   </div>
 
                   <div
-                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${trackingOrder.payment_status === "paid"
-                      ? "bg-[#E9F5E7] text-[#2D7A40]"
+                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${
+                      trackingOrder.payment_status === "paid"
+                        ? "bg-[#E9F5E7] text-[#2D7A40]"
                       : "bg-[#FFF0DA] text-[#684B35]"
-                      }`}
+                    }`}
                   >
                     Payment status:{" "}
                     <span className="font-black">
@@ -4097,10 +4816,43 @@ export function CustomerDashboard({
                     </span>
                   </div>
 
-                  {trackingOrder.status === "pending" ? (
+                  {trackingQrPhPayment ? (
+                    <div className="mt-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-3">
+                      <p className="font-sans text-sm font-black text-[#0D2E18]">
+                        Awaiting QR Ph payment
+                      </p>
+                      <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                        Reopen the PayMongo QR to complete this order.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openTrackedQrPhPayment}
+                        className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#0F441D]"
+                      >
+                        Show QR Code
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {isTrackingQrPhExpired ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold text-[#9C543D]">
+                      QR expired. Please place a new order.
+                    </div>
+                  ) : null}
+
+                  {isTrackingOnlinePaymentPending &&
+                  !trackingQrPhPayment &&
+                  !isTrackingQrPhExpired ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold leading-6 text-[#9C543D]">
+                      QR code is not available for this order. Cancel this unpaid
+                      order, then place a new online order to generate a new QR.
+                    </div>
+                  ) : null}
+
+                  {canCancelTrackingOrder ? (
                     <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3">
                       <p className="font-sans text-sm font-semibold text-[#9C543D]">
-                        You can still cancel this order while it is pending.
+                        {getCustomerCancelHelp(trackingOrder)}
                       </p>
                       {trackingActionMessage ? (
                         <p className="mt-2 font-sans text-xs font-semibold text-[#9C543D]">
@@ -4120,12 +4872,18 @@ export function CustomerDashboard({
                     </div>
                   ) : null}
 
+                  {!canCancelTrackingOrder && cancelUnavailableMessage ? (
+                    <div className="mt-3 rounded-[18px] bg-[#FFF8EF] p-3 font-sans text-sm font-semibold text-[#684B35]">
+                      {cancelUnavailableMessage}
+                    </div>
+                  ) : null}
+
                   {trackingOrder.payment_status === "paid" ||
-                    ["out_for_delivery", "delivered"].includes(
-                      trackingOrder.status
-                    ) ? (
+                  ["out_for_delivery", "delivered"].includes(
+                    trackingOrder.status
+                  ) ? (
                     <div className="mt-3 rounded-[18px] bg-[#FFF0DA] p-3 font-sans text-sm font-semibold text-[#684B35]">
-                      Check your email for the latest Kada Cafe PH update.
+                      Check KadaServe notifications for order updates and receipt details.
                     </div>
                   ) : null}
                 </section>
@@ -4135,17 +4893,74 @@ export function CustomerDashboard({
         </div>
       ) : null}
 
+      {qrPhPayment ? (
+        <div className="fixed inset-0 z-[72] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
+          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                  PayMongo QR Ph
+                </p>
+                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Scan to pay {formatPrice(qrPhPayment.totalAmount)}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrPhPayment(null)}
+                aria-label="Close QR Ph payment"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrPhPayment.qrCodeImageUrl}
+                alt="PayMongo QR Ph payment code"
+                className="mx-auto aspect-square w-full max-w-[280px] rounded-[18px] bg-white object-contain p-3"
+              />
+              <p className="mt-3 font-sans text-sm font-black text-[#0D2E18]">
+                {formatOrderCode(qrPhPayment.orderId)}
+              </p>
+              <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                Pay with any QR Ph-supported wallet or banking app. This QR
+                expires in about {qrPhPayment.expiresInMinutes} minutes.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
+              KadaServe will move this order to the staff queue after PayMongo
+              confirms payment.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setQrPhPayment(null)}
+              className="mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+            >
+              Back to Order Tracker
+            </button>
+          </section>
+        </div>
+      ) : null}
+
       <div
-        className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px] transition-opacity duration-300 ${isSidebarOpen
-          ? "pointer-events-auto opacity-100"
-          : "pointer-events-none opacity-0"
-          }`}
+        className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px] transition-opacity duration-300 ${
+          isSidebarOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
         onClick={() => setIsSidebarOpen(false)}
       />
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-full w-[85vw] max-w-[300px] flex-col rounded-r-[24px] bg-[#0D2E18] text-white shadow-[12px_0_30px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-out sm:w-[280px] ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        className={`fixed left-0 top-0 z-50 flex h-full w-[85vw] max-w-[300px] flex-col rounded-r-[24px] bg-[#0D2E18] text-white shadow-[12px_0_30px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-out sm:w-[280px] ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
         <div className="flex items-center justify-between px-7 pb-5 pt-10">
           <h2 className="font-sans text-[2.1rem] font-bold leading-none tracking-[-0.04em] text-[#FFF0D8]">
@@ -4164,31 +4979,32 @@ export function CustomerDashboard({
 
         <nav className="mt-3 flex-1 space-y-5 px-4">
           <div className="space-y-2">
-            {sections
-              .filter((section) => section.id !== "feedback")
-              .map(({ id, icon: Icon, label }) => {
-                const isActive = activeSection === id;
+          {sections
+            .filter((section) => section.id !== "feedback")
+            .map(({ id, icon: Icon, label }) => {
+            const isActive = activeSection === id;
 
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => handleSectionClick(id)}
-                    className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 text-left font-sans text-base font-semibold transition ${isActive
-                      ? "bg-[#FFF0D8] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
-                      : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
-                      }`}
-                  >
-                    <Icon size={21} className="shrink-0" />
-                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                      <span>{label}</span>
-                      {id === "orders" && hasOrderAttention ? (
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#684B35] ring-2 ring-[#FFF0D8]" />
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })}
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSectionClick(id)}
+                className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 text-left font-sans text-base font-semibold transition ${
+                  isActive
+                    ? "bg-[#FFF0D8] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                    : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
+                }`}
+              >
+                <Icon size={21} className="shrink-0" />
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span>{label}</span>
+                  {id === "orders" && hasOrderAttention ? (
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#684B35] ring-2 ring-[#FFF0D8]" />
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
           </div>
 
           <div className="space-y-2 border-t border-[#FFF0D8]/10 pt-5">
@@ -4202,10 +5018,11 @@ export function CustomerDashboard({
                     key={id}
                     type="button"
                     onClick={() => handleSectionClick(id)}
-                    className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 text-left font-sans text-base font-semibold transition ${isActive
-                      ? "bg-[#FFF0D8] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
-                      : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
-                      }`}
+                    className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 text-left font-sans text-base font-semibold transition ${
+                      isActive
+                        ? "bg-[#FFF0D8] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                        : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
+                    }`}
                   >
                     <Icon size={21} className="shrink-0" />
                     <span>{label}</span>
@@ -4218,18 +5035,20 @@ export function CustomerDashboard({
       </aside>
 
       <div
-        className={`fixed inset-0 z-[55] bg-[#0D2E18]/35 backdrop-blur-[2px] transition-opacity duration-300 ${isProfileOpen
-          ? "pointer-events-auto opacity-100"
-          : "pointer-events-none opacity-0"
-          }`}
+        className={`fixed inset-0 z-[55] bg-[#0D2E18]/35 backdrop-blur-[2px] transition-opacity duration-300 ${
+          isProfileOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
         onClick={closeProfileDrawer}
       />
 
       <aside
-        className={`fixed bottom-0 left-0 right-0 z-[60] flex max-h-[92vh] w-full flex-col rounded-t-[30px] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.20)] transition-transform duration-300 ease-out md:left-auto md:bottom-auto md:right-0 md:top-0 md:h-full md:max-h-none md:max-w-[420px] md:rounded-none md:shadow-[-18px_0_40px_rgba(13,46,24,0.20)] ${isProfileOpen
-          ? "translate-y-0 md:translate-x-0"
-          : "translate-y-full md:translate-y-0 md:translate-x-full"
-          }`}
+        className={`fixed bottom-0 left-0 right-0 z-[60] flex max-h-[92vh] w-full flex-col rounded-t-[30px] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.20)] transition-transform duration-300 ease-out md:left-auto md:bottom-auto md:right-0 md:top-0 md:h-full md:max-h-none md:max-w-[420px] md:rounded-none md:shadow-[-18px_0_40px_rgba(13,46,24,0.20)] ${
+          isProfileOpen
+            ? "translate-y-0 md:translate-x-0"
+            : "translate-y-full md:translate-y-0 md:translate-x-full"
+        }`}
       >
         <div className="bg-[linear-gradient(135deg,_#0F441D_0%,_#0D2E18_62%,_#684B35_100%)] px-5 pb-5 pt-6 text-[#FFF0D8]">
           <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#FFF0D8]/45 md:hidden" />
@@ -4252,8 +5071,9 @@ export function CustomerDashboard({
                   setProfileSettingsMessage("");
                 }}
                 aria-label="Open profile settings"
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#FFF0D8]/12 text-[#FFF0D8] transition hover:bg-[#0F441D] ${isProfileSettingsOpen ? "bg-[#FFF0D8]/18" : "bg-[#0F441D]/70"
-                  }`}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#FFF0D8]/12 text-[#FFF0D8] transition hover:bg-[#0F441D] ${
+                  isProfileSettingsOpen ? "bg-[#FFF0D8]/18" : "bg-[#0F441D]/70"
+                }`}
               >
                 <Settings size={19} />
               </button>
@@ -4392,10 +5212,11 @@ export function CustomerDashboard({
                       key={language}
                       type="button"
                       onClick={() => setProfileLanguage(language)}
-                      className={`rounded-[14px] border px-3 py-2.5 font-sans text-sm font-bold transition ${profileLanguage === language
-                        ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8]"
-                        : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]"
-                        }`}
+                      className={`rounded-[14px] border px-3 py-2.5 font-sans text-sm font-bold transition ${
+                        profileLanguage === language
+                          ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0D8]"
+                          : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35]"
+                      }`}
                     >
                       {language}
                     </button>
@@ -4442,8 +5263,9 @@ export function CustomerDashboard({
                         {faq.title}
                         <ChevronDown
                           size={16}
-                          className={`transition ${openProfileFaq === faq.id ? "rotate-180" : ""
-                            }`}
+                          className={`transition ${
+                            openProfileFaq === faq.id ? "rotate-180" : ""
+                          }`}
                         />
                       </button>
                       {openProfileFaq === faq.id ? (
@@ -4512,9 +5334,9 @@ export function CustomerDashboard({
 
               <section className="rounded-[18px] border border-[#DCCFB8] bg-white p-3.5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
-                    Recent Orders
-                  </h3>
+              <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
+                Recent Orders
+              </h3>
                   <button
                     type="button"
                     onClick={() => {
@@ -4528,42 +5350,42 @@ export function CustomerDashboard({
                   </button>
                 </div>
 
-                <div className="mt-3 space-y-2.5">
-                  {visibleRecentOrders.length === 0 ? (
-                    <p className="font-sans text-sm text-[#6F634E]">
-                      Your recent orders will appear here.
-                    </p>
-                  ) : (
-                    visibleRecentOrders.map((order) => (
-                      <div
-                        key={order.id}
-                        className="rounded-[14px] border border-[#E8D9BE] bg-[#FFF8EF] p-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-sans text-sm font-black text-[#0D2E18]">
-                              {formatOrderCode(order.id)}
-                            </p>
-                            <p className="mt-1 line-clamp-1 font-sans text-xs text-[#6F634E]">
-                              {formatOrderItemSummary(
-                                order.order_items
-                                  .map((item) => item.menu_items?.name)
-                                  .filter(Boolean) as string[]
-                              )}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleReorder(order)}
-                            className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-bold text-white"
-                          >
-                            Reorder
-                          </button>
-                        </div>
+            <div className="mt-3 space-y-2.5">
+              {visibleRecentOrders.length === 0 ? (
+                <p className="font-sans text-sm text-[#6F634E]">
+                  Your recent orders will appear here.
+                </p>
+              ) : (
+                visibleRecentOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="rounded-[14px] border border-[#E8D9BE] bg-[#FFF8EF] p-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-sans text-sm font-black text-[#0D2E18]">
+                          {formatOrderCode(order.id)}
+                        </p>
+                        <p className="mt-1 line-clamp-1 font-sans text-xs text-[#6F634E]">
+                          {formatOrderItemSummary(
+                            order.order_items
+                              .map((item) => item.menu_items?.name)
+                              .filter(Boolean) as string[]
+                          )}
+                        </p>
                       </div>
-                    ))
-                  )}
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => handleReorder(order)}
+                        className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-bold text-white"
+                      >
+                        Reorder
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
               </section>
 
               <p className="flex gap-2 rounded-[16px] bg-[#E9F5E7] px-3.5 py-2.5 font-sans text-xs leading-5 text-[#2D7A40]">
@@ -4587,30 +5409,32 @@ export function CustomerDashboard({
               {isSavingProfile ? "Saving..." : "Save Changes"}
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsLogoutConfirmOpen(true)}
-              disabled={isLoggingOut}
-              className="w-full rounded-[14px] border border-[#DCCFB8] px-4 py-2.5 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
-            >
-              {isLoggingOut ? "Logging out..." : "Logout"}
-            </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full rounded-[14px] border border-[#DCCFB8] px-4 py-2.5 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+          >
+            {isLoggingOut ? "Logging out..." : "Logout"}
+          </button>
           </div>
         ) : null}
       </aside>
 
       {isCartTrayOpen ? (
         <section
-          className={`fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur transition duration-300 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] ${isCartPulseActive ? "scale-[1.03] ring-4 ring-[#F8EBCF]" : ""
-            }`}
+          className={`fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur transition duration-300 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] ${
+            isCartPulseActive ? "scale-[1.03] ring-4 ring-[#F8EBCF]" : ""
+          }`}
         >
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setIsCartTrayOpen(false)}
               aria-label="Collapse cart"
-              className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)] ${isCartPulseActive ? "animate-bounce" : ""
-                }`}
+              className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)] ${
+                isCartPulseActive ? "animate-bounce" : ""
+              }`}
             >
               <ShoppingCart size={20} />
               <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 font-sans text-[11px] font-black text-white">
@@ -4660,8 +5484,9 @@ export function CustomerDashboard({
             setIsCartTrayOpen(true);
           }}
           aria-label="Open cart"
-          className={`fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] transition duration-300 sm:bottom-6 sm:right-6 ${isCartPulseActive ? "animate-bounce ring-4 ring-[#F8EBCF]" : ""
-            }`}
+          className={`fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] transition duration-300 sm:bottom-6 sm:right-6 ${
+            isCartPulseActive ? "animate-bounce ring-4 ring-[#F8EBCF]" : ""
+          }`}
         >
           <ShoppingCart size={25} />
           {cartCount > 0 ? (
@@ -4671,43 +5496,6 @@ export function CustomerDashboard({
           ) : null}
         </button>
       )}
-      {isLogoutConfirmOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-[#0D2E18]/45 backdrop-blur-sm"
-            onClick={() => !isLoggingOut && setIsLogoutConfirmOpen(false)}
-          />
-          <div className="relative w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-[#FFF0DA] p-6 shadow-[0_20px_50px_rgba(13,46,24,0.15)]">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF8EF] text-[#684B35]">
-              <LogOut size={24} />
-            </div>
-            <h2 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
-              Ready to leave?
-            </h2>
-            <p className="mt-2 font-sans text-sm font-medium text-[#7D6B55]">
-              Are you sure you want to log out of KadaServe? You can always come back for your favorite drinks!
-            </p>
-            <div className="mt-6 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#143E21] disabled:opacity-60"
-              >
-                {isLoggingOut ? "Logging out..." : "Yes, Log out"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsLogoutConfirmOpen(false)}
-                disabled={isLoggingOut}
-                className="w-full rounded-xl border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

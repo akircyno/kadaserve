@@ -17,14 +17,10 @@ type StaffCartItem = {
 };
 
 type CreateStaffOrderBody = {
-  orderType: "pickup" | "delivery";
+  orderType: "pickup";
   items: StaffCartItem[];
   totalAmount: number;
-  deliveryFee?: number;
   walkinName?: string;
-  deliveryAddress?: string;
-  deliveryEmail?: string;
-  deliveryPhone?: string;
   paymentMethod?: "cash" | "gcash";
   paymentStatus?: "unpaid" | "paid";
 };
@@ -75,9 +71,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
     }
 
-    if (!["pickup", "delivery"].includes(body.orderType)) {
+    if (body.orderType !== "pickup") {
       return NextResponse.json(
-        { error: "Invalid order type." },
+        { error: "Encode Order only supports walk-in orders." },
         { status: 400 }
       );
     }
@@ -99,22 +95,9 @@ export async function POST(request: Request) {
       );
     }
 
-
-    if (body.orderType === "delivery") {
-      if (
-        !body.deliveryAddress?.trim() ||
-        !body.deliveryPhone?.trim()
-      ) {
-        return NextResponse.json(
-          { error: "Delivery address and phone are required." },
-          { status: 400 }
-        );
-      }
-    }
-
-    if (body.orderType === "pickup" && !body.walkinName?.trim()) {
+    if (!body.walkinName?.trim()) {
       return NextResponse.json(
-        { error: "Customer name is required for walk-in pickup." },
+        { error: "Customer name is required for walk-in order." },
         { status: 400 }
       );
     }
@@ -126,9 +109,8 @@ export async function POST(request: Request) {
 
       return sum + (basePrice + addonPrice) * item.quantity;
     }, 0);
-    const deliveryFee =
-      body.orderType === "delivery" ? Math.max(0, Number(body.deliveryFee ?? 0)) : 0;
-    const calculatedTotal = calculatedItemsTotal + deliveryFee;
+    const deliveryFee = 0;
+    const calculatedTotal = calculatedItemsTotal;
 
     if (calculatedTotal !== body.totalAmount) {
       return NextResponse.json(
@@ -146,12 +128,9 @@ export async function POST(request: Request) {
         total_amount: calculatedTotal,
         delivery_fee: deliveryFee,
         walkin_name: body.walkinName?.trim() || null,
-        delivery_address:
-          body.orderType === "delivery" ? body.deliveryAddress?.trim() : null,
-        delivery_email:
-          body.orderType === "delivery" ? body.deliveryEmail?.trim() : null,
-        delivery_phone:
-          body.orderType === "delivery" ? body.deliveryPhone?.trim() : null,
+        delivery_address: null,
+        delivery_email: null,
+        delivery_phone: null,
         encoded_by: user.id,
       };
 

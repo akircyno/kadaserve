@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast-provider";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type DateRange = "today" | "yesterday" | "custom" | "all";
@@ -172,6 +173,7 @@ function getSpecialRemarks(order: StaffOrder) {
 }
 
 export function StaffOrderHistory() {
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>("today");
@@ -247,6 +249,11 @@ export function StaffOrderHistory() {
 
         if (!response.ok) {
           setError(result.error || "Failed to load order history.");
+          showToast({
+            title: "History not loaded",
+            description: result.error || "Failed to load order history.",
+            variant: "error",
+          });
           return;
         }
 
@@ -258,12 +265,17 @@ export function StaffOrderHistory() {
         setHasMore(Boolean(result.hasMore));
       } catch {
         setError("Something went wrong while loading order history.");
+        showToast({
+          title: "History not loaded",
+          description: "Something went wrong while loading order history.",
+          variant: "error",
+        });
       } finally {
         setIsLoading(false);
         setIsLoadingMore(false);
       }
     },
-    [buildParams, customFrom, customTo, dateRange]
+    [buildParams, customFrom, customTo, dateRange, showToast]
   );
 
   useEffect(() => {
@@ -286,6 +298,11 @@ export function StaffOrderHistory() {
       if (!response.ok) {
         const result = await response.json();
         setError(result.error || "Failed to export order history.");
+        showToast({
+          title: "Export failed",
+          description: result.error || "Failed to export order history.",
+          variant: "error",
+        });
         return;
       }
 
@@ -296,8 +313,18 @@ export function StaffOrderHistory() {
       link.download = `kadaserve-order-history-${manilaDate()}.csv`;
       link.click();
       window.URL.revokeObjectURL(url);
+      showToast({
+        title: "Export downloaded",
+        description: "Order history CSV is ready.",
+        variant: "success",
+      });
     } catch {
       setError("Something went wrong while exporting order history.");
+      showToast({
+        title: "Export failed",
+        description: "Something went wrong while exporting order history.",
+        variant: "error",
+      });
     } finally {
       setIsExporting(false);
     }
