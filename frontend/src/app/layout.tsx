@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import { PwaRegister } from "@/components/pwa-register";
+import { AuthRecoveryListener } from "@/components/auth-recovery-listener";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import "./globals.css";
 
@@ -51,10 +52,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <ToastProvider>{children}</ToastProvider>
-        <PwaRegister />
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <ToastProvider>
+          <AuthRecoveryListener />
+          {children}
+          <PwaRegister />
+        </ToastProvider>
       </body>
     </html>
   );

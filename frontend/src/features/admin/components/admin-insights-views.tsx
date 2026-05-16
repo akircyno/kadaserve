@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import {
-  KadaAlertIcon,
-  KadaAwardIcon,
-  KadaStarIcon,
-} from "@/components/icons/kadaserve-admin-icons";
+  AlertTriangle,
+  Award,
+  Star,
+} from "lucide-react";
 import {
   getRecommendationsForCustomer,
   type RecommendationFeedback,
@@ -168,9 +168,10 @@ function RatingStars({ value }: { value: number }) {
   return (
     <div className="flex items-center gap-0.5" aria-label={`${value.toFixed(1)} rating`}>
       {Array.from({ length: 5 }).map((_, index) => (
-        <KadaStarIcon
+        <Star
           key={index}
           size={13}
+          strokeWidth={1.8}
           className={
             index + 1 <= Math.round(value)
               ? "fill-[#0D2E18] text-[#0D2E18]"
@@ -221,7 +222,7 @@ export function ItemRankingView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
         <div className="flex items-center gap-2">
-          <KadaAwardIcon size={18} className="text-[#684B35]" />
+          <Award size={18} strokeWidth={1.8} className="text-[#684B35]" />
           <p className="font-sans text-sm font-black text-[#0D2E18]">Ranking view</p>
         </div>
         <div className="grid grid-cols-3 gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1">
@@ -311,7 +312,7 @@ export function ItemRankingView({
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
               Review Candidates
             </h2>
-            <KadaAlertIcon size={18} className="text-[#684B35]" />
+            <AlertTriangle size={18} strokeWidth={1.8} className="text-[#684B35]" />
           </div>
           <div className="mt-4 space-y-3">
             {lowPerformingItems.map((item, index) => (

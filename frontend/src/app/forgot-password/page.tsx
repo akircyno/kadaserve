@@ -4,7 +4,6 @@ import Image from "next/image";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useToast } from "@/components/ui/toast-provider";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -22,7 +21,6 @@ const emailPattern =
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const supabase = createClient();
-  const { showToast } = useToast();
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const [email, setEmail] = useState("");
@@ -43,13 +41,7 @@ export default function ForgotPasswordPage() {
     setSuccessMessage("");
 
     if (!isEmailValid || isSubmitting) {
-      const message = "Please enter a valid email address.";
-      setError(message);
-      showToast({
-        title: "Email needed",
-        description: message,
-        variant: "error",
-      });
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -67,33 +59,20 @@ export default function ForgotPasswordPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        const message = result.error || "Unable to send reset instructions.";
-        setError(message);
-        showToast({
-          title: "Reset link not sent",
-          description: message,
-          variant: "error",
-        });
+        setError(result.error || "Unable to send reset instructions.");
         return;
       }
 
-      const message =
-        result.message ||
-        "If this email is registered, we sent a password reset link to it.";
-      setSuccessMessage(message);
-      showToast({
-        title: "Reset link requested",
-        description: message,
-        variant: "success",
-      });
+      setSuccessMessage(
+        "We sent a 6-digit reset code to your email. Please check your inbox."
+      );
+      
+      // Redirect to verify-code page after a few seconds
+      setTimeout(() => {
+        router.push(`/verify-code?email=${encodeURIComponent(normalizedEmail)}`);
+      }, 3000);
     } catch {
-      const message = "Unable to send reset instructions right now.";
-      setError(message);
-      showToast({
-        title: "Reset link not sent",
-        description: message,
-        variant: "error",
-      });
+      setError("Unable to send reset instructions right now.");
     } finally {
       setIsSubmitting(false);
     }

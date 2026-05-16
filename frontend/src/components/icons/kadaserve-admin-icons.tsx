@@ -13,7 +13,7 @@ function AdminIcon({
   className,
   fill = "none",
   size = 24,
-  strokeWidth = 2.35,
+  strokeWidth = 1.8,
   ...props
 }: KadaAdminIconProps) {
   return (
@@ -72,10 +72,12 @@ export function KadaCustomerIcon(props: KadaAdminIconProps) {
 export function KadaMenuIcon(props: KadaAdminIconProps) {
   return (
     <AdminIcon {...props}>
-      <path d="M7.5 4.5v7.2a4.5 4.5 0 0 0 9 0V4.5" />
-      <path d="M7.5 9.5h9" />
-      <path d="M12 16.2v4" />
-      <path d="M8.8 20.5h6.4" />
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <circle cx="5" cy="6" r="1" />
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="5" cy="18" r="1" />
     </AdminIcon>
   );
 }
@@ -83,10 +85,9 @@ export function KadaMenuIcon(props: KadaAdminIconProps) {
 export function KadaPanelMenuIcon(props: KadaAdminIconProps) {
   return (
     <AdminIcon {...props}>
-      <rect x="4" y="5" width="16" height="14" rx="4" />
-      <path d="M8 9h8" />
-      <path d="M8 12h8" />
-      <path d="M8 15h5" />
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
     </AdminIcon>
   );
 }

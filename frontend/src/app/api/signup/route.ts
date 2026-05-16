@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail, escapeHtml } from "@/lib/email";
 
 function getPasswordIssues(password: string) {
   const issues: string[] = [];
@@ -24,36 +24,6 @@ const nameRegex = /^[A-Za-z\s.-]+$/;
 const emailRegex =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
-function getSmtpConfig() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || user;
-
-  if (!host || !user || !pass || !from) {
-    return null;
-  }
-
-  return {
-    host,
-    port,
-    secure: port === 465,
-    user,
-    pass,
-    from,
-  };
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 async function sendConfirmationEmail({
   to,
   fullName,
@@ -63,26 +33,10 @@ async function sendConfirmationEmail({
   fullName: string;
   confirmationUrl: string;
 }) {
-  const smtpConfig = getSmtpConfig();
-
-  if (!smtpConfig) {
-    throw new Error("SMTP email settings are not configured.");
-  }
-
   const safeName = escapeHtml(fullName);
   const safeConfirmationUrl = escapeHtml(confirmationUrl);
-  const transporter = nodemailer.createTransport({
-    host: smtpConfig.host,
-    port: smtpConfig.port,
-    secure: smtpConfig.secure,
-    auth: {
-      user: smtpConfig.user,
-      pass: smtpConfig.pass,
-    },
-  });
 
-  await transporter.sendMail({
-    from: smtpConfig.from,
+  await sendEmail({
     to,
     subject: "Confirm your KadaServe account",
     text: `Hi ${fullName},\n\nConfirm your KadaServe account by opening this link:\n${confirmationUrl}\n\nIf you did not create this account, you can ignore this email.`,

@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
-  KadaClockIcon,
-  KadaCloseIcon,
-  KadaLogoutIcon,
-  KadaMenuIcon as KadaCafeMenuIcon,
-  KadaPanelMenuIcon,
-  KadaRefreshIcon,
-  KadaSearchIcon,
-} from "@/components/icons/kadaserve-admin-icons";
+  Clock,
+  X,
+  LogOut,
+  Coffee,
+  Menu,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import {
   CustomerPreferenceView,
   ItemRankingView,
@@ -1544,34 +1544,31 @@ export function AdminDashboard() {
             className={`flex items-center gap-3 pt-7 ${isSidebarOpen ? "justify-between px-5" : "justify-center px-3"
               }`}
           >
-            <div className={`flex items-center gap-3 ${isSidebarOpen ? "" : "justify-center"}`}>
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-[#FFF0DA]/18 bg-[#FFF0DA]/12 font-sans text-sm font-black text-[#FFF8EF]">
-                KS
-              </div>
-              {isSidebarOpen ? (
+            <div className={`flex items-center gap-2.5 ${isSidebarOpen ? "" : "hidden"}`}>
+              {isSidebarOpen && (
                 <div>
-                  <p className="font-sans text-[1.65rem] font-black leading-none text-[#FFF8EF]">
+                  <p className="font-sans text-[1.4rem] font-black leading-none text-[#FFF8EF]">
                     KadaServe
                   </p>
-                  <p className="mt-1 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/78">
+                  <p className="mt-0.5 font-sans text-[0.6rem] font-bold uppercase tracking-[0.18em] text-[#E8D9BE]/78">
                     Admin Panel
                   </p>
                 </div>
-              ) : null}
+              )}
             </div>
 
             <button
               type="button"
               onClick={() => setIsSidebarOpen((current) => !current)}
               aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#FFF0DA]/12 bg-[#FFF0DA]/8 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/16"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FFF0DA]/12 bg-[#FFF0DA]/8 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/16"
             >
-              {isSidebarOpen ? <KadaCloseIcon size={20} /> : <KadaPanelMenuIcon size={20} />}
+              {isSidebarOpen ? <X size={18} strokeWidth={1.8} /> : <Menu size={18} strokeWidth={1.8} />}
             </button>
           </div>
 
           <nav
-            className={`mt-12 space-y-2 ${isSidebarOpen ? "px-4" : "px-3"
+            className={`mt-8 space-y-1.5 ${isSidebarOpen ? "px-3" : "px-2"
               }`}
           >
             {isSidebarOpen ? (
@@ -1589,12 +1586,12 @@ export function AdminDashboard() {
                   type="button"
                   onClick={() => handleTabSelect(tab.key)}
                   title={tab.label}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left font-sans text-sm font-semibold leading-tight transition ${isActive
-                    ? "rounded-[18px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_14px_34px_rgba(0,0,0,0.2)]"
-                    : "rounded-[18px] text-[#FFF0DA]/82 hover:bg-[#FFF0DA]/10 hover:text-[#FFF8EF]"
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left font-sans text-xs font-semibold leading-tight transition ${isActive
+                    ? "rounded-[14px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_8px_24px_rgba(0,0,0,0.15)]"
+                    : "rounded-[14px] text-[#FFF0DA]/82 hover:bg-[#FFF0DA]/10 hover:text-[#FFF8EF]"
                     }`}
                 >
-                  <Icon size={20} className="shrink-0" />
+                  <Icon size={18} className="shrink-0" />
                   {isSidebarOpen ? (
                     tab.label
                   ) : (
@@ -1605,24 +1602,24 @@ export function AdminDashboard() {
             })}
           </nav>
 
-          <div className={`mt-auto pb-7 ${isSidebarOpen ? "px-4" : "px-3"}`}>
+          <div className={`mt-auto pb-5 ${isSidebarOpen ? "px-3" : "px-2"}`}>
             <button
               type="button"
               onClick={handleLogout}
               disabled={isLoggingOut}
               title="Logout"
-              className={`flex w-full items-center gap-3 rounded-[18px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-4 py-3 font-sans text-sm font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/12 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
+              className={`flex w-full items-center gap-2.5 rounded-[14px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-3 py-2.5 font-sans text-xs font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/12 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
                 }`}
             >
-              <KadaLogoutIcon size={20} className="shrink-0" />
+              <LogOut size={18} strokeWidth={1.8} className="shrink-0" />
               {isSidebarOpen ? (isLoggingOut ? "Logging out..." : "Logout") : null}
             </button>
           </div>
         </aside>
 
         <section className="min-w-0 bg-[#FFF0DA]">
-          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_8px_24px_rgba(104,75,53,0.06)] backdrop-blur">
-            <div className="grid gap-4 px-5 py-5 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
+          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_4px_16px_rgba(104,75,53,0.04)] backdrop-blur">
+            <div className="grid gap-3 px-4 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
               {/* LEFT: Header Title & Description */}
               <div className="flex items-center gap-4">
                 <button
@@ -1631,18 +1628,17 @@ export function AdminDashboard() {
                   aria-label="Open admin navigation"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6C6AC] bg-[#FFF8EF] text-[#684B35] transition hover:bg-white lg:hidden"
                 >
-                  <KadaPanelMenuIcon size={20} />
+                  <Menu size={20} strokeWidth={1.8} />
                 </button>
                 <div>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-baseline gap-2">
-                      <h1 className="font-sans text-2xl font-black leading-none text-[#0D2E18]">
+                    <div className="flex items-baseline gap-1.5">
+                      <h1 className="font-sans text-xl font-black leading-none text-[#0D2E18]">
                         {activeTab === "dashboard" 
                           ? `Good ${getTimeOfDay()}, Admin` 
                           : activeHeaderTitle}
                       </h1>
                       {activeTab === "dashboard" && (
-                        <KadaCafeMenuIcon size={24} className="text-[#8C6C48]" />
+                        <Coffee size={20} strokeWidth={1.8} className="text-[#8C6C48]" />
                       )}
                     </div>
                     {activeTab === "dashboard" && (
@@ -1652,7 +1648,7 @@ export function AdminDashboard() {
                     )}
                   </div>
                 </div>
-              </div>
+
 
               {/* CENTER: Refresh Button */}
               <div className="hidden xl:block">
@@ -1661,18 +1657,18 @@ export function AdminDashboard() {
                   onClick={() => void handleRefreshAnalytics()}
                   disabled={isLoading}
                   aria-label="Refresh analytics"
-                  className="inline-flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-4 font-sans text-xs font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3.5 font-sans text-[0.7rem] font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
                 >
-                  <KadaRefreshIcon size={16} className={isLoading ? "animate-spin" : ""} />
+                  <RefreshCw size={14} strokeWidth={1.8} className={isLoading ? "animate-spin" : ""} />
                   Refresh Analytics
                 </button>
               </div>
 
               {/* RIGHT: Status, Search, Sync Info */}
               <div className="flex flex-wrap items-center justify-start gap-3 xl:justify-end">
-                <div className="relative w-full max-w-[260px]">
-                  <label className="flex h-10 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
-                    <KadaSearchIcon size={15} className="text-[#8C7A64]" />
+                <div className="relative w-full max-w-[240px]">
+                  <label className="flex h-9 items-center gap-2 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
+                    <Search size={14} strokeWidth={1.8} className="text-[#8C7A64]" />
                     <input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
@@ -1681,7 +1677,7 @@ export function AdminDashboard() {
                         window.setTimeout(() => setIsSearchFocused(false), 140);
                       }}
                       placeholder="Search..."
-                      className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+                      className="w-full bg-transparent font-sans text-xs text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
                     />
                   </label>
 
@@ -1713,9 +1709,9 @@ export function AdminDashboard() {
                 </div>
 
                 {/* Store Status */}
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 font-sans text-xs font-bold transition ${
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-sans text-[0.7rem] font-bold transition ${
                       storeStatus?.effectiveStatus === "open"
                         ? "bg-[#E9F5E7] text-[#0D2E18]"
                         : storeStatus?.effectiveStatus === "busy"
@@ -1724,7 +1720,7 @@ export function AdminDashboard() {
                     }`}
                   >
                     <span
-                      className={`h-2.5 w-2.5 rounded-full animate-pulse ${
+                      className={`h-2 w-2 rounded-full animate-pulse ${
                         storeStatus?.effectiveStatus === "open"
                           ? "bg-[#0F441D]"
                           : storeStatus?.effectiveStatus === "busy"
@@ -1744,7 +1740,7 @@ export function AdminDashboard() {
                     }
                     disabled={isStoreStatusUpdating}
                     aria-label="Master store status override"
-                    className="h-10 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3 font-sans text-xs font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
+                    className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-2.5 font-sans text-[0.7rem] font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
                   >
                     <option value="auto">Auto</option>
                     <option value="open">Force Open</option>
@@ -1766,7 +1762,7 @@ export function AdminDashboard() {
             ) : null}
           </header>
 
-          <div className="px-5 py-5 xl:px-6">
+          <div className="px-4 py-4 xl:px-6">
             {error ? (
               <div className="mb-5 rounded-[18px] bg-[#FFF1EC] px-5 py-4 font-sans text-sm text-[#9C543D]">
                 {error}
@@ -1830,7 +1826,7 @@ export function AdminDashboard() {
                       </div>
 
                       <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[#DCCFB8] bg-white px-4 py-2.5 font-sans text-xs font-bold text-[#684B35]">
-                        <KadaClockIcon size={13} />
+                        <Clock size={13} strokeWidth={1.8} />
                         5PM-12AM
                       </span>
                     </div>

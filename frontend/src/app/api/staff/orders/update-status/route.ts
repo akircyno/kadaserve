@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPendingExpirySetupMessage } from "@/lib/orders/expire-pending-orders";
+import { sendEmail, escapeHtml, getSmtpConfig } from "@/lib/email";
 
 type OrderStatus =
   | "pending_payment"
@@ -17,10 +18,19 @@ type PaymentStatus = "unpaid" | "paid";
 
 const pendingOrderTimeoutMinutes = 45;
 
+
+function peso(value: number) {
+  return `\u20B1${Math.round(value)}`;
+}
+
 function getNumberValue(value: unknown) {
   const numericValue = Number(value);
 
   return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
+  return Math.max(0, getNumberValue(totalAmount) - getNumberValue(deliveryFee));
 }
 
 function getPendingOrderAgeMinutes(orderedAt: string) {
@@ -57,6 +67,297 @@ function getNextStatus(
       return "delivered";
     default:
       return null;
+  }
+}
+
+async function triggerDispatchNotification(
+  orderId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  origin: string
+) {
+  const smtpConfig = getSmtpConfig();
+
+  if (!smtpConfig) {
+    return false;
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        customer_id,
+        order_type,
+        total_amount,
+        delivery_fee,
+        delivery_email,
+        delivery_phone,
+        delivery_address,
+        walkin_name,
+        order_items (
+          quantity,
+          menu_items (
+            name
+          )
+        )
+      `
+    )
+    .eq("id", orderId)
+    .single();
+
+  if (!order) {
+    return false;
+  }
+
+  let customerProfile: {
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null = null;
+
+  if (order.customer_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email, phone")
+      .eq("id", order.customer_id)
+      .single();
+
+    customerProfile = profile ?? null;
+  }
+
+  const customerEmail = order.delivery_email || customerProfile?.email;
+
+  if (!customerEmail) {
+    return false;
+  }
+
+  const customerName =
+    order.walkin_name ||
+    customerProfile?.full_name ||
+    customerEmail.split("@")[0] ||
+    "Customer";
+
+  const orderSummary =
+    order.order_items
+      ?.map((item) => {
+        const menuItem = Array.isArray(item.menu_items)
+          ? item.menu_items[0]
+          : item.menu_items;
+        const name = menuItem?.name ?? "Menu item";
+        return `${name} x ${item.quantity}`;
+      })
+      .join("\n") ?? "";
+
+  const deliveryFee =
+    order.order_type === "delivery" ? getNumberValue(order.delivery_fee) : 0;
+  const subtotal = getBaseAmount(order.total_amount, deliveryFee);
+  const totalAmountDue = getNumberValue(order.total_amount);
+  const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
+  const text = `Hi ${customerName},
+
+Good news! Your order is now out for delivery.
+
+Order:
+${orderSummary || "Order details unavailable"}
+
+Items Total: ${peso(subtotal)}
+Delivery Fee: ${peso(deliveryFee)}
+Total Amount Due: ${peso(totalAmountDue)}
+
+Track your order here:
+${trackingLink}
+
+Thank you for ordering from Kada Cafe PH.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0D2E18; line-height: 1.5;">
+      <h2 style="color: #0D2E18;">Your Kada Cafe PH order is on the way</h2>
+      <p>Hi ${escapeHtml(customerName)},</p>
+      <p>Good news! Your order is now out for delivery.</p>
+      <div style="background: #FFF0DA; padding: 14px; border-radius: 10px; margin: 16px 0;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Order:</p>
+        <pre style="font-family: Arial, sans-serif; margin: 0; white-space: pre-wrap;">${escapeHtml(
+          orderSummary || "Order details unavailable"
+        )}</pre>
+        <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
+          <p style="margin: 0;">Items Total: <strong>${peso(subtotal)}</strong></p>
+          <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
+          <p style="margin: 8px 0 0; font-size: 16px;">Total Amount Due: <strong>${peso(
+            totalAmountDue
+          )}</strong></p>
+        </div>
+      </div>
+      <p>
+        <a href="${trackingLink}" style="display: inline-block; background: #0D2E18; color: #FFF0DA; padding: 10px 14px; border-radius: 999px; text-decoration: none; font-weight: 700;">
+          Track your order here
+        </a>
+      </p>
+      <p>Thank you for ordering from Kada Cafe PH.</p>
+    </div>
+  `;
+
+  try {
+    await sendEmail({
+      to: customerEmail,
+      subject: "Your Kada Cafe PH order is on the way",
+      text,
+      html,
+    });
+
+    return true;
+  } catch {
+    // Status transitions should not fail if the notification service is offline.
+    return false;
+  }
+}
+
+async function triggerPaymentReceiptNotification(
+  orderId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  origin: string
+) {
+  const smtpConfig = getSmtpConfig();
+
+  if (!smtpConfig) {
+    return false;
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        customer_id,
+        order_type,
+        total_amount,
+        delivery_fee,
+        payment_method,
+        delivery_email,
+        walkin_name,
+        order_items (
+          quantity,
+          unit_price,
+          menu_items (
+            name
+          )
+        )
+      `
+    )
+    .eq("id", orderId)
+    .single();
+
+  if (!order) {
+    return false;
+  }
+
+  let customerProfile: {
+    full_name: string | null;
+    email: string | null;
+  } | null = null;
+
+  if (order.customer_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", order.customer_id)
+      .single();
+
+    customerProfile = profile ?? null;
+  }
+
+  const customerEmail = order.delivery_email || customerProfile?.email;
+
+  if (!customerEmail) {
+    return false;
+  }
+
+  const customerName =
+    order.walkin_name ||
+    customerProfile?.full_name ||
+    customerEmail.split("@")[0] ||
+    "Customer";
+
+  const orderSummary =
+    order.order_items
+      ?.map((item) => {
+        const menuItem = Array.isArray(item.menu_items)
+          ? item.menu_items[0]
+          : item.menu_items;
+        const name = menuItem?.name ?? "Menu item";
+        return `${name} x ${item.quantity} - ${peso(
+          item.unit_price * item.quantity
+        )}`;
+      })
+      .join("\n") ?? "";
+
+  const deliveryFee =
+    order.order_type === "delivery" ? getNumberValue(order.delivery_fee) : 0;
+  const subtotal = getBaseAmount(order.total_amount, deliveryFee);
+  const totalPaid = getNumberValue(order.total_amount);
+  const trackingLink = `${origin}/customer?tab=orders&orderId=${order.id}`;
+  const paymentMethod =
+    order.payment_method === "gcash"
+      ? "GCash"
+      : order.payment_method === "cash"
+      ? "Cash"
+      : "Payment";
+  const text = `Hi ${customerName},
+
+Payment received. Thank you for paying for your Kada Cafe PH order.
+
+Receipt:
+${orderSummary || "Order details unavailable"}
+
+Items Total: ${peso(subtotal)}
+Delivery Fee: ${peso(deliveryFee)}
+Total Paid: ${peso(totalPaid)}
+Payment Method: ${paymentMethod}
+
+Track your order here:
+${trackingLink}
+
+Thank you for ordering from Kada Cafe PH.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0D2E18; line-height: 1.5;">
+      <h2 style="color: #0D2E18;">Payment received for your Kada Cafe PH order</h2>
+      <p>Hi ${escapeHtml(customerName)},</p>
+      <p>Payment received. Thank you for paying for your Kada Cafe PH order.</p>
+      <div style="background: #FFF0DA; padding: 14px; border-radius: 10px; margin: 16px 0;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Receipt:</p>
+        <pre style="font-family: Arial, sans-serif; margin: 0; white-space: pre-wrap;">${escapeHtml(
+          orderSummary || "Order details unavailable"
+        )}</pre>
+        <div style="border-top: 1px solid #DCCFB8; margin-top: 12px; padding-top: 12px;">
+          <p style="margin: 0;">Items Total: <strong>${peso(subtotal)}</strong></p>
+          <p style="margin: 4px 0 0;">Delivery Fee: <strong>${peso(deliveryFee)}</strong></p>
+          <p style="margin: 8px 0 0; font-size: 16px;">Total Paid: <strong>${peso(
+            totalPaid
+          )}</strong></p>
+          <p style="margin: 4px 0 0;">Payment Method: <strong>${escapeHtml(
+            paymentMethod
+          )}</strong></p>
+        </div>
+      </div>
+      <p>
+        <a href="${trackingLink}" style="display: inline-block; background: #0D2E18; color: #FFF0DA; padding: 10px 14px; border-radius: 999px; text-decoration: none; font-weight: 700;">
+          Track your order
+        </a>
+      </p>
+      <p>Thank you for ordering from Kada Cafe PH.</p>
+    </div>
+  `;
+
+  try {
+    await sendEmail({
+      to: customerEmail,
+      subject: "Payment received for your Kada Cafe PH order",
+      text,
+      html,
+    });
+
+    return true;
+  } catch {
+    // Payment updates should not fail if the notification service is offline.
+    return false;
   }
 }
 
@@ -263,13 +564,28 @@ export async function POST(request: Request) {
       );
     }
 
+    const notificationSent =
+      nextStatus === "out_for_delivery"
+        ? await triggerDispatchNotification(
+            orderId,
+            supabase,
+            new URL(request.url).origin
+          )
+        : false;
+    const receiptSent =
+      nextStatus === "delivered"
+        ? await triggerPaymentReceiptNotification(
+            orderId,
+            supabase,
+            new URL(request.url).origin
+          )
+        : false;
+
     return NextResponse.json({
       success: true,
       nextStatus,
-      notificationSent: ["preparing", "ready", "out_for_delivery"].includes(
-        nextStatus
-      ),
-      receiptSent: nextStatus === "delivered",
+      notificationSent,
+      receiptSent,
     });
   } catch {
     return NextResponse.json(
