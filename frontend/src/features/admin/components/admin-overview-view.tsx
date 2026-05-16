@@ -160,7 +160,7 @@ function MetricCard({
 }: { 
   label: string
   value: string
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: React.ComponentType<{ size: number; strokeWidth?: number; className?: string }>
   trend?: string
   trendUp?: boolean
   description?: string
@@ -227,7 +227,7 @@ function InsightCard({
   detail: string
   label: string
   value: string
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: React.ComponentType<{ size: number; strokeWidth?: number; className?: string }>
 }) {
   return (
     <article className="group relative overflow-hidden rounded-[18px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-4 py-3.5 shadow-[0_6px_16px_rgba(75,50,24,0.04)] transition-all hover:shadow-[0_12px_32px_rgba(75,50,24,0.1)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
@@ -261,7 +261,7 @@ function NeedsAttentionItem({
   description,
   type = "info",
 }: {
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: React.ComponentType<{ size: number; strokeWidth?: number; className?: string }>
   title: string
   description: string
   type?: "warning" | "success" | "info"

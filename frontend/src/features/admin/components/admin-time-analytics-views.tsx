@@ -68,7 +68,7 @@ function TimeSeriesMetricCard({
   value,
 }: {
   detail: string;
-  icon: ComponentType<{ className?: string; size?: number }>;
+  icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
   label: string;
   value: string;
 }) {

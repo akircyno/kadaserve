@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useRef, useState, useEffect } from "react";
+import { FormEvent, useRef, useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -11,10 +11,11 @@ import {
   LoaderCircle,
   RotateCcw,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const LOGO_SRC = "/images/logo/logo.png";
 
-export default function VerifyCodePage() {
+function VerifyCodeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -267,5 +268,17 @@ export default function VerifyCodePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function VerifyCodePage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-[#FFF0DA] flex items-center justify-center">
+        <LoadingSpinner label="Loading verification session..." />
+      </main>
+    }>
+      <VerifyCodeContent />
+    </Suspense>
   );
 }
