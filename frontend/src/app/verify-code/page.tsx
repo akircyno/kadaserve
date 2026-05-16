@@ -96,7 +96,9 @@ export default function VerifyCodePage() {
 
       setSuccessMessage("Code verified! Redirecting to reset password...");
       setTimeout(() => {
-        router.push("/reset-password");
+        router.push(
+          `/reset-password?email=${encodeURIComponent(email)}&code=${fullCode}&step=new_password`
+        );
       }, 1500);
     } catch {
       setError("Unable to verify code right now.");
@@ -182,7 +184,7 @@ export default function VerifyCodePage() {
 
         <div className="mb-7">
           <p className="font-sans text-base leading-7 text-[#684B35]">
-            We've sent a 6-digit code to <strong>{email}</strong>. Please enter
+            We&apos;ve sent a 6-digit code to <strong>{email}</strong>. Please enter
             it below to proceed.
           </p>
         </div>
@@ -243,7 +245,7 @@ export default function VerifyCodePage() {
 
         <div className="mt-6 border-t border-[#DCCFB8] pt-6">
           <p className="mb-3 text-center font-sans text-sm text-[#684B35]">
-            Didn't receive the code?
+            Didn&apos;t receive the code?
           </p>
           <button
             type="button"

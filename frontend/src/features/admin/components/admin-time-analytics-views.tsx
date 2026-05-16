@@ -2,13 +2,12 @@
 
 import { type ComponentType, useState } from "react";
 import {
-  KadaActivityIcon,
-  KadaClockIcon,
-  KadaDemandIcon,
-  KadaFlameIcon,
-  KadaTrendIcon,
-  KadaUsersIcon,
-} from "@/components/icons/kadaserve-admin-icons";
+  Activity,
+  Clock,
+  TrendingUp,
+  Flame,
+  Users,
+} from "lucide-react";
 
 export type PeakHourWindow = {
   id: string;
@@ -79,7 +78,7 @@ function TimeSeriesMetricCard({
         <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
           {label}
         </p>
-        <Icon size={16} className="text-[#7D6B55]" />
+        <Icon size={16} strokeWidth={1.8} className="text-[#7D6B55]" />
       </div>
       <p className="mt-3 font-sans text-[1.75rem] font-bold leading-none text-[#0D2E18]">
         {value}
@@ -552,25 +551,25 @@ export function TimeSeriesView({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <TimeSeriesMetricCard
           detail={`at ${peak.label}`}
-          icon={KadaActivityIcon}
+          icon={Activity}
           label="Peak Hour"
           value={String(peak.orders)}
         />
         <TimeSeriesMetricCard
           detail={`${activeHourCount} active hours`}
-          icon={KadaDemandIcon}
+          icon={TrendingUp}
           label="Total Volume"
           value={String(total)}
         />
         <TimeSeriesMetricCard
           detail={`${serviceShare}% of daily demand`}
-          icon={KadaClockIcon}
+          icon={Clock}
           label="Service Window"
           value={String(serviceTotal)}
         />
         <TimeSeriesMetricCard
           detail={`${low} lowest hour`}
-          icon={KadaTrendIcon}
+          icon={TrendingUp}
           label="Average"
           value={String(avg)}
         />
@@ -727,7 +726,7 @@ export function PeakHoursView({
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <KadaFlameIcon size={20} className="text-[#684B35]" />
+                <Flame size={20} strokeWidth={1.8} className="text-[#684B35]" />
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
                   Peak Hour Intelligence
                 </p>
@@ -737,7 +736,7 @@ export function PeakHoursView({
               </h3>
             </div>
             <span className="whitespace-nowrap rounded-full border border-[#DCCFB8] bg-[#FFF0DA]/60 px-4 py-2 font-sans text-xs font-semibold text-[#684B35]">
-              <KadaClockIcon size={12} className="inline mr-1" />
+              <Clock size={12} strokeWidth={1.8} className="inline mr-1" />
               5PM-12AM
             </span>
           </div>
@@ -758,7 +757,7 @@ export function PeakHoursView({
       <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
         <div className="space-y-2 mb-6">
           <div className="flex items-center gap-2">
-            <KadaTrendIcon size={18} className="text-[#684B35]" />
+            <TrendingUp size={18} strokeWidth={1.8} className="text-[#684B35]" />
             <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
               Hourly Traffic Heatmap
             </h4>
@@ -779,7 +778,7 @@ export function PeakHoursView({
         <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
           <div className="space-y-2 mb-6">
             <div className="flex items-center gap-2">
-              <KadaUsersIcon size={18} className="text-[#684B35]" />
+              <Users size={18} strokeWidth={1.8} className="text-[#684B35]" />
               <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
                 Busiest Service Hours
               </h4>

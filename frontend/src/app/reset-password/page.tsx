@@ -11,8 +11,6 @@ import {
   EyeOff,
   Lock,
   Mail,
-  KeyRound,
-  ArrowRight,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
@@ -32,44 +30,33 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
-  const [step, setStep] = useState<"verify_code" | "new_password">("verify_code");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
-    if (emailParam) {
-      setEmail(emailParam);
+    const codeParam = searchParams.get("code");
+
+    if (!emailParam || !codeParam) {
+      router.replace("/forgot-password");
+      return;
     }
-  }, [searchParams]);
+
+    setEmail(emailParam);
+    setCode(codeParam);
+    setIsLoading(false);
+  }, [searchParams, router]);
 
   const passwordChecks = getPasswordChecks(password);
   const isPasswordStrong = Object.values(passwordChecks).every(Boolean);
   const passwordsMatch = password.length > 0 && password === confirmPassword;
-
-  async function handleVerifyCode(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    
-    if (code.length !== 6) {
-      setError("Please enter the 6-digit reset code.");
-      return;
-    }
-
-    if (!email) {
-      setError("Email is missing. Please try requesting a code again.");
-      return;
-    }
-
-    // We proceed to password entry step
-    setStep("new_password");
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,9 +85,6 @@ export default function ResetPasswordPage() {
 
       if (!response.ok) {
         setError(result.error || "Verification failed.");
-        if (result.error?.toLowerCase().includes("code")) {
-          setStep("verify_code");
-        }
         return;
       }
 
@@ -108,6 +92,11 @@ export default function ResetPasswordPage() {
       setPassword("");
       setConfirmPassword("");
       setCode("");
+
+      // Redirect to login after success
+      setTimeout(() => {
+        router.push("/login");
+      }, 3000);
     } catch {
       setError("Unable to update password right now.");
     } finally {
@@ -143,60 +132,15 @@ export default function ResetPasswordPage() {
               Account Recovery
             </p>
             <h1 className="font-sans text-4xl font-semibold text-[#0D2E18]">
-              {step === "verify_code" ? "Verify Code" : "New Password"}
+              New Password
             </h1>
           </div>
         </div>
 
-        {step === "verify_code" ? (
-          <form onSubmit={handleVerifyCode} className="space-y-5">
-            <div className="rounded-xl bg-[#FFF1EC]/50 p-4 mb-4">
-              <p className="text-sm text-[#684B35]">
-                We've sent a 6-digit code to <strong>{email}</strong>. Please enter it below to proceed.
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="code"
-                className="mb-2 block font-sans text-sm font-bold uppercase tracking-[0.08em] text-[#0F441D]"
-              >
-                Reset Code
-              </label>
-
-              <div className="flex items-center rounded-xl border border-[#BFD1B5] bg-white px-4 py-3 transition focus-within:border-[#0F441D] focus-within:ring-2 focus-within:ring-[#0F441D]/15">
-                <KeyRound className="mr-3 text-[#8C7A64]" size={18} />
-                <input
-                  id="code"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoFocus
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
-                  placeholder="000000"
-                  className="min-w-0 flex-1 bg-transparent font-sans text-2xl font-bold tracking-[0.5em] text-[#0D2E18] outline-none placeholder:text-[#9B8A74] placeholder:tracking-normal placeholder:font-normal placeholder:text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {error ? (
-              <p className="flex items-center gap-2 rounded-xl bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-medium text-[#9C543D]">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {error}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={code.length !== 6}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F441D] py-3 font-sans text-lg font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
-            >
-              Continue
-              <ArrowRight className="h-5 w-5" />
-            </button>
-          </form>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <LoadingSpinner label="Preparing reset form..." />
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -211,7 +155,9 @@ export default function ResetPasswordPage() {
                   readOnly
                   className="min-w-0 flex-1 bg-transparent font-sans text-sm text-[#684B35] outline-none cursor-not-allowed"
                 />
-                <span className="text-[10px] font-bold text-[#8C7A64] uppercase tracking-wider">View Only</span>
+                <span className="text-[10px] font-bold text-[#8C7A64] uppercase tracking-wider">
+                  View Only
+                </span>
               </div>
             </div>
 
@@ -321,19 +267,21 @@ export default function ResetPasswordPage() {
               disabled={!isPasswordStrong || !passwordsMatch || isSubmitting}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F441D] py-3 font-sans text-lg font-bold text-white shadow-lg shadow-[#0F441D]/15 transition hover:-translate-y-0.5 hover:bg-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
             >
-              {isSubmitting ? <LoadingSpinner label="Updating password" /> : null}
+              {isSubmitting ? (
+                <LoadingSpinner label="Updating password" />
+              ) : null}
               {isSubmitting ? "Updating..." : "Update password"}
             </button>
 
-            <div className="flex justify-between items-center px-1 mt-4">
+            <div className="flex items-center justify-between px-1 mt-4">
               <button
                 type="button"
-                onClick={() => setStep("verify_code")}
+                onClick={() => router.push("/forgot-password")}
                 className="text-sm font-semibold text-[#684B35] hover:text-[#0D2E18]"
               >
-                Back to code entry
+                Back to email entry
               </button>
-              
+
               {successMessage ? (
                 <button
                   type="button"

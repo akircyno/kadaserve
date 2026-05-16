@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import {
-  KadaChevronRightIcon,
-  KadaDownloadIcon,
-} from "@/components/icons/kadaserve-admin-icons";
+  ChevronRight,
+  Download,
+} from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   getAdminOrderTotals,
@@ -439,7 +439,7 @@ export function OrdersView({
                 {isExportingReport ? (
                   <LoadingSpinner label="Generating report" />
                 ) : (
-                  <KadaDownloadIcon size={16} />
+                  <Download size={16} strokeWidth={1.8} />
                 )}
                 {isExportingReport ? "Generating..." : "Export"}
               </button>
@@ -645,7 +645,7 @@ export function OrdersView({
                 aria-label={`View ${formatOrderCode(order.id)}`}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#684B35] transition hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
               >
-                <KadaChevronRightIcon size={18} />
+                <ChevronRight size={18} strokeWidth={1.8} />
               </button>
             </div>
           ))}

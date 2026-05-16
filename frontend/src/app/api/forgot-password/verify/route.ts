@@ -5,9 +5,9 @@ export async function POST(request: Request) {
   try {
     const { email, code, password } = await request.json();
 
-    if (!email || !code || !password) {
+    if (!email || !code) {
       return NextResponse.json(
-        { error: "Email, code, and password are required." },
+        { error: "Email and code are required." },
         { status: 400 }
       );
     }
@@ -44,25 +44,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Update the user's password
-    const { error: updateError } = await supabase.auth.admin.updateUserById(
-      user.id,
-      { password: password }
-    );
-
-    if (updateError) {
-      console.error("Error updating password:", updateError);
-      return NextResponse.json(
-        { error: "Failed to update password." },
-        { status: 500 }
+    if (password) {
+      // 3. Update the user's password
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
+        user.id,
+        { password: password }
       );
-    }
 
-    // 4. Mark the code as used
-    await supabase
-      .from("password_resets")
-      .update({ is_used: true })
-      .eq("id", resetEntry.id);
+      if (updateError) {
+        console.error("Error updating password:", updateError);
+        return NextResponse.json(
+          { error: "Failed to update password." },
+          { status: 500 }
+        );
+      }
+
+      // 4. Mark the code as used
+      await supabase
+        .from("password_resets")
+        .update({ is_used: true })
+        .eq("id", resetEntry.id);
+    }
 
     return NextResponse.json({
       success: true,

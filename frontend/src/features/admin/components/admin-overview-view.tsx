@@ -2,20 +2,19 @@
 
 import { useMemo, useState } from "react";
 import {
-  KadaAlertIcon,
-  KadaChevronUpIcon,
-  KadaClockIcon,
-  KadaDemandIcon,
-  KadaFlameIcon,
-  KadaInfoIcon,
-  KadaMenuIcon,
-  KadaMoneyIcon,
-  KadaPackageIcon,
-  KadaSmileIcon,
-  KadaStarIcon,
-  KadaTrendIcon,
-  KadaZapIcon,
-} from "@/components/icons/kadaserve-admin-icons";
+  AlertTriangle,
+  ChevronUp,
+  Clock,
+  TrendingUp,
+  Flame,
+  Info,
+  Coffee,
+  PhilippinePeso,
+  Package,
+  Smile,
+  Star,
+  Zap,
+} from "lucide-react";
 import type { StaffOrder } from "@/types/orders";
 
 const STORE_HOURS_LABEL = "Store Hours: 5:00 PM – 12:00 AM";
@@ -124,7 +123,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[24px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/70 ${className}`}
+      className={`overflow-hidden rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] p-4 shadow-[0_8px_20px_rgba(75,50,24,0.06)] transition-all hover:shadow-[0_16px_40px_rgba(75,50,24,0.12)] hover:border-[#D8C8AA]/70 ${className}`}
     >
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-3">
@@ -138,7 +137,7 @@ function Panel({
           )}
         </div>
         {rightLabel ? (
-          <p className="rounded-full bg-gradient-to-br from-[#0D2E18]/8 to-[#4A6B4D]/4 px-3.5 py-2 font-sans text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#684B35] border border-[#D8C8AA]/30">
+          <p className="rounded-full bg-gradient-to-br from-[#0D2E18]/8 to-[#4A6B4D]/4 px-2.5 py-1.5 font-sans text-[0.6rem] font-bold uppercase tracking-[0.14em] text-[#684B35] border border-[#D8C8AA]/30">
             {rightLabel}
           </p>
         ) : null}
@@ -170,7 +169,7 @@ function MetricCard({
   formulaExplanation?: string
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-[24px] border border-[#D8C8AA]/60 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-6 py-6 shadow-[0_10px_28px_rgba(75,50,24,0.08)] transition-all hover:shadow-[0_20px_50px_rgba(75,50,24,0.16)] hover:border-[#D8C8AA] hover:-translate-y-1">
+    <div className="group relative overflow-hidden rounded-[20px] border border-[#D8C8AA]/60 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-5 py-5 shadow-[0_8px_24px_rgba(75,50,24,0.06)] transition-all hover:shadow-[0_16px_40px_rgba(75,50,24,0.12)] hover:border-[#D8C8AA] hover:-translate-y-0.5">
       {/* Background gradient accent */}
       <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br from-[#0D2E18]/8 to-[#4A6B4D]/4 transition-transform group-hover:scale-125" />
       
@@ -190,8 +189,8 @@ function MetricCard({
                 />
               )}
             </div>
-            <div className="mt-4 flex items-baseline gap-2.5">
-              <p className="font-sans text-4xl font-black tabular-nums leading-none text-[#0D2E18]">
+            <div className="mt-3 flex items-baseline gap-2">
+              <p className="font-sans text-3xl font-black tabular-nums leading-none text-[#0D2E18]">
                 {value}
               </p>
               {trend && (
@@ -205,13 +204,13 @@ function MetricCard({
               )}
             </div>
             {description && (
-              <p className="mt-3 font-sans text-xs leading-relaxed text-[#6D5B48]">
+              <p className="mt-2 font-sans text-[0.7rem] leading-relaxed text-[#6D5B48]">
                 {description}
               </p>
             )}
           </div>
-          <div className="ml-4 flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-[#0D2E18]/12 to-[#4A6B4D]/6 transition-all group-hover:from-[#0D2E18]/20 group-hover:to-[#4A6B4D]/12">
-            <Icon size={28} className="text-[#0D2E18]" />
+          <div className="ml-3 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-[#0D2E18]/8 transition-all group-hover:bg-[#0D2E18]/12">
+            <Icon size={20} strokeWidth={1.8} className="text-[#0D2E18]" />
           </div>
         </div>
       </div>
@@ -231,7 +230,7 @@ function InsightCard({
   icon: React.ComponentType<{ size: number; className?: string }>
 }) {
   return (
-    <article className="group relative overflow-hidden rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-5 py-5 shadow-[0_8px_20px_rgba(75,50,24,0.06)] transition-all hover:shadow-[0_16px_40px_rgba(75,50,24,0.14)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
+    <article className="group relative overflow-hidden rounded-[18px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-4 py-3.5 shadow-[0_6px_16px_rgba(75,50,24,0.04)] transition-all hover:shadow-[0_12px_32px_rgba(75,50,24,0.1)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
       <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#4A6B4D]/6 transition-transform group-hover:scale-125" />
       
       <div className="relative z-10">
@@ -240,15 +239,15 @@ function InsightCard({
             <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
               {label}
             </p>
-            <p className="mt-2.5 font-sans text-lg font-bold leading-tight text-[#0D2E18] truncate">
+            <p className="mt-1.5 font-sans text-base font-bold leading-tight text-[#0D2E18] truncate">
               {value}
             </p>
           </div>
-          <div className="ml-2 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-[#0D2E18]/10 transition-all group-hover:bg-[#0D2E18]/15">
-            <Icon size={20} className="text-[#0D2E18]" />
+          <div className="ml-2 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#0D2E18]/6 transition-all group-hover:bg-[#0D2E18]/10">
+            <Icon size={18} strokeWidth={1.8} className="text-[#0D2E18]" />
           </div>
         </div>
-        <p className="mt-2.5 font-sans text-xs leading-relaxed text-[#6D5B48]">
+        <p className="mt-1.5 font-sans text-[0.7rem] leading-relaxed text-[#6D5B48]">
           {detail}
         </p>
       </div>
@@ -297,19 +296,19 @@ function NeedsAttentionItem({
   const style = typeStyles[type];
 
   return (
-    <div className={`flex gap-3.5 rounded-[16px] border ${style.border} ${style.bg} px-4 py-3.5 transition-all hover:shadow-[0_6px_16px_rgba(75,50,24,0.12)] group hover:translate-y-[-2px]`}>
-      <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${style.iconBg} transition-transform group-hover:scale-110`}>
-        <Icon size={18} className={style.icon} />
+    <div className={`flex gap-3 rounded-[14px] border ${style.border} ${style.bg} px-3 py-2.5 transition-all hover:shadow-[0_4px_12px_rgba(75,50,24,0.08)] group hover:translate-y-[-1px]`}>
+      <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg ${style.iconBg} transition-transform group-hover:scale-110`}>
+        <Icon size={14} strokeWidth={1.8} className={style.icon} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className={`font-sans text-sm font-semibold ${style.title}`}>
+        <p className={`font-sans text-xs font-semibold ${style.title}`}>
           {title}
         </p>
-        <p className="mt-0.5 font-sans text-xs leading-relaxed text-[#6D5B48]">
+        <p className="mt-0.5 font-sans text-[0.65rem] leading-relaxed text-[#6D5B48]">
           {description}
         </p>
       </div>
-      <div className={`${style.dotColor} h-1.5 w-1.5 flex-shrink-0 rounded-full mt-1.5 opacity-60`} />
+      <div className={`${style.dotColor} h-1 w-1 flex-shrink-0 rounded-full mt-1.5 opacity-60`} />
     </div>
   );
 }
@@ -334,10 +333,10 @@ function RankingRow({
   const rankColor = rankColors[Math.min(index - 1, 2)] || { text: "text-white", badge: "bg-gradient-to-br from-[#7D6B55] to-[#8C7A64]", bar: "from-[#7D6B55] via-[#8C7A64] to-[#DCCFB8]" };
 
   return (
-    <div className="group relative grid min-h-[46px] grid-cols-[40px_minmax(0,1fr)_40px_110px] items-center gap-3 border-b border-[#EBE0D3]/60 px-1 py-2 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+    <div className="group relative grid min-h-[38px] grid-cols-[32px_minmax(0,1fr)_40px_100px] items-center gap-2.5 border-b border-[#EBE0D3]/60 px-0.5 py-1.5 font-sans text-xs transition-all hover:bg-white/40 last:border-b-0">
       {/* Rank Badge */}
-      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl ${rankColor.badge} shadow-[0_4px_12px_rgba(13,46,24,0.15)] transition-transform group-hover:scale-110`}>
-        <span className={`text-xs font-bold ${rankColor.text}`}>#{index}</span>
+      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${rankColor.badge} shadow-[0_3px_8px_rgba(13,46,24,0.12)] transition-transform group-hover:scale-110`}>
+        <span className={`text-[0.65rem] font-bold ${rankColor.text}`}>#{index}</span>
       </div>
       
       {/* Item Label */}
@@ -349,9 +348,9 @@ function RankingRow({
       </span>
       
       {/* Progress Bar */}
-      <div className="relative h-2 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
         <div
-          className={`h-full rounded-full bg-gradient-to-r ${rankColor.bar} shadow-[0_2px_8px_rgba(13,46,24,0.2)] transition-all duration-500`}
+          className={`h-full rounded-full bg-gradient-to-r ${rankColor.bar} shadow-[0_1px_6px_rgba(13,46,24,0.15)] transition-all duration-500`}
           style={{
             width: `${Math.min(100, Math.max(0, (value / max) * 100))}%`,
           }}
@@ -367,7 +366,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
   const hasHalfStar = rating % 1 >= 0.5;
 
   return (
-    <div className="group relative grid min-h-[46px] grid-cols-[minmax(130px,0.8fr)_1fr_48px] items-center gap-3 border-b border-[#EBE0D3]/60 px-1 py-2 font-sans text-sm transition-all hover:bg-white/40 last:border-b-0">
+    <div className="group relative grid min-h-[38px] grid-cols-[minmax(120px,0.8fr)_1fr_40px] items-center gap-2.5 border-b border-[#EBE0D3]/60 px-0.5 py-1.5 font-sans text-xs transition-all hover:bg-white/40 last:border-b-0">
       {/* Item Name */}
       <div className="flex items-center gap-2 min-w-0">
         <span className="truncate font-semibold text-[#0D2E18]">{item}</span>
@@ -376,9 +375,9 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
       {/* Rating Bar & Stars */}
       <div className="flex items-center gap-2.5">
         {/* Progress Bar */}
-        <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
+        <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[#E8D9BE]/50 backdrop-blur-sm">
           <div
-            className={`h-full rounded-full bg-gradient-to-r ${colors.barGradient} shadow-[0_2px_8px_rgba(13,46,24,0.15)] transition-all duration-500 group-hover:shadow-[0_3px_12px_rgba(13,46,24,0.25)]`}
+            className={`h-full rounded-full bg-gradient-to-r ${colors.barGradient} shadow-[0_1px_6px_rgba(13,46,24,0.15)] transition-all duration-500 group-hover:shadow-[0_2px_10px_rgba(13,46,24,0.2)]`}
             style={{
               width: `${Math.min(100, (rating / 5) * 100)}%`,
             }}
@@ -393,15 +392,16 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
             return (
               <div key={i} className="relative h-3 w-3">
                 {isFilled || isHalf ? (
-                  <KadaStarIcon
+                  <Star
                     size={12}
+                    strokeWidth={1.8}
                     className="absolute inset-0 fill-current text-[#0F441D] transition-transform group-hover:scale-110"
                     style={{
                       clipPath: isHalf ? "polygon(0 0, 50% 0, 50% 100%, 0 100%)" : undefined,
                     }}
                   />
                 ) : null}
-                <KadaStarIcon size={12} className="absolute inset-0 text-[#DCCFB8]" />
+                <Star size={12} strokeWidth={1.8} className="absolute inset-0 text-[#DCCFB8]" />
               </div>
             );
           })}
@@ -409,7 +409,7 @@ function RatingRow({ item, rating }: { item: string; rating: number }) {
       </div>
 
       {/* Rating Number */}
-      <span className={`text-right text-xs font-bold tabular-nums ${colors.textColor}`}>
+      <span className={`text-right text-[0.65rem] font-bold tabular-nums ${colors.textColor}`}>
         {rating.toFixed(1)}
       </span>
     </div>
@@ -620,7 +620,7 @@ function FormulaTooltip({
         className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-[#0D2E18]/10 hover:bg-[#0D2E18]/20 transition-colors"
         title={title}
       >
-        <KadaInfoIcon size={14} className="text-[#684B35]" />
+        <Info size={14} strokeWidth={1.8} className="text-[#684B35]" />
       </button>
       
       {isOpen && (
@@ -649,7 +649,7 @@ function FormulaTooltip({
 function StoreHoursBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#684B35] px-3 py-1.5 rounded-full bg-[#FFF0DA]/60 border border-[#FFE0BA]">
-      <KadaClockIcon size={13} />
+      <Clock size={13} strokeWidth={1.8} />
       {STORE_HOURS_LABEL}
     </span>
   );
@@ -1026,7 +1026,7 @@ export function DashboardView({
       id: "admin-total-orders", 
       label: totalOrdersLabel, 
       value: totalOrders.toString(),
-      icon: KadaPackageIcon,
+      icon: Package,
       trend: totalOrders > 10 ? "+12%" : undefined,
       trendUp: true,
       description: "All confirmed orders",
@@ -1038,7 +1038,7 @@ export function DashboardView({
       id: "admin-gross-sales", 
       label: "Today's Revenue", 
       value: peso(grossIncomeSales),
-      icon: KadaMoneyIcon,
+      icon: PhilippinePeso,
       trend: grossIncomeSales > 1000 ? "+8%" : undefined,
       trendUp: true,
       description: "Total sales today",
@@ -1050,7 +1050,7 @@ export function DashboardView({
       id: "admin-avg-order-value", 
       label: "Avg Order Value", 
       value: peso(averageOrderValue),
-      icon: KadaMenuIcon,
+      icon: Coffee,
       description: "Per customer",
       formulaTitle: "Average Order Value Formula",
       formula: "Average Order Value = Total Revenue ÷ Total Orders",
@@ -1060,7 +1060,7 @@ export function DashboardView({
       id: "admin-average-rating", 
       label: "Satisfaction", 
       value: averageRating ? averageRating.toFixed(1) : "N/A",
-      icon: KadaStarIcon,
+      icon: Star,
       trend: feedbackCount > 0 ? `${feedbackCount} reviews` : undefined,
       trendUp: averageRating >= 4,
       description: "Customer ratings",
@@ -1082,19 +1082,19 @@ export function DashboardView({
   // Build "Needs Attention" alerts
   const needsAttentionItems = [
     ...(totalOrders === 0 
-      ? [{ icon: KadaDemandIcon, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
+      ? [{ icon: TrendingUp, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
       : []),
     ...(topItem && topItem.rating < 3.5
-      ? [{ icon: KadaAlertIcon, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
+      ? [{ icon: AlertTriangle, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
       : []),
     ...(busiestHour.orders > 0 && busiestHour.label
-      ? [{ icon: KadaFlameIcon, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
+      ? [{ icon: Flame, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
       : []),
     ...(trendDelta < -20
-      ? [{ icon: KadaTrendIcon, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
+      ? [{ icon: TrendingUp, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
       : []),
     ...(satisfactionLabel === "Needs review"
-      ? [{ icon: KadaSmileIcon, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
+      ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
       : []),
   ].slice(0, 3);
 
@@ -1106,7 +1106,7 @@ export function DashboardView({
         busiestHour.orders > 0
           ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
           : "Wait for more order data.",
-      icon: KadaClockIcon,
+      icon: Clock,
     },
     {
       label: "Weekly Growth",
@@ -1115,7 +1115,7 @@ export function DashboardView({
         weeklyTrendCounts.length < 2
           ? "Need more data for comparison."
           : `${latestWeek} orders vs ${previousWeek} last week.`,
-      icon: KadaTrendIcon,
+      icon: TrendingUp,
     },
     {
       label: "Top Favorite",
@@ -1123,7 +1123,7 @@ export function DashboardView({
       detail: topItem
         ? `${topItem.orders} orders. Use as recommendation signal.`
         : "Collect order data first.",
-      icon: KadaStarIcon,
+      icon: Star,
     },
     {
       label: "Satisfaction",
@@ -1132,7 +1132,7 @@ export function DashboardView({
         feedbackCount > 0
           ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
           : "Encourage customer feedback.",
-      icon: KadaSmileIcon,
+      icon: Smile,
     },
   ].filter(
     (insight) =>
@@ -1183,7 +1183,7 @@ export function DashboardView({
     showWeekly;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Store Hours Badge */}
       <div className="flex justify-between items-start gap-3">
         <StoreHoursBadge />
@@ -1191,7 +1191,7 @@ export function DashboardView({
 
       {/* KPI Cards */}
       {showKpi ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           {visibleKpiCards.map((metric) => (
             <div
               key={metric.label}
@@ -1218,15 +1218,15 @@ export function DashboardView({
       {showNeedsAttention ? (
         <section
           id="admin-needs-attention"
-          className="scroll-mt-28 overflow-hidden rounded-[22px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)]"
+          className="scroll-mt-28 overflow-hidden rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-3.5 shadow-[0_8px_20px_rgba(75,50,24,0.06)]"
         >
-          <div className="flex items-center gap-2 mb-4">
-            <KadaZapIcon size={18} className="text-[#684B35]" />
-            <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={16} strokeWidth={1.8} className="text-[#684B35]" />
+            <h3 className="font-sans text-[0.7rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
               Needs Attention
             </h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {needsAttentionItems.map((item, idx) => (
               <NeedsAttentionItem
                 key={idx}
@@ -1246,13 +1246,13 @@ export function DashboardView({
           id="admin-decision-support"
           className="scroll-mt-28"
         >
-          <div className="mb-3">
-            <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
+          <div className="mb-2.5">
+            <p className="font-sans text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
               Quick Insights
             </p>
           </div>
           {visibleInsights.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
               {visibleInsights.map((insight) => (
                 <InsightCard
                   key={insight.label}
@@ -1273,9 +1273,9 @@ export function DashboardView({
 
       {/* Charts Grid */}
       {showWeekly || showPeakHours ? (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {showWeekly ? (
-            <div id="admin-weekly-trend" className="scroll-mt-28 xl:h-[340px]">
+            <div id="admin-weekly-trend" className="scroll-mt-28 xl:h-[300px]">
               <Panel 
                 className="h-full" 
                 title="Demand Growth" 
@@ -1296,7 +1296,7 @@ export function DashboardView({
           ) : null}
 
           {showPeakHours ? (
-            <div id="admin-peak-hours" className="scroll-mt-28 xl:h-[340px]">
+            <div id="admin-peak-hours" className="scroll-mt-28 xl:h-[300px]">
               <Panel 
                 className="h-full" 
                 title="Peak Hours Heatmap"
@@ -1313,9 +1313,9 @@ export function DashboardView({
 
       {/* Order & Hourly Volume */}
       {showOrdersWeek || showHourly ? (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {showOrdersWeek ? (
-            <div id="admin-orders-week" className="scroll-mt-28 xl:h-[320px]">
+            <div id="admin-orders-week" className="scroll-mt-28 xl:h-[280px]">
               <Panel 
                 className="h-full" 
                 title="Orders by Day"
@@ -1323,8 +1323,8 @@ export function DashboardView({
                 formula="Order Count = number of completed orders per day (5PM–12AM)"
                 formulaExplanation="Shows which days are busiest. Orders are counted during store operating hours only."
               >
-                <div className="mt-3 space-y-3">
-                  <div className="flex h-[130px] items-end gap-2 rounded-[18px] border border-[#EFE3CF]/45 bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-4 pb-4 pt-3">
+                <div className="mt-2.5 space-y-2.5">
+                  <div className="flex h-[110px] items-end gap-2 rounded-[16px] border border-[#EFE3CF]/45 bg-gradient-to-b from-[#FFF8F0] to-[#FFF3E6] px-3.5 pb-3 pt-2.5">
                     {weekdayCounts.map((item) => {
                       const hasOrders = item.orders > 0;
                       const heightPercent = Math.max(8, (item.orders / maxWeekdayOrders) * 100);
@@ -1339,7 +1339,7 @@ export function DashboardView({
                           
                           {/* Bar */}
                           <div
-                            className={`w-full max-w-[42px] rounded-t-[14px] transition-all duration-300 shadow-[0_8px_16px_rgba(13,46,24,0.12)] group-hover:translate-y-[-2px] group-hover:shadow-[0_12px_28px_rgba(13,46,24,0.2)] ${
+                            className={`w-full max-w-[38px] rounded-t-[12px] transition-all duration-300 shadow-[0_6px_12px_rgba(13,46,24,0.1)] group-hover:translate-y-[-2px] group-hover:shadow-[0_10px_24px_rgba(13,46,24,0.18)] ${
                               !hasOrders
                                 ? "border border-[#DCCFB8] bg-gradient-to-t from-[#DCCFB8] to-[#FFF0DA] shadow-none"
                                 : isHighest
@@ -1369,7 +1369,7 @@ export function DashboardView({
                         {Math.max(...weekdayCounts.map(c => c.orders))} orders
                       </span>
                     </p>
-                    <KadaChevronUpIcon size={16} className="text-[#8C6C48] flex-shrink-0" />
+                    <ChevronUp size={16} strokeWidth={1.8} className="text-[#8C6C48] flex-shrink-0" />
                   </div>
                 </div>
               </Panel>
@@ -1377,7 +1377,7 @@ export function DashboardView({
           ) : null}
 
           {showHourly ? (
-            <div id="admin-hourly-order-volume" className="scroll-mt-28 xl:h-[320px]">
+            <div id="admin-hourly-order-volume" className="scroll-mt-28 xl:h-[280px]">
               <Panel 
                 className="h-full" 
                 title="Hourly Volume"
@@ -1398,9 +1398,9 @@ export function DashboardView({
 
       {/* Top Items & Satisfaction */}
       {showTopItems || showSatisfaction ? (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {showTopItems ? (
-            <div id="admin-top-items" className="scroll-mt-28 xl:h-[330px]">
+            <div id="admin-top-items" className="scroll-mt-28 xl:h-[290px]">
               <Panel 
                 className="h-full" 
                 title="Top Sellers" 
@@ -1409,7 +1409,7 @@ export function DashboardView({
                 formula="Item Sales = Σ quantity sold per item"
                 formulaExplanation="Ranks menu items by total orders. #1 badge shows your most popular item. Use this to optimize inventory and marketing."
               >
-                <div className="mt-3 rounded-[18px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-1">
+                <div className="mt-2.5 rounded-[16px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-0.5">
                   {visibleItemRanking.slice(0, 5).map((item, index) => (
                     <RankingRow
                       key={item.item}
@@ -1426,7 +1426,7 @@ export function DashboardView({
           ) : null}
 
           {showSatisfaction ? (
-            <div id="admin-satisfaction" className="scroll-mt-28 xl:h-[330px]">
+            <div id="admin-satisfaction" className="scroll-mt-28 xl:h-[290px]">
               <Panel 
                 className="h-full" 
                 title="Customer Ratings" 
@@ -1435,7 +1435,7 @@ export function DashboardView({
                 formula="Average Rating = Σ ratings / feedback entries"
                 formulaExplanation="Calculates mean rating from customer feedback (1–5 stars). Deep green = excellent, muted green = good, coffee brown = needs attention."
               >
-                <div className="mt-3 rounded-[18px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-1">
+                <div className="mt-2.5 rounded-[16px] border border-[#EFE3CF]/45 bg-[#FFF8EF] px-3 py-0.5">
                   {visibleItemRanking.slice(0, 5).map((item) => (
                     <RatingRow key={item.item} item={item.item} rating={item.rating} />
                   ))}

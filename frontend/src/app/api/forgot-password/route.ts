@@ -77,12 +77,11 @@ export async function POST(request: Request) {
 
     const user = users.users.find((u) => u.email === normalizedEmail);
 
-    // To prevent email enumeration, we return success even if the user isn't found
     if (!user) {
-      return NextResponse.json({
-        success: true,
-        message: "If this email is registered, we sent a password reset code to it.",
-      });
+      return NextResponse.json(
+        { error: "No account found with this email address." },
+        { status: 404 }
+      );
     }
 
     // 2. Generate a 6-digit reset code

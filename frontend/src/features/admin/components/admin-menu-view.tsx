@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
 import type * as React from "react";
-import { KadaSearchIcon } from "@/components/icons/kadaserve-admin-icons";
+import { Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -669,7 +669,7 @@ export function MenuView({
       <div className="rounded-[18px] border border-[#DCCFB8] bg-white p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <label className="flex w-full items-center gap-3 rounded-full border border-[#BFD0B8] bg-[#F7FBF5] px-5 py-3 xl:max-w-[420px]">
-            <KadaSearchIcon size={17} className="text-[#6F7F69]" />
+            <Search size={17} strokeWidth={1.8} className="text-[#6F7F69]" />
             <input
               value={menuSearch}
               onChange={(event) => setMenuSearch(event.target.value)}
