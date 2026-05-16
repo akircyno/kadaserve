@@ -32,6 +32,10 @@ export async function GET() {
         delivery_lng,
         delivery_email,
         delivery_phone,
+        paymongo_qr_code_id,
+        paymongo_qr_code_image_url,
+        paymongo_qr_code_label,
+        paymongo_qr_expires_at,
         order_items (
           id,
           quantity,

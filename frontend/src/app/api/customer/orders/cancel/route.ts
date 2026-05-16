@@ -1,9 +1,34 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 type CancelOrderRequest = {
   orderId?: string;
 };
+
+function getCancelBlockReason(order: {
+  status: string;
+  payment_method: string | null;
+  payment_status: string | null;
+}) {
+  if (order.status === "pending_payment") {
+    return order.payment_method === "online" && order.payment_status !== "paid"
+      ? null
+      : "Only unpaid online orders can be cancelled while awaiting payment.";
+  }
+
+  if (order.status === "pending") {
+    return order.payment_status === "paid"
+      ? "Paid orders can no longer be cancelled from the customer app."
+      : null;
+  }
+
+  if (["cancelled", "expired", "completed", "delivered"].includes(order.status)) {
+    return "This order is already closed.";
+  }
+
+  return "This order can no longer be cancelled because staff has started processing it.";
+}
 
 export async function POST(request: Request) {
   try {
@@ -45,9 +70,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: order, error: orderError } = await supabase
+    const adminSupabase = createAdminClient();
+
+    const { data: order, error: orderError } = await adminSupabase
       .from("orders")
-      .select("id, status, customer_id")
+      .select("id, status, customer_id, payment_method, payment_status")
       .eq("id", orderId)
       .eq("customer_id", user.id)
       .maybeSingle();
@@ -59,19 +86,27 @@ export async function POST(request: Request) {
       );
     }
 
-    if (order.status !== "pending") {
+    const cancelBlockReason = getCancelBlockReason(order);
+
+    if (cancelBlockReason) {
       return NextResponse.json(
-        { error: "Only pending orders can be cancelled." },
+        { error: cancelBlockReason },
         { status: 400 }
       );
     }
 
-    const { count, error: updateError } = await supabase
+    let updateQuery = adminSupabase
       .from("orders")
       .update({ status: "cancelled" }, { count: "exact" })
       .eq("id", orderId)
       .eq("customer_id", user.id)
-      .eq("status", "pending");
+      .eq("status", order.status);
+
+    updateQuery = order.payment_status
+      ? updateQuery.eq("payment_status", order.payment_status)
+      : updateQuery.is("payment_status", null);
+
+    const { count, error: updateError } = await updateQuery;
 
     if (updateError) {
       return NextResponse.json(

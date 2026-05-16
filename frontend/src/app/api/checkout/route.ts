@@ -436,12 +436,17 @@ export async function POST(request: Request) {
           deliveryAddress: orderType === "delivery" ? deliveryAddress : null,
           totalAmount,
         });
+        const qrExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
         const { error: paymentUpdateError } = await supabase
           .from("orders")
           .update({
             paymongo_payment_intent_id: payMongoQrPh.paymentIntentId,
             paymongo_payment_method_used: "qrph",
+            paymongo_qr_code_id: payMongoQrPh.qrCodeId,
+            paymongo_qr_code_image_url: payMongoQrPh.qrCodeImageUrl,
+            paymongo_qr_code_label: payMongoQrPh.qrCodeLabel,
+            paymongo_qr_expires_at: qrExpiresAt,
           })
           .eq("id", order.id);
 
@@ -461,6 +466,7 @@ export async function POST(request: Request) {
           qrCodeId: payMongoQrPh.qrCodeId,
           qrCodeImageUrl: payMongoQrPh.qrCodeImageUrl,
           qrCodeLabel: payMongoQrPh.qrCodeLabel,
+          qrCodeExpiresAt: qrExpiresAt,
           paymentStatus: "pending_payment",
           totalAmount,
         });

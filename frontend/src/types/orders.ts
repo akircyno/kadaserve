@@ -93,5 +93,9 @@ export type CustomerOrder = {
   delivery_lng?: number | null;
   delivery_email?: string | null;
   delivery_phone?: string | null;
+  paymongo_qr_code_id?: string | null;
+  paymongo_qr_code_image_url?: string | null;
+  paymongo_qr_code_label?: string | null;
+  paymongo_qr_expires_at?: string | null;
   order_items: CustomerOrderItem[];
 };

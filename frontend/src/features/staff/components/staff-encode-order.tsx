@@ -5,7 +5,6 @@ import {
     AlertTriangle,
     CheckCircle2,
     CreditCard,
-    MapPin,
     Minus,
     PackageCheck,
     Plus,
@@ -18,7 +17,7 @@ import {
 import { useToast } from "@/components/ui/toast-provider";
 import { EncodeOrderHeaderControls } from "./encode-order-header-controls";
 import type { MenuCategory, MenuFilterCategory, StaffMenuItem } from "@/types/menu";
-import type { OrderType, PaymentMethod, PaymentStatus } from "@/types/orders";
+import type { PaymentMethod, PaymentStatus } from "@/types/orders";
 
 type Size = "regular";
 
@@ -139,14 +138,9 @@ export function StaffEncodeOrder() {
     const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
     const [search, setSearch] = useState("");
     const [activeCategory, setActiveCategory] = useState<MenuFilterCategory>("all");
-    const [orderType, setOrderType] = useState<OrderType>("pickup");
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
     const [walkinName, setWalkinName] = useState("");
-    const [deliveryAddress, setDeliveryAddress] = useState("");
-    const [deliveryEmail, setDeliveryEmail] = useState("");
-    const [deliveryPhone, setDeliveryPhone] = useState("");
-    const [deliveryFee, setDeliveryFee] = useState(0);
     const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
     const [cart, setCart] = useState<CartItem[]>([]);
     const [customizingItem, setCustomizingItem] = useState<StaffMenuItem | null>(null);
@@ -204,9 +198,7 @@ export function StaffEncodeOrder() {
         );
     }, [cart]);
 
-    const total = useMemo(() => {
-        return subtotal + (orderType === "delivery" ? deliveryFee : 0);
-    }, [subtotal, deliveryFee, orderType]);
+    const total = subtotal;
 
     const customizingAddonTotal = useMemo(() => {
         return customizingAddons.reduce(
@@ -216,11 +208,7 @@ export function StaffEncodeOrder() {
         );
     }, [customizingAddons]);
 
-    const hasRequiredDeliveryInfo =
-        orderType !== "delivery" ||
-        (deliveryAddress.trim().length > 0 && deliveryPhone.trim().length > 0);
-    const hasRequiredCustomerName =
-        orderType !== "pickup" || walkinName.trim().length > 0;
+    const hasRequiredCustomerName = walkinName.trim().length > 0;
 
     const cartCount = useMemo(() => {
         return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -243,16 +231,11 @@ export function StaffEncodeOrder() {
     const canSubmitOrder =
         cart.length > 0 &&
         !isSubmitting &&
-        hasRequiredCustomerName &&
-        hasRequiredDeliveryInfo;
+        hasRequiredCustomerName;
     const visibleCategoryLabel =
         categoryButtons.find((button) => button.key === activeCategory)?.label ?? "All";
     const paymentMethodLabel =
-        orderType === "delivery"
-            ? "Cash on Delivery"
-            : paymentMethod === "gcash"
-            ? "GCash"
-            : "Cash";
+        paymentMethod === "gcash" ? "GCash" : "Cash";
     const menuSyncMeta = isLoadingMenu
         ? "Syncing..."
         : `Menu sync${
@@ -438,20 +421,10 @@ export function StaffEncodeOrder() {
         if (cart.length === 0 || isSubmitting) return;
 
         if (!hasRequiredCustomerName) {
-            setError("Customer name is required for walk-in pickup.");
+            setError("Customer name is required for walk-in order.");
             showToast({
                 title: "Customer name required",
-                description: "Add the customer name before submitting pickup order.",
-                variant: "error",
-            });
-            return;
-        }
-
-        if (!hasRequiredDeliveryInfo) {
-            setError("Delivery address and phone are required.");
-            showToast({
-                title: "Delivery details required",
-                description: "Add the delivery address and phone before submitting.",
+                description: "Add the customer name before submitting walk-in order.",
                 variant: "error",
             });
             return;
@@ -468,14 +441,10 @@ export function StaffEncodeOrder() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    orderType,
+                    orderType: "pickup",
                     items: cart,
                     totalAmount: total,
-                    deliveryFee: orderType === "delivery" ? deliveryFee : 0,
                     walkinName,
-                    deliveryAddress,
-                    deliveryEmail,
-                    deliveryPhone,
                     paymentMethod,
                     paymentStatus,
                 }),
@@ -495,14 +464,9 @@ export function StaffEncodeOrder() {
 
             setCart([]);
             setSelectedQuantities({});
-            setOrderType("pickup");
             setPaymentMethod("cash");
             setPaymentStatus("paid");
             setWalkinName("");
-            setDeliveryAddress("");
-            setDeliveryEmail("");
-            setDeliveryPhone("");
-            setDeliveryFee(0);
             setSuccessMessage(
                 `Order #${result.orderId.slice(0, 8).toUpperCase()} added to queue.`
             );
@@ -750,36 +714,12 @@ export function StaffEncodeOrder() {
                             <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
                                 Fulfillment
                             </p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {(["pickup", "delivery"] as const).map((type) => {
-                                    const Icon = type === "pickup" ? PackageCheck : MapPin;
-
-                                    return (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            onClick={() => {
-                                                setOrderType(type);
-                                                if (type === "delivery") {
-                                                    setPaymentMethod("cash");
-                                                }
-                                            }}
-                                            className={`min-h-20 rounded-[24px] border p-3 text-left font-sans transition-all duration-200 ${
-                                                orderType === type
-                                                    ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.16)]"
-                                                    : "border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF8EF]"
-                                            }`}
-                                        >
-                                            <Icon size={18} />
-                                            <p className="mt-2 text-sm font-black">
-                                                {type === "pickup" ? "Pickup" : "Delivery"}
-                                            </p>
-                                            <p className="mt-0.5 text-xs font-semibold opacity-75">
-                                                {type === "pickup" ? "Counter handoff" : "Address required"}
-                                            </p>
-                                        </button>
-                                    );
-                                })}
+                            <div className="rounded-[24px] border border-[#0D2E18] bg-[#0D2E18] p-3 font-sans text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.16)]">
+                                <PackageCheck size={18} />
+                                <p className="mt-2 text-sm font-black">Walk-in</p>
+                                <p className="mt-0.5 text-xs font-semibold opacity-75">
+                                    Counter order
+                                </p>
                             </div>
                         </div>
 
@@ -788,61 +728,16 @@ export function StaffEncodeOrder() {
                             <label className="block">
                                 <span className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
                                     <UserRound size={14} />
-                                    Customer Name{" "}
-                                    {orderType === "pickup" && <span className="text-[#C55432]">*</span>}
+                                    Customer Name <span className="text-[#C55432]">*</span>
                                 </span>
                                 <input
                                     value={walkinName}
                                     onChange={(event) => setWalkinName(event.target.value)}
-                                    placeholder={orderType === "pickup" ? "Walk-in customer name" : "Receiver name"}
+                                    placeholder="Customer name"
                                     className="mt-2 h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
                                 />
                             </label>
                         </div>
-
-                        {/* Delivery Info */}
-                        {orderType === "delivery" && (
-                            <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
-                                <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
-                                    Delivery Details
-                                </p>
-                                <div className="grid gap-2">
-                                    <input
-                                        value={deliveryAddress}
-                                        onChange={(event) => setDeliveryAddress(event.target.value)}
-                                        placeholder="Full delivery address"
-                                        required
-                                        className="h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                                    />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="tel"
-                                            value={deliveryPhone}
-                                            onChange={(event) => setDeliveryPhone(event.target.value)}
-                                            placeholder="Phone number"
-                                            required
-                                            className="h-11 min-w-0 rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                                        />
-                                        <input
-                                            type="number"
-                                            value={deliveryFee}
-                                            onChange={(event) => setDeliveryFee(Math.max(0, Number(event.target.value) || 0))}
-                                            placeholder="Delivery fee"
-                                            min="0"
-                                            step="1"
-                                            className="h-11 min-w-0 rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                                        />
-                                    </div>
-                                    <input
-                                        type="email"
-                                        value={deliveryEmail}
-                                        onChange={(event) => setDeliveryEmail(event.target.value)}
-                                        placeholder="Email (optional)"
-                                        className="h-11 w-full rounded-[18px] border border-[#D6C6AC] bg-white px-3 font-sans text-sm font-bold text-[#0D2E18] outline-none placeholder:text-[#9B8A74] transition-all focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/10"
-                                    />
-                                </div>
-                            </div>
-                        )}
 
                         {/* Cart Items */}
                         <div className="border-b border-[#E6D7C0]">
@@ -953,10 +848,7 @@ export function StaffEncodeOrder() {
                                             Method
                                         </p>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {(orderType === "delivery"
-                                                ? (["cash"] as const)
-                                                : (["cash", "gcash"] as const)
-                                            ).map((method) => (
+                                            {(["cash", "gcash"] as const).map((method) => (
                                                 <button
                                                     key={method}
                                                     type="button"
@@ -968,17 +860,11 @@ export function StaffEncodeOrder() {
                                                     }`}
                                                 >
                                                     <p className="text-sm font-black">
-                                                        {method === "cash"
-                                                            ? orderType === "delivery"
-                                                                ? "COD"
-                                                                : "Cash"
-                                                            : "GCash"}
+                                                        {method === "cash" ? "Cash" : "GCash"}
                                                     </p>
                                                     <p className="mt-0.5 text-xs font-semibold opacity-75">
                                                         {method === "cash"
-                                                            ? orderType === "delivery"
-                                                                ? "Collect on delivery"
-                                                                : "Counter payment"
+                                                            ? "Counter payment"
                                                             : "Digital wallet"}
                                                     </p>
                                                 </button>
@@ -1024,12 +910,6 @@ export function StaffEncodeOrder() {
                                 <p className="hidden font-sans text-[11px] text-[#8C7A64]">
                                     Subtotal: {peso(subtotal)}
                                 </p>
-                                {orderType === "delivery" && (
-                                    <p className="flex items-center justify-between font-sans text-sm font-bold text-[#684B35]">
-                                        <span>Delivery fee</span>
-                                        <span>{peso(deliveryFee)}</span>
-                                    </p>
-                                )}
                                 <p className="flex items-center justify-between font-sans text-sm font-bold text-[#684B35]">
                                     <span>Payment</span>
                                     <span className="text-right">{paymentMethodLabel} - {paymentStatus}</span>
@@ -1041,7 +921,7 @@ export function StaffEncodeOrder() {
                                         Grand Total
                                     </p>
                                     <p className="font-sans text-sm font-bold text-[#684B35]">
-                                        {orderType === "delivery" ? "Delivery order" : "Pickup order"}
+                                        Walk-in order
                                     </p>
                                 </div>
                                 <p className="font-sans text-3xl font-black text-[#0D2E18]">

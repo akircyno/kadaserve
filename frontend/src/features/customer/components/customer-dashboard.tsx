@@ -143,6 +143,13 @@ type CustomerNotification = {
   };
 };
 
+type ReopenableQrPhPayment = {
+  orderId: string;
+  qrCodeImageUrl: string;
+  qrCodeLabel: string;
+  totalAmount: number;
+  expiresInMinutes: number;
+};
 
 const sections: Array<{
   id: Section;
@@ -500,6 +507,86 @@ function getOrderReceipt(order: CustomerOrder) {
   };
 }
 
+function getReopenableQrPhPayment(order: CustomerOrder | null) {
+  if (
+    !order ||
+    order.status !== "pending_payment" ||
+    order.payment_method !== "online" ||
+    order.payment_status !== "unpaid" ||
+    !order.paymongo_qr_code_image_url
+  ) {
+    return null;
+  }
+
+  const expiresAt = order.paymongo_qr_expires_at
+    ? new Date(order.paymongo_qr_expires_at).getTime()
+    : 0;
+
+  if (expiresAt && expiresAt <= Date.now()) {
+    return null;
+  }
+
+  return {
+    orderId: order.id,
+    qrCodeImageUrl: order.paymongo_qr_code_image_url,
+    qrCodeLabel: order.paymongo_qr_code_label || "KadaServe QR Ph",
+    totalAmount: order.total_amount,
+    expiresInMinutes: expiresAt
+      ? Math.max(1, Math.ceil((expiresAt - Date.now()) / 60000))
+      : 30,
+  };
+}
+
+function hasExpiredQrPhPayment(order: CustomerOrder | null) {
+  if (
+    !order ||
+    order.status !== "pending_payment" ||
+    order.payment_method !== "online" ||
+    order.payment_status !== "unpaid" ||
+    !order.paymongo_qr_expires_at
+  ) {
+    return false;
+  }
+
+  return new Date(order.paymongo_qr_expires_at).getTime() <= Date.now();
+}
+
+function isAwaitingOnlinePayment(order: CustomerOrder | null) {
+  return (
+    order?.status === "pending_payment" &&
+    order.payment_method === "online" &&
+    order.payment_status === "unpaid"
+  );
+}
+
+function canCustomerCancelOrder(order: CustomerOrder | null) {
+  if (!order || order.payment_status === "paid") {
+    return false;
+  }
+
+  return order.status === "pending" || order.status === "pending_payment";
+}
+
+function getCustomerCancelHelp(order: CustomerOrder) {
+  if (order.status === "pending_payment") {
+    return "You can cancel this unpaid online order before payment is confirmed.";
+  }
+
+  return "You can cancel this order before staff starts preparing it.";
+}
+
+function getCustomerCancelUnavailableMessage(order: CustomerOrder) {
+  if (["cancelled", "expired", "completed", "delivered"].includes(order.status)) {
+    return "";
+  }
+
+  if (order.payment_status === "paid") {
+    return "Paid orders cannot be cancelled here. Please contact staff for assistance.";
+  }
+
+  return "Cancellation closes once staff starts preparing the order.";
+}
+
 function getEmoji(item: CustomerMenuItem) {
   const text = `${item.name} ${item.category}`.toLowerCase();
 
@@ -838,6 +925,9 @@ export function CustomerDashboard({
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [selectedCurrentOrderId, setSelectedCurrentOrderId] = useState<string | null>(null);
   const [trackingActionMessage, setTrackingActionMessage] = useState("");
+  const [qrPhPayment, setQrPhPayment] = useState<ReopenableQrPhPayment | null>(
+    null
+  );
   const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
@@ -1323,6 +1413,13 @@ export function CustomerDashboard({
         : null,
     [customerOrders, trackingOrderId]
   );
+  const trackingQrPhPayment = getReopenableQrPhPayment(trackingOrder);
+  const isTrackingQrPhExpired = hasExpiredQrPhPayment(trackingOrder);
+  const isTrackingOnlinePaymentPending = isAwaitingOnlinePayment(trackingOrder);
+  const canCancelTrackingOrder = canCustomerCancelOrder(trackingOrder);
+  const cancelUnavailableMessage = trackingOrder
+    ? getCustomerCancelUnavailableMessage(trackingOrder)
+    : "";
   const trackingOrderStep = trackingOrder
     ? getOrderStepIndex(trackingOrder.status)
     : 0;
@@ -2037,8 +2134,17 @@ export function CustomerDashboard({
     setTrackingActionMessage("");
   }
 
+  function openTrackedQrPhPayment() {
+    if (!trackingQrPhPayment) {
+      setTrackingActionMessage("QR expired. Please place a new order.");
+      return;
+    }
+
+    setQrPhPayment(trackingQrPhPayment);
+  }
+
   async function handleCancelTrackedOrder() {
-    if (!trackingOrder || trackingOrder.status !== "pending") {
+    if (!trackingOrder || !canCancelTrackingOrder) {
       return;
     }
 
@@ -2072,6 +2178,9 @@ export function CustomerDashboard({
         current.map((order) =>
           order.id === trackingOrder.id ? { ...order, status: "cancelled" } : order
         )
+      );
+      setQrPhPayment((current) =>
+        current?.orderId === trackingOrder.id ? null : current
       );
       setTrackingActionMessage("Order cancelled. Staff and admin are updated.");
       showToast({
@@ -4707,10 +4816,43 @@ export function CustomerDashboard({
                     </span>
                   </div>
 
-                  {trackingOrder.status === "pending" ? (
+                  {trackingQrPhPayment ? (
+                    <div className="mt-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-3">
+                      <p className="font-sans text-sm font-black text-[#0D2E18]">
+                        Awaiting QR Ph payment
+                      </p>
+                      <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                        Reopen the PayMongo QR to complete this order.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openTrackedQrPhPayment}
+                        className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#0F441D]"
+                      >
+                        Show QR Code
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {isTrackingQrPhExpired ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold text-[#9C543D]">
+                      QR expired. Please place a new order.
+                    </div>
+                  ) : null}
+
+                  {isTrackingOnlinePaymentPending &&
+                  !trackingQrPhPayment &&
+                  !isTrackingQrPhExpired ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold leading-6 text-[#9C543D]">
+                      QR code is not available for this order. Cancel this unpaid
+                      order, then place a new online order to generate a new QR.
+                    </div>
+                  ) : null}
+
+                  {canCancelTrackingOrder ? (
                     <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3">
                       <p className="font-sans text-sm font-semibold text-[#9C543D]">
-                        You can still cancel this order while it is pending.
+                        {getCustomerCancelHelp(trackingOrder)}
                       </p>
                       {trackingActionMessage ? (
                         <p className="mt-2 font-sans text-xs font-semibold text-[#9C543D]">
@@ -4730,6 +4872,12 @@ export function CustomerDashboard({
                     </div>
                   ) : null}
 
+                  {!canCancelTrackingOrder && cancelUnavailableMessage ? (
+                    <div className="mt-3 rounded-[18px] bg-[#FFF8EF] p-3 font-sans text-sm font-semibold text-[#684B35]">
+                      {cancelUnavailableMessage}
+                    </div>
+                  ) : null}
+
                   {trackingOrder.payment_status === "paid" ||
                   ["out_for_delivery", "delivered"].includes(
                     trackingOrder.status
@@ -4741,6 +4889,61 @@ export function CustomerDashboard({
                 </section>
               </div>
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {qrPhPayment ? (
+        <div className="fixed inset-0 z-[72] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
+          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
+                  PayMongo QR Ph
+                </p>
+                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
+                  Scan to pay {formatPrice(qrPhPayment.totalAmount)}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrPhPayment(null)}
+                aria-label="Close QR Ph payment"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrPhPayment.qrCodeImageUrl}
+                alt="PayMongo QR Ph payment code"
+                className="mx-auto aspect-square w-full max-w-[280px] rounded-[18px] bg-white object-contain p-3"
+              />
+              <p className="mt-3 font-sans text-sm font-black text-[#0D2E18]">
+                {formatOrderCode(qrPhPayment.orderId)}
+              </p>
+              <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
+                Pay with any QR Ph-supported wallet or banking app. This QR
+                expires in about {qrPhPayment.expiresInMinutes} minutes.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
+              KadaServe will move this order to the staff queue after PayMongo
+              confirms payment.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setQrPhPayment(null)}
+              className="mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+            >
+              Back to Order Tracker
+            </button>
           </section>
         </div>
       ) : null}

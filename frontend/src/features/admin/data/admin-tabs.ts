@@ -19,6 +19,6 @@ export const adminTabs: Array<{
 }> = [
   { key: "dashboard", label: "Dashboard", icon: KadaDashboardIcon },
   { key: "demand", label: "Demand", icon: KadaDemandIcon },
-  { key: "customer-intelligence", label: "Customer Intelligence", icon: KadaCustomerIcon },
+  { key: "customer-intelligence", label: "Customers", icon: KadaCustomerIcon },
   { key: "menu", label: "Menu", icon: KadaMenuIcon },
 ];

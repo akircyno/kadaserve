@@ -4,16 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
-  KadaAlertIcon,
   KadaClockIcon,
   KadaCloseIcon,
   KadaLogoutIcon,
   KadaMenuIcon as KadaCafeMenuIcon,
-  KadaMessageIcon,
   KadaPanelMenuIcon,
   KadaRefreshIcon,
   KadaSearchIcon,
-  KadaStarIcon,
 } from "@/components/icons/kadaserve-admin-icons";
 import {
   CustomerPreferenceView,
@@ -165,6 +162,18 @@ function formatFeedbackDateTime(value: string) {
   });
 }
 
+function getFeedbackRatingStyle(value: number) {
+  if (value >= 4) {
+    return "bg-[#E6F2E8] text-[#0F441D]";
+  }
+
+  if (value >= 3) {
+    return "bg-[#FFF0DA] text-[#684B35]";
+  }
+
+  return "bg-[#FFF1EC] text-[#C55432]";
+}
+
 type AdminSearchSuggestion = {
   category: string;
   label: string;
@@ -206,27 +215,22 @@ const demandViews: Array<{
 const customerIntelligenceViews: Array<{
   key: CustomerIntelligenceView;
   label: string;
-  description: string;
 }> = [
   {
     key: "customer-pref",
     label: "Preferences",
-    description: "Learning signals",
   },
   {
     key: "item-ranking",
     label: "Ranking",
-    description: "Best item patterns",
   },
   {
     key: "satisfaction",
     label: "Satisfaction",
-    description: "Rating quality",
   },
   {
     key: "feedback",
     label: "Feedback",
-    description: "Raw comments",
   },
 ];
 
@@ -310,11 +314,6 @@ function FeedbackManagementView({
 }: {
   feedbackRows: AdminFeedbackRow[];
 }) {
-  const average =
-    feedbackRows.length > 0
-      ? feedbackRows.reduce((sum, row) => sum + Number(row.overall_rating), 0) /
-        feedbackRows.length
-      : 0;
   const byItem = new Map<string, { count: number; total: number }>();
 
   feedbackRows.forEach((row) => {
@@ -337,67 +336,43 @@ function FeedbackManagementView({
     (first, second) =>
       new Date(second.created_at).getTime() - new Date(first.created_at).getTime()
   );
-  const reviewItems = itemSummaries.filter((item) => item.average < 3);
-  const strongestItem = itemSummaries[0];
-  const weakestItem = [...itemSummaries].sort(
-    (first, second) => first.average - second.average
-  )[0];
+  const [feedbackFilter, setFeedbackFilter] = useState<
+    "all" | "five" | "four" | "review"
+  >("all");
+  const visibleFeedbackRows = sortedFeedbackRows.filter((row) => {
+    const rating = Number(row.overall_rating);
+    if (feedbackFilter === "five") return rating >= 5;
+    if (feedbackFilter === "four") return rating >= 4 && rating < 5;
+    if (feedbackFilter === "review") return rating < 3;
+    return true;
+  });
+  const [selectedFeedbackId, setSelectedFeedbackId] = useState<string | null>(null);
+  const selectedFeedback =
+    visibleFeedbackRows.find((row) => row.id === selectedFeedbackId) ??
+    visibleFeedbackRows[0];
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        {[
-          {
-            icon: KadaMessageIcon,
-            label: "Responses",
-            value: String(feedbackRows.length),
-            detail: `${sortedFeedbackRows.length} shown`,
-          },
-          {
-            icon: KadaStarIcon,
-            label: "Overall Avg",
-            value: average ? average.toFixed(1) : "N/A",
-            detail: "All feedback",
-          },
-          {
-            icon: KadaCafeMenuIcon,
-            label: "Strongest Item",
-            value: strongestItem?.item ?? "None",
-            detail: strongestItem
-              ? `${strongestItem.average.toFixed(1)} avg rating`
-              : "No rated item",
-          },
-          {
-            icon: KadaAlertIcon,
-            label: "Needs Review",
-            value: String(reviewItems.length),
-            detail: weakestItem
-              ? `${weakestItem.item} at ${weakestItem.average.toFixed(1)}`
-              : "No weak signal",
-          },
-        ].map((card) => {
-          const Icon = card.icon;
-
-          return (
-            <div
-              key={card.label}
-              className="rounded-[18px] border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-                  {card.label}
-                </p>
-                <Icon size={16} className="text-[#7D6B55]" />
-              </div>
-              <p className="mt-3 truncate font-sans text-2xl font-black text-[#0D2E18]">
-                {card.value}
-              </p>
-              <p className="mt-1 truncate font-sans text-xs font-semibold text-[#8C7A64]">
-                {card.detail}
-              </p>
-            </div>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-2 rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-3 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
+        {([
+          ["all", "All"],
+          ["five", "5 star"],
+          ["four", "4 star"],
+          ["review", "Review"],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setFeedbackFilter(key)}
+            className={`rounded-full px-4 py-2 font-sans text-xs font-black transition ${
+              feedbackFilter === key
+                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
+                : "border border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:bg-white"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
@@ -457,49 +432,99 @@ function FeedbackManagementView({
               Feedback Stream
             </h2>
             <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-              {sortedFeedbackRows.length} shown
+              {visibleFeedbackRows.length} shown
             </span>
           </div>
-          <div className="mt-4 space-y-3">
-            {sortedFeedbackRows.map((row) => (
-              <article
-                key={row.id}
-                className="rounded-[18px] border border-[#EFE3CF] bg-white p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-sans text-sm font-bold text-[#0D2E18]">
-                      {row.menu_items?.name || "Menu item"}
+          {selectedFeedback ? (
+            <div className="mt-4 rounded-[20px] border border-[#DCCFB8] bg-white p-4 shadow-[0_10px_22px_rgba(75,50,24,0.06)]">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-sans text-base font-black text-[#0D2E18]">
+                    {selectedFeedback.menu_items?.name || "Menu item"}
+                  </p>
+                  <p className="mt-1 font-sans text-xs font-bold text-[#8C7A64]">
+                    {selectedFeedback.profiles?.full_name ||
+                      selectedFeedback.profiles?.email ||
+                      "Customer"}{" "}
+                    - {formatFeedbackDateTime(selectedFeedback.created_at)}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 font-sans text-xs font-black ${getFeedbackRatingStyle(
+                    Number(selectedFeedback.overall_rating)
+                  )}`}
+                >
+                  {Number(selectedFeedback.overall_rating).toFixed(1)} / 5
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {[
+                  ["Overall", selectedFeedback.overall_rating],
+                  ["Taste", selectedFeedback.taste_rating],
+                  ["Strength", selectedFeedback.strength_rating],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-[14px] border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2"
+                  >
+                    <p className="font-sans text-[10px] font-black uppercase tracking-[0.12em] text-[#684B35]">
+                      {label}
                     </p>
-                    <p className="mt-1 font-sans text-xs font-semibold text-[#8C7A64]">
-                      {row.profiles?.full_name ||
-                        row.profiles?.email ||
-                        "Customer"}{" "}
-                      - {formatFeedbackDateTime(row.created_at)}
+                    <p className="mt-1 font-sans text-lg font-black text-[#0D2E18]">
+                      {Number(value).toFixed(1)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-[#E6F2E8] px-3 py-1 font-sans text-xs font-bold text-[#0D2E18]">
-                    {Number(row.overall_rating).toFixed(1)} / 5
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 font-sans text-xs font-bold text-[#684B35]">
-                  <span className="rounded-full bg-white px-2.5 py-1">
-                    Taste {Number(row.taste_rating).toFixed(1)}
-                  </span>
-                  <span className="rounded-full bg-white px-2.5 py-1">
-                    Strength {Number(row.strength_rating).toFixed(1)}
-                  </span>
-                </div>
-                {row.comment ? (
-                  <p className="mt-2 font-sans text-sm text-[#684B35]">
-                    {row.comment}
-                  </p>
-                ) : null}
-              </article>
-            ))}
-            {sortedFeedbackRows.length === 0 ? (
+                ))}
+              </div>
+
+              <p className="mt-4 rounded-[16px] bg-[#FFF8EF] px-3 py-3 font-sans text-sm font-semibold leading-relaxed text-[#684B35]">
+                {selectedFeedback.comment?.trim() || "No comment provided."}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {visibleFeedbackRows.map((row) => {
+              const isSelected = selectedFeedback?.id === row.id;
+
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedFeedbackId(row.id)}
+                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[16px] border px-3 py-3 text-left transition ${
+                    isSelected
+                      ? "border-[#0D2E18] bg-[#E6F2E8]"
+                      : "border-[#EFE3CF] bg-white hover:border-[#0D2E18]/30 hover:bg-[#FFF8EF]"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-sans text-sm font-black text-[#0D2E18]">
+                      {row.menu_items?.name || "Menu item"}
+                    </p>
+                    <p className="mt-1 truncate font-sans text-xs font-bold text-[#8C7A64]">
+                      {row.profiles?.full_name || row.profiles?.email || "Customer"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-black ${getFeedbackRatingStyle(
+                        Number(row.overall_rating)
+                      )}`}
+                    >
+                      {Number(row.overall_rating).toFixed(1)}
+                    </span>
+                    <p className="mt-1 font-sans text-[10px] font-bold text-[#8C7A64]">
+                      {formatFeedbackDateTime(row.created_at)}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+            {visibleFeedbackRows.length === 0 ? (
               <div className="rounded-[14px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-6 text-center font-sans text-sm text-[#8C7A64]">
-                No customer feedback yet
+                No matching feedback
               </div>
             ) : null}
           </div>
@@ -583,7 +608,7 @@ export function AdminDashboard() {
       : activeTab === "demand"
       ? "Demand Intelligence"
       : activeTab === "customer-intelligence"
-      ? "Customer Intelligence"
+      ? "Customers"
       : activeTab === "menu"
       ? "Menu Management"
       : adminTabs.find((tab) => tab.key === activeTab)?.label ?? "Admin";
@@ -1835,57 +1860,26 @@ export function AdminDashboard() {
 
             {activeTab === "customer-intelligence" ? (
               <div className="space-y-4">
-                <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_30px_rgba(75,50,24,0.08)] sm:px-5">
-                  <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                        Customer Intelligence
-                      </p>
-                      <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                        Preference, recommendation, and satisfaction signals
-                      </h2>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                          {orders.filter((order) => order.customer_id).length} customer orders
-                        </span>
-                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                          {feedbackRows.length} feedback samples
-                        </span>
-                        <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
-                          {displayItemRanking.length} ranked items
-                        </span>
-                      </div>
-                    </div>
+                <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:w-fit xl:grid-cols-4">
+                  {customerIntelligenceViews.map((view) => {
+                    const isActive = customerIntelligenceView === view.key;
 
-                    <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:grid-cols-4">
-                      {customerIntelligenceViews.map((view) => {
-                        const isActive = customerIntelligenceView === view.key;
-
-                        return (
-                          <button
-                            key={view.key}
-                            type="button"
-                            onClick={() => setCustomerIntelligenceView(view.key)}
-                            className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[132px] ${
-                              isActive
-                                ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
-                                : "text-[#684B35] hover:bg-white"
-                            }`}
-                          >
-                            <span className="block leading-tight">{view.label}</span>
-                            <span
-                              className={`mt-0.5 block text-[0.68rem] font-semibold leading-tight ${
-                                isActive ? "text-[#FFF8EF]/78" : "text-[#8C7A64]"
-                              }`}
-                            >
-                              {view.description}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
+                    return (
+                      <button
+                        key={view.key}
+                        type="button"
+                        onClick={() => setCustomerIntelligenceView(view.key)}
+                        className={`rounded-full px-4 py-2.5 text-left font-sans text-sm font-bold transition xl:min-w-[132px] ${
+                          isActive
+                            ? "bg-[#0D2E18] text-[#FFF8EF] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
+                            : "text-[#684B35] hover:bg-white"
+                        }`}
+                      >
+                        {view.label}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 {customerIntelligenceView === "customer-pref" ? (
                   <CustomerPreferenceView
