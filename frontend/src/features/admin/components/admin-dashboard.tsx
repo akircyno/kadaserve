@@ -169,10 +169,7 @@ type AdminSearchSuggestion = {
 };
 
 type DemandView = "orders" | "time-series" | "peak-hours";
-type CustomerIntelligenceView =
-  | "item-ranking"
-  | "satisfaction"
-  | "feedback";
+type CustomerIntelligenceView = "item-ranking" | "feedback";
 
 const demandViews: Array<{
   key: DemandView;
@@ -203,10 +200,6 @@ const customerIntelligenceViews: Array<{
   {
     key: "item-ranking",
     label: "Ranking",
-  },
-  {
-    key: "satisfaction",
-    label: "Satisfaction",
   },
   {
     key: "feedback",
@@ -409,7 +402,7 @@ function FeedbackManagementView({
         <section className="rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
-              Feedback Stream
+              Customer Feedback
             </h2>
             <span className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1 font-sans text-xs font-bold text-[#684B35]">
               {visibleFeedbackRows.length} shown
@@ -544,6 +537,7 @@ export function AdminDashboard() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshingAnalytics, setIsRefreshingAnalytics] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
@@ -558,8 +552,8 @@ export function AdminDashboard() {
 
   const dashboardTimeFilter = "month" as const;
   const dashboardOrders = useMemo(
-    () => getAdminReportOrders(orders, { timeFilter: dashboardTimeFilter }),
-    [orders]
+    () => getAdminReportOrders(nonCancelledOrders, { timeFilter: dashboardTimeFilter }),
+    [nonCancelledOrders]
   );
   const dashboardOrderTotals = useMemo(
     () => getAdminOrderTotals(dashboardOrders),
@@ -588,8 +582,8 @@ export function AdminDashboard() {
   const activeHeaderTitle =
     activeTab === "dashboard"
       ? "Dashboard Overview"
-      : activeTab === "demand"
-      ? "Demand Intelligence"
+    : activeTab === "demand"
+      ? "Demand"
       : activeTab === "customer-intelligence"
       ? "Customers"
       : activeTab === "menu"
@@ -732,9 +726,7 @@ export function AdminDashboard() {
   const scopedFeedbackRows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
     const shouldFilterFeedback =
-      activeTab === "customer-intelligence" &&
-      (customerIntelligenceView === "satisfaction" ||
-        customerIntelligenceView === "feedback");
+      activeTab === "customer-intelligence" && customerIntelligenceView === "feedback";
 
     if (!shouldFilterFeedback || !keyword) {
       return feedbackRows;
@@ -856,7 +848,7 @@ export function AdminDashboard() {
       [
         String(window.day_of_week),
         formatHourNumber(Number(window.hour_start)),
-        `${window.avg_order_count} avg orders`,
+        formatHourNumber(Number(window.hour_end)),
         window.intensity,
       ]
         .join(" ")
@@ -1008,14 +1000,14 @@ export function AdminDashboard() {
         });
       });
     } else if (activeTab === "customer-intelligence") {
-      if (
-        customerIntelligenceView === "item-ranking" ||
-        customerIntelligenceView === "satisfaction"
-      ) {
+      if (customerIntelligenceView === "item-ranking") {
         displayItemRanking.slice(0, 12).forEach((item) =>
           addSuggestion({ category: "Items", label: item.item, query: item.item })
         );
       } else if (customerIntelligenceView === "feedback") {
+        displayItemRanking.slice(0, 8).forEach((item) =>
+          addSuggestion({ category: "Items", label: item.item, query: item.item })
+        );
         feedbackRows.slice(0, 14).forEach((row) => {
           if (row.profiles?.full_name) {
             const customerLabel = maskCustomerName(row.profiles.full_name, "Customer");
@@ -1308,7 +1300,7 @@ export function AdminDashboard() {
 
   async function handleRefreshAnalytics() {
     setError("");
-    setIsLoading(true);
+    setIsRefreshingAnalytics(true);
 
     try {
       const [
@@ -1391,7 +1383,7 @@ export function AdminDashboard() {
         variant: "error",
       });
     } finally {
-      setIsLoading(false);
+      setIsRefreshingAnalytics(false);
     }
   }
 
@@ -1480,11 +1472,6 @@ export function AdminDashboard() {
             className={`mt-8 space-y-1.5 ${isSidebarOpen ? "px-3" : "px-2"
               }`}
           >
-            {isSidebarOpen ? (
-              <p className="px-3 pb-2 font-sans text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#E8D9BE]/68">
-                Navigation
-              </p>
-            ) : null}
             {adminTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -1550,11 +1537,6 @@ export function AdminDashboard() {
                         <Coffee size={20} strokeWidth={1.8} className="text-[#8C6C48]" />
                       )}
                     </div>
-                    {activeTab === "dashboard" && (
-                      <p className="font-sans text-xs leading-relaxed text-[#6D5B48]">
-                        KadaServe&apos;s live café performance today
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -1564,12 +1546,12 @@ export function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => void handleRefreshAnalytics()}
-                  disabled={isLoading}
+                  disabled={isRefreshingAnalytics}
                   aria-label="Refresh analytics"
                   className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3.5 font-sans text-[0.7rem] font-bold text-[#684B35] transition hover:bg-white disabled:opacity-60"
                 >
-                  <RefreshCw size={14} strokeWidth={1.8} className={isLoading ? "animate-spin" : ""} />
-                  Refresh Analytics
+                  <RefreshCw size={14} strokeWidth={1.8} className={isRefreshingAnalytics ? "animate-spin" : ""} />
+                  {isRefreshingAnalytics ? "Refreshing" : "Refresh Analytics"}
                 </button>
               </div>
 
@@ -1686,17 +1668,7 @@ export function AdminDashboard() {
             {activeTab === "demand" ? (
               <div className="space-y-4">
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-5 py-4 shadow-[0_14px_34px_rgba(75,50,24,0.08)] sm:px-6">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                    <div>
-                      <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                        Demand Intelligence
-                      </p>
-                      <h2 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
-                        Orders, time series, and peak windows
-                      </h2>
-                    </div>
-
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                       <div className="grid gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-3">
                         {demandViews.map((view) => {
                           const isActive = demandView === view.key;
@@ -1721,7 +1693,6 @@ export function AdminDashboard() {
                         <Clock size={13} strokeWidth={1.8} />
                         5PM-12AM
                       </span>
-                    </div>
                   </div>
                 </section>
 
@@ -1748,7 +1719,7 @@ export function AdminDashboard() {
 
             {activeTab === "customer-intelligence" ? (
               <div className="space-y-4">
-                <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-3 xl:w-fit">
+                <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:w-fit">
                   {customerIntelligenceViews.map((view) => {
                     const isActive = customerIntelligenceView === view.key;
 
@@ -1776,12 +1747,11 @@ export function AdminDashboard() {
                   />
                 ) : null}
 
-                {customerIntelligenceView === "satisfaction" ? (
-                  <SatisfactionView feedbackRows={scopedFeedbackRows} />
-                ) : null}
-
                 {customerIntelligenceView === "feedback" ? (
-                  <FeedbackManagementView feedbackRows={scopedFeedbackRows} />
+                  <div className="space-y-4">
+                    <SatisfactionView feedbackRows={scopedFeedbackRows} />
+                    <FeedbackManagementView feedbackRows={scopedFeedbackRows} />
+                  </div>
                 ) : null}
               </div>
             ) : null}

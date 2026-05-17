@@ -3,7 +3,7 @@ import Link from "next/link";
 const sections = [
   {
     title: "Data We Collect",
-    body: "KadaServe may collect your name, email address, phone number, delivery address, order history, feedback, preference signals, and system usage data when you use the app.",
+    body: "KadaServe may collect your name, email address, phone number, profile photo, delivery address, order history, feedback, preference signals, and system usage data when you use the app.",
   },
   {
     title: "How We Use Data",

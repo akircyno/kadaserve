@@ -112,9 +112,6 @@ export default function StaffLayout({
             <span className="block text-lg font-bold leading-none text-[#FFF8EF]">
               KadaServe
             </span>
-            <span className="mt-1 block text-xs text-[#8C7A64]">
-              Staff Workspace
-            </span>
           </Link>
 
           <div className="flex items-center gap-1">
@@ -164,8 +161,8 @@ export default function StaffLayout({
                   isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
                 } ${
                   isActive
-                    ? "bg-[#FFF8EF] font-medium text-[#0D2E18]"
-                    : "text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
+                    ? "bg-[#FFF0D8] font-bold text-[#0D2E18] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                    : "text-[#FFF0D8]/76 hover:bg-[#0F441D]/45 hover:text-white"
                 }`}
               >
                 <Icon size={20} className="shrink-0" />
@@ -228,9 +225,6 @@ export default function StaffLayout({
               <div className="hidden h-12 w-1.5 shrink-0 rounded-full bg-[#0D2E18] shadow-[0_0_0_4px_rgba(13,46,24,0.07)] sm:block" />
 
               <div className="min-w-0 flex-1 2xl:flex-none">
-                <p className="font-sans text-[11px] font-black uppercase tracking-[0.18em] text-[#684B35]">
-                  Staff Workspace
-                </p>
                 <h1 className="truncate font-sans text-[1.45rem] font-black leading-tight text-[#0D2E18] sm:text-[1.65rem]">
                   {isEncodeOrder
                     ? "Encode Order"

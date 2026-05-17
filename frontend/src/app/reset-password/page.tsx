@@ -20,8 +20,6 @@ function getPasswordChecks(password: string) {
   return {
     length: password.length >= 8,
     number: /\d/.test(password),
-    uppercase: /[A-Z]/.test(password),
-    special: /[^A-Za-z0-9]/.test(password),
   };
 }
 
@@ -155,9 +153,6 @@ function ResetPasswordContent() {
                   readOnly
                   className="min-w-0 flex-1 bg-transparent font-sans text-sm text-[#684B35] outline-none cursor-not-allowed"
                 />
-                <span className="text-[10px] font-bold text-[#8C7A64] uppercase tracking-wider">
-                  View Only
-                </span>
               </div>
             </div>
 
@@ -234,8 +229,6 @@ function ResetPasswordContent() {
               {[
                 ["8 characters", passwordChecks.length],
                 ["1 number", passwordChecks.number],
-                ["1 uppercase letter", passwordChecks.uppercase],
-                ["1 special character", passwordChecks.special],
               ].map(([label, isMet]) => (
                 <div key={String(label)} className="flex items-center gap-2">
                   <CheckCircle2

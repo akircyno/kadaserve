@@ -1,11 +1,8 @@
 "use client";
 
-import { type ComponentType, useState } from "react";
+import { useState } from "react";
 import {
-  Activity,
-  Clock,
   TrendingUp,
-  Flame,
   Users,
 } from "lucide-react";
 
@@ -61,35 +58,6 @@ function getVolumeBand(orders: number, maxOrders: number) {
   return "Low";
 }
 
-function TimeSeriesMetricCard({
-  detail,
-  icon: Icon,
-  label,
-  value,
-}: {
-  detail: string;
-  icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[20px] border border-[#DCCFB8] bg-[#FFFCF7] p-4 shadow-[0_10px_24px_rgba(75,50,24,0.06)]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-          {label}
-        </p>
-        <Icon size={16} strokeWidth={1.8} className="text-[#7D6B55]" />
-      </div>
-      <p className="mt-3 font-sans text-[1.75rem] font-bold leading-none text-[#0D2E18]">
-        {value}
-      </p>
-      <p className="mt-2 font-sans text-xs font-semibold text-[#8C7A64]">
-        {detail}
-      </p>
-    </div>
-  );
-}
-
 function ServiceWindowCurve({
   activeIndex,
   maxOrders,
@@ -132,14 +100,7 @@ function ServiceWindowCurve({
   return (
     <div className="flex h-full flex-col rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-            Demand Curve
-          </p>
-          <h3 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-            Hourly demand curve
-          </h3>
-        </div>
+        <div />
         {activePoint ? (
           <div className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 text-right font-sans text-xs font-bold text-[#684B35]">
             {activePoint.label} | {activePoint.orders} orders
@@ -149,7 +110,7 @@ function ServiceWindowCurve({
 
       <div className="mt-5 flex flex-1 items-center rounded-[20px] border border-[#EFE3CF] bg-white px-3 py-4">
         <svg
-          aria-label="Hourly demand curve"
+          aria-label="Hourly orders chart"
           className="h-[220px] w-full overflow-visible"
           role="img"
           viewBox={`0 0 ${width} ${height}`}
@@ -440,9 +401,6 @@ function PeakInsights({
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
           {strongestDayLabel}
         </p>
-        <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-          {Math.round(strongestDay[1])} avg orders
-        </p>
       </div>
 
       <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
@@ -451,9 +409,6 @@ function PeakInsights({
         </p>
         <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
           {strongestHourLabel}
-        </p>
-        <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-          {Math.round(strongestHour[1])} avg orders
         </p>
       </div>
 
@@ -485,7 +440,6 @@ function PeakInsights({
 }
 
 export function TimeSeriesView({
-  dateLabel,
   hourlyCounts,
   maxHourlyOrders,
 }: {
@@ -498,18 +452,12 @@ export function TimeSeriesView({
     hourlyCounts[0] ?? { label: "N/A", orders: 0 }
   );
   const total = hourlyCounts.reduce((sum, item) => sum + item.orders, 0);
-  const avg = hourlyCounts.length ? Math.round(total / hourlyCounts.length) : 0;
-  const low = hourlyCounts.length
-    ? Math.min(...hourlyCounts.map((item) => item.orders))
-    : 0;
   const serviceWindowCounts = HOUR_LABELS
     .map((label) => hourlyCounts.find((item) => item.label === label))
     .filter((item): item is { label: string; orders: number } => Boolean(item));
-  const serviceTotal = serviceWindowCounts.reduce((sum, item) => sum + item.orders, 0);
   const chartSeries = hourlyCounts.length > 0 ? hourlyCounts : serviceWindowCounts;
   const chartMax = Math.max(1, ...chartSeries.map((item) => item.orders));
   const activeHourCount = hourlyCounts.filter((item) => item.orders > 0).length;
-  const serviceShare = total ? Math.round((serviceTotal / total) * 100) : 0;
   const peakIndex = Math.max(
     0,
     chartSeries.findIndex((item) => item.label === peak.label)
@@ -527,178 +475,129 @@ export function TimeSeriesView({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-              Time Series
-            </p>
-            <h3 className="mt-1 font-sans text-2xl font-bold text-[#0D2E18]">
-              Hourly demand profile
-            </h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4 py-2 font-sans text-xs font-bold text-[#684B35]">
-              {dateLabel}
-            </span>
-            <span className="rounded-full border border-[#DCCFB8] bg-white px-4 py-2 font-sans text-xs font-bold text-[#684B35]">
-              {total} orders
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <TimeSeriesMetricCard
-          detail={`at ${peak.label}`}
-          icon={Activity}
-          label="Peak Hour"
-          value={String(peak.orders)}
-        />
-        <TimeSeriesMetricCard
-          detail={`${activeHourCount} active hours`}
-          icon={TrendingUp}
-          label="Total Volume"
-          value={String(total)}
-        />
-        <TimeSeriesMetricCard
-          detail={`${serviceShare}% of daily demand`}
-          icon={Clock}
-          label="Service Window"
-          value={String(serviceTotal)}
-        />
-        <TimeSeriesMetricCard
-          detail={`${low} lowest hour`}
-          icon={TrendingUp}
-          label="Average"
-          value={String(avg)}
-        />
-      </div>
+      <ServiceWindowCurve
+        activeIndex={activeServiceIndex}
+        maxOrders={chartMax}
+        points={chartSeries}
+        setActiveIndex={setSelectedServiceIndex}
+      />
 
       <div className="grid items-stretch gap-4 xl:grid-cols-2">
-        <ServiceWindowCurve
-          activeIndex={activeServiceIndex}
-          maxOrders={chartMax}
-          points={chartSeries}
-          setActiveIndex={setSelectedServiceIndex}
-        />
+        <div className="grid min-h-full">
+          <section className="flex h-full flex-col rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
+                  5PM-12AM volume
+                </h3>
+              </div>
+              <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
+                {activeHourCount} active
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+              {hourlyCounts.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[14px] border border-[#EFE3CF] bg-white px-2 py-1.5 text-center"
+                  title={`${item.label} / ${item.orders} orders`}
+                >
+                  <p className={`font-sans text-xs font-bold tabular-nums ${
+                      item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
+                    }`}>
+                    {item.orders}
+                  </p>
+                  <div className="mt-1.5 flex h-8 items-end justify-center">
+                    <div
+                      className="w-5 rounded-t-full"
+                      style={{
+                        backgroundColor:
+                          item.orders >= maxHourlyOrders * 0.8
+                            ? "#0D2E18"
+                            : item.orders >= maxHourlyOrders * 0.5
+                              ? "#0F441D"
+                              : item.orders >= maxHourlyOrders * 0.2
+                                ? "#684B35"
+                                : "#EFE3CF",
+                        height: `${Math.max(5, (item.orders / Math.max(1, maxHourlyOrders)) * 30)}px`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 font-sans text-[0.68rem] font-bold text-[#8C7A64]">
+                    {item.label}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {topHours.map((item, index) => (
+                <div
+                  key={`${item.label}-${index}`}
+                  className="flex items-center justify-between rounded-full border border-[#EFE3CF] bg-white px-3 py-2 font-sans text-xs font-bold"
+                >
+                  <span className="text-[#684B35]">#{index + 1} {item.label}</span>
+                  <span className="text-[#0D2E18]">{item.orders} orders</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
 
         <section className="flex h-full flex-col rounded-[22px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                Store-Hours Scan
-              </p>
-              <h3 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                5PM-12AM volume
-              </h3>
+          <h3 className="font-sans text-xl font-bold text-[#0D2E18]">Hourly Breakdown</h3>
+          
+          <div className="mt-4 flex-1 overflow-x-auto rounded-[18px] border border-[#EFE3CF] bg-white">
+            <div className="min-w-[520px]">
+              <div className="grid grid-cols-[1fr_1fr_1fr_1.1fr] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF] px-5 py-3 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                <span>Hour</span>
+                <span>Orders</span>
+                <span>Share</span>
+                <span>Trend</span>
+              </div>
+              <div className="max-h-[360px] divide-y divide-[#EFE3CF] overflow-y-auto">
+                {hourlyCounts.map((item, index, list) => {
+                  const previous = list[index - 1]?.orders ?? item.orders;
+                  const delta = item.orders - previous;
+                  const band = getVolumeBand(item.orders, maxHourlyOrders);
+
+                  return (
+                    <div
+                      key={item.label}
+                      className={`grid grid-cols-[1fr_1fr_1fr_1.1fr] items-center gap-4 px-5 py-3 font-sans text-sm transition hover:bg-[#FFF8EF] ${
+                        index % 2 === 0 ? "bg-white/30" : ""
+                      }`}
+                    >
+                      <span className="font-semibold text-[#0D2E18]">{item.label}</span>
+                      <span className="font-bold tabular-nums text-[#0D2E18]">
+                        {item.orders}
+                      </span>
+                      <span className="font-semibold text-[#8C7A64]">
+                        {total ? `${Math.round((item.orders / total) * 100)}%` : "0%"}
+                      </span>
+                      <span
+                        className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                          band === "Peak"
+                            ? "bg-[#0D2E18] text-[#FFF8EF]"
+                            : band === "High"
+                              ? "bg-[#E6F2E8] text-[#0F441D]"
+                              : band === "Medium"
+                                ? "bg-[#FFF0DA] text-[#684B35]"
+                                : "bg-[#EFE3CF] text-[#7D6B55]"
+                        }`}
+                      >
+                        {delta > 0 ? "+" : ""}
+                        {delta} / {band}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
-              {activeHourCount} active
-            </span>
-          </div>
-
-          <div className="mt-4 grid grid-cols-6 gap-1.5">
-            {hourlyCounts.map((item) => (
-              <div
-                key={item.label}
-                className="rounded-[14px] border border-[#EFE3CF] bg-white px-2 py-1.5 text-center"
-                title={`${item.label} / ${item.orders} orders`}
-              >
-                <p className={`font-sans text-xs font-bold tabular-nums ${
-                    item.orders === 0 ? "text-[#0D2E18]/35" : "text-[#0D2E18]"
-                  }`}>
-                  {item.orders}
-                </p>
-                <div className="mt-1.5 flex h-8 items-end justify-center">
-                  <div
-                    className="w-5 rounded-t-full"
-                    style={{
-                      backgroundColor:
-                        item.orders >= maxHourlyOrders * 0.8
-                          ? "#0D2E18"
-                          : item.orders >= maxHourlyOrders * 0.5
-                            ? "#0F441D"
-                            : item.orders >= maxHourlyOrders * 0.2
-                              ? "#684B35"
-                              : "#EFE3CF",
-                      height: `${Math.max(5, (item.orders / Math.max(1, maxHourlyOrders)) * 30)}px`,
-                    }}
-                  />
-                </div>
-                <p className="mt-1 font-sans text-[0.68rem] font-bold text-[#8C7A64]">
-                  {item.label}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 space-y-2">
-            {topHours.map((item, index) => (
-              <div
-                key={`${item.label}-${index}`}
-                className="flex items-center justify-between rounded-full border border-[#EFE3CF] bg-white px-3 py-2 font-sans text-xs font-bold"
-              >
-                <span className="text-[#684B35]">#{index + 1} {item.label}</span>
-                <span className="text-[#0D2E18]">{item.orders} orders</span>
-              </div>
-            ))}
           </div>
         </section>
       </div>
-
-      <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] p-5 shadow-[0_12px_30px_rgba(75,50,24,0.08)]">
-        <h3 className="font-sans text-lg font-bold text-[#0D2E18]">Hourly Breakdown</h3>
-        
-        <div className="mt-4 overflow-x-auto rounded-[18px] border border-[#EFE3CF] bg-white">
-          <div className="min-w-[560px]">
-            <div className="grid grid-cols-[1fr_1fr_1fr_1.1fr] gap-4 border-b border-[#EFE3CF] bg-[#FFF8EF] px-5 py-3 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
-              <span>Hour</span>
-              <span>Orders</span>
-              <span>Share</span>
-              <span>Trend</span>
-            </div>
-            <div className="max-h-[360px] divide-y divide-[#EFE3CF] overflow-y-auto">
-              {hourlyCounts.map((item, index, list) => {
-                const previous = list[index - 1]?.orders ?? item.orders;
-                const delta = item.orders - previous;
-                const band = getVolumeBand(item.orders, maxHourlyOrders);
-
-                return (
-                  <div
-                    key={item.label}
-                    className={`grid grid-cols-[1fr_1fr_1fr_1.1fr] items-center gap-4 px-5 py-3 font-sans text-sm transition hover:bg-[#FFF8EF] ${
-                      index % 2 === 0 ? "bg-white/30" : ""
-                    }`}
-                  >
-                    <span className="font-semibold text-[#0D2E18]">{item.label}</span>
-                    <span className="font-bold tabular-nums text-[#0D2E18]">
-                      {item.orders}
-                    </span>
-                    <span className="font-semibold text-[#8C7A64]">
-                      {total ? `${Math.round((item.orders / total) * 100)}%` : "0%"}
-                    </span>
-                    <span
-                      className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
-                        band === "Peak"
-                          ? "bg-[#0D2E18] text-[#FFF8EF]"
-                          : band === "High"
-                            ? "bg-[#E6F2E8] text-[#0F441D]"
-                            : band === "Medium"
-                              ? "bg-[#FFF0DA] text-[#684B35]"
-                              : "bg-[#EFE3CF] text-[#7D6B55]"
-                      }`}
-                    >
-                      {delta > 0 ? "+" : ""}
-                      {delta} / {band}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
@@ -719,36 +618,9 @@ export function PeakHoursView({
 
   return (
     <div className="space-y-5">
-      {/* Main Analytics Card Header */}
-      <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)] transition-all hover:shadow-[0_20px_60px_rgba(75,50,24,0.15)]">
-        <div className="space-y-3">
-          {/* Title with Icon */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Flame size={20} strokeWidth={1.8} className="text-[#684B35]" />
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                  Peak Hour Intelligence
-                </p>
-              </div>
-              <h3 className="font-sans text-2xl font-bold text-[#0D2E18]">
-                Busiest operating hours
-              </h3>
-            </div>
-            <span className="whitespace-nowrap rounded-full border border-[#DCCFB8] bg-[#FFF0DA]/60 px-4 py-2 font-sans text-xs font-semibold text-[#684B35]">
-              <Clock size={12} strokeWidth={1.8} className="inline mr-1" />
-              5PM-12AM
-            </span>
-          </div>
-        </div>
-      </section>
-
       {/* Peak Insights Cards */}
       {peakHourWindows.length > 0 && (
         <div>
-          <h4 className="mb-3 font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#684B35]">
-            Quick Intelligence
-          </h4>
           <PeakInsights peakHourWindows={peakHourWindows} />
         </div>
       )}

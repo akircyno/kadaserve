@@ -177,19 +177,20 @@ const ingredientFacts = {
     reviewNote: "Condensed milk still needs its supplier label for Spanish Latte precision.",
   },
   whipped_milk: {
-    label: "Yarra Farm Master Barista Cow Milk",
-    baseAmount: 250,
+    label: "Family's Choice Artisanal Whipping Cream",
+    baseAmount: 25,
     unit: "ml",
     liquidMlPerUnit: 1,
     nutrients: {
-      calories: 152,
-      protein: 8,
-      carbs: 11,
-      fat: 8,
-      sugar: 11,
-      sodium: 71,
+      calories: 100,
+      protein: 1,
+      carbs: 18,
+      fat: 2.5,
+      sugar: 18,
+      sodium: 0,
     },
-    reviewNote: "Whipped milk uses the same Yarra Farm milk label as full cream milk.",
+    reviewNote:
+      "Whipped milk uses Family's Choice Artisanal Whipping Cream. The label is per 25g powder; v1 maps recipe ml to gram-equivalent label scaling until prepared yield is measured.",
   },
   full_cream_milk: {
     label: "Yarra Farm Master Barista Cow Milk",
@@ -209,7 +210,6 @@ const ingredientFacts = {
     label: "Arabica bean brewed coffee",
     baseAmount: 1,
     unit: "serving",
-    liquidMlPerUnit: 60,
     nutrients: {
       calories: 2,
       protein: 0.2,
@@ -218,7 +218,8 @@ const ingredientFacts = {
       sugar: 0,
       sodium: 2,
     },
-    reviewNote: "Coffee uses Arabica beans and is counted as brewed beverage contribution, not dry grounds.",
+    reviewNote:
+      "Coffee uses Arabica beans and is counted as brewed beverage contribution, not dry grounds. Serving volume comes from the recipe water measurement.",
   },
   matcha_mix: {
     label: "Matcha Powder",
@@ -527,7 +528,7 @@ export function getMenuItemNutrition(
       ...scaledNutrients,
       servingSizeMl: servingSizeMl * quantity,
     }),
-    sourceLabel: "Recipe-calculated from KadaServe recipes and supplier labels",
+    sourceLabel: "Nutrition estimate from KadaServe recipes and supplier labels",
     confidence: "recipe_calculated",
     reviewNotes: Array.from(reviewNotes),
   };
@@ -576,7 +577,7 @@ export function getCartNutritionSummary(
 
   return {
     ...roundFacts(totals),
-    sourceLabel: "Recipe-calculated from KadaServe recipes and supplier labels",
+    sourceLabel: "Nutrition estimate from KadaServe recipes and supplier labels",
     confidence: "recipe_calculated",
     reviewNotes: Array.from(
       new Set(itemFacts.flatMap((item) => item.reviewNotes))

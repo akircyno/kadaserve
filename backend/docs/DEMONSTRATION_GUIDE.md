@@ -1,118 +1,161 @@
 # Demonstration Guide
 
-Last updated: 2026-05-11
+Last updated: 2026-05-17
 
 ## Demo Story
 
-KadaServe demonstrates an intelligent cafe ordering system that connects customer ordering, staff fulfillment, delivery mapping, payment readiness, feedback learning, and admin analytics.
+KadaServe helps Kada Cafe PH customers choose, order, pay, track, and review cafe items. The system also gives staff a controlled order workspace and gives admins clear analytics for demand, ratings, menu performance, and feedback.
 
-The project should be presented as a Computer Science system because it includes:
+Main defense line:
 
-- recommendation-ready data flow
-- user preference learning through feedback
-- geospatial delivery fee computation
-- order state modeling
-- real-time staff/customer workflow
-- analytics and evaluation-ready data collection
+```text
+KadaServe is a cafe ordering and analytics system that turns orders, nutrition data, payments, tracking, and feedback into useful customer and business signals.
+```
 
-## Suggested Demo Order
+## Suggested Demo Flow
 
-### 1. Landing and Login
+### 1. Landing Page
 
-Show the app entry point, then sign in as a customer.
+Show the public landing page.
 
-Mention:
+Point out:
 
-- Login is simple and does not require Terms.
-- Terms are required only during account creation.
+- customer-friendly coffee promotion
+- nutrition facts preview
+- live order tracking preview
+- ratings and feedback preview
+- analytics preview for demand, hourly orders, popular drinks, and feedback
+- Kada Cafe PH Facebook link
 
 ### 2. Customer Menu
 
+Sign in as a customer and open the menu.
+
 Show:
 
-- search
 - category filter
-- add to cart
-- customization
+- search
+- recommended items
+- item rating badge
+- item detail/customization modal
+- nutrition facts
+- recent anonymous comments
 
 Talking point:
 
-The menu is modeled as structured data, allowing search, filtering, personalization, and future recommendation scoring.
+The menu is stored as structured data, so the system can filter, search, recommend, calculate nutrition, and connect feedback to menu items.
 
-### 3. Cart and Pickup
+### 3. Cart And Checkout
 
-Show:
+Add an item to cart.
 
-- selected cart items
-- pickup order method card
-- Pay at Cafe payment method
-- professional checkout summary panel
+Show pickup first:
 
-Talking point:
+- selected items
+- quantity controls
+- total
+- Pay at Cafe
+- order tracker after checkout
 
-Cash or cafe payment creates a normal pending order.
+Then show delivery:
 
-### 4. Cart and Delivery
-
-Switch to Delivery.
-
-Show:
-
-- address input
+- delivery selection
+- saved address or address input
 - map pin
-- optional phone
-- distance-based delivery fee
-- clear Cash on Delivery payment card
+- delivery fee
+- Cash on Delivery
 
 Talking point:
 
-The delivery fee is calculated using geographic coordinates and distance, not a fixed manual fee. The frontend displays the value, while the backend recalculates it during checkout for integrity.
+Delivery fee uses the cafe coordinates and the customer map pin. The backend recalculates the fee during checkout.
 
-### 5. Staff Dashboard
+### 4. Online Payment With QR Ph
+
+Choose online payment when PayMongo test mode is enabled.
 
 Show:
 
-- order appears in staff dashboard
-- clean white staff header and simplified staff sidebar navigation
-- professional Encode Order page for walk-in pickup and staff delivery encoding
-- professional order queue columns with counts, timing, item quantity, focus label, queue heatmap, and next action
-- professional order detail modal with queue heat, fulfillment summary, customer/delivery details, and clear action footer
-- staff advances order status
-- customer tracker updates automatically after staff changes the status
-- delivery flow
-- payment visibility using `Pay at Cafe`, `Cash on Delivery`, `Online`, and `Awaiting Payment`
-- delivery order breakdown: items total, delivery fee, and grand total
-- automatic pending-order expiry after 45 minutes
+- QR Ph modal after checkout
+- pending payment order tracker
+- Show QR Code from tracker
+- payment stays unpaid until webhook confirmation
 
 Talking point:
 
-Order status is modeled as a state machine. Staff can encode walk-in and delivery orders through a controlled form that validates totals, including delivery fee for staff delivery orders. Staff actions move orders through valid transitions, while the queue heatmap turns waiting time into a visual priority signal. Pending orders automatically become `expired` after 45 minutes and move to history, which is different from a manual cancellation. Expired orders show an `Auto-expired after 45m` label in session summary and order history so the automated rule is visible during demonstration. The customer tracker syncs status automatically and payment status remains a separate field so online payment and cash collection are not confused.
+Redirects and QR display do not prove payment. The order becomes paid only after the verified PayMongo webhook confirms it.
 
-### 6. Feedback
+### 5. Staff Module
 
-Move order to Delivered or Completed.
+Open the staff workspace.
 
 Show:
 
-- feedback modal appears only when eligible
-- no refresh-triggered popup
-- feedback becomes preference data
+- active order queue
+- order search
+- masked customer names
+- payment method and payment status
+- order detail modal
+- valid status movement
+- session summary
+- walk-in pickup encoding
+- store status control
 
 Talking point:
 
-Feedback is not just a review feature. It is data for learning customer preferences and improving recommendations.
+Order status works like a controlled state flow. Staff move orders through valid steps, while payment status stays separate from order status.
 
-### 7. PayMongo Ready Flow
+### 6. Customer Tracker And Notifications
 
-Show Online Payment disabled/coming soon.
+Keep the customer tracker open while staff changes the order status.
 
-Explain:
+Show:
 
-The PayMongo foundation is implemented but feature-flagged until the beneficiary account is ready. When enabled, online orders start as `pending_payment`; only the PayMongo webhook can mark them paid.
+- tracker updates
+- in-app notification bell
+- receipt/order details after completion
+- feedback reminder
 
-## Important Demo Notes
+Talking point:
 
-- Do not mark online orders paid manually during PayMongo demo.
-- Do not say rewards are part of the current system; they were removed.
-- Emphasize recommendation algorithms and preference learning as the CS direction.
-- If asked why PayMongo is disabled, answer: account setup is pending, but the architecture is ready and safe.
+Customers do not need email for order updates. KadaServe keeps updates inside the app.
+
+### 7. Feedback
+
+Complete an order and submit feedback.
+
+Show:
+
+- overall rating
+- comment
+- feedback connected to menu item
+- customer-safe comments displayed anonymously on menu items
+
+Talking point:
+
+Feedback is data for satisfaction analysis, item ranking, and recommendation signals.
+
+### 8. Admin Analytics
+
+Open admin.
+
+Show:
+
+- dashboard
+- demand growth
+- hourly order volume
+- popular items
+- customer satisfaction
+- feedback review
+- menu intelligence
+
+Talking point:
+
+Admin analytics explain what customers order, when demand is high, which items perform well, and what feedback says about the menu.
+
+## Important Defense Notes
+
+- Say QR Ph payment is confirmed by webhook, not by opening the QR or redirect page.
+- Say nutrition facts are recipe-calculated from KadaServe recipes and supplier labels.
+- Say customer comments are anonymous in the public menu.
+- Say staff controls daily store status.
+- Say admin focuses on analytics and decision support.

@@ -34,6 +34,7 @@ import {
   UserPen,
   UserRound,
 } from "lucide-react";
+import Cropper, { type Area } from "react-easy-crop";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
@@ -400,6 +401,55 @@ function getInitials(name: string) {
   }
 
   return parts.map((part) => part[0]?.toUpperCase()).join("");
+}
+
+function loadImageElement(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not prepare the image."));
+    image.src = src;
+  });
+}
+
+async function getCroppedAvatarFile(imageUrl: string, cropArea: Area) {
+  const image = await loadImageElement(imageUrl);
+  const canvas = document.createElement("canvas");
+  const size = 512;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not prepare the cropped image.");
+  }
+
+  canvas.width = size;
+  canvas.height = size;
+  context.drawImage(
+    image,
+    cropArea.x,
+    cropArea.y,
+    cropArea.width,
+    cropArea.height,
+    0,
+    0,
+    size,
+    size
+  );
+
+  return new Promise<File>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Could not save the cropped image."));
+          return;
+        }
+
+        resolve(new File([blob], "profile-avatar.webp", { type: "image/webp" }));
+      },
+      "image/webp",
+      0.9
+    );
+  });
 }
 
 function getPhoneDigits(value: string) {
@@ -1024,6 +1074,11 @@ export function CustomerDashboard({
   );
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState("");
+  const [avatarCropImageUrl, setAvatarCropImageUrl] = useState("");
+  const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0 });
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const [avatarCroppedAreaPixels, setAvatarCroppedAreaPixels] =
+    useState<Area | null>(null);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [profileFullNameDraft, setProfileFullNameDraft] =
     useState(profileName);
@@ -1235,6 +1290,14 @@ export function CustomerDashboard({
   useEffect(() => {
     setProfileAvatarUrl(customerProfile?.avatarUrl ?? "");
   }, [customerProfile?.avatarUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarCropImageUrl) {
+        URL.revokeObjectURL(avatarCropImageUrl);
+      }
+    };
+  }, [avatarCropImageUrl]);
 
   useEffect(() => {
     setDisplayProfileName(profileName);
@@ -1809,8 +1872,13 @@ export function CustomerDashboard({
       score: recommendation.preference_score ?? 0,
     };
   });
+  const hasPersonalizedClientRecommendations = recommendedItems.some(
+    (recommendation) => recommendation.basis === "preference"
+  );
   const visibleRecommendedItems =
-    recommendedItems.length > 0 ? recommendedItems : persistedRecommendedItems;
+    hasPersonalizedClientRecommendations || persistedRecommendedItems.length === 0
+      ? recommendedItems
+      : persistedRecommendedItems;
   const isColdStartRecommendation =
     !visibleRecommendedItems.some(
       (recommendation) => recommendation.basis === "preference"
@@ -2329,7 +2397,17 @@ export function CustomerDashboard({
     }
   }
 
-  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+  function closeAvatarCropModal() {
+    if (avatarCropImageUrl) {
+      URL.revokeObjectURL(avatarCropImageUrl);
+    }
+    setAvatarCropImageUrl("");
+    setAvatarCrop({ x: 0, y: 0 });
+    setAvatarZoom(1);
+    setAvatarCroppedAreaPixels(null);
+  }
+
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -2347,16 +2425,28 @@ export function CustomerDashboard({
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setAvatarMessage("Profile picture must be 2MB or smaller.");
+    if (file.size > 10 * 1024 * 1024) {
+      setAvatarMessage("Profile picture must be 10MB or smaller.");
       showToast({
         title: "Image too large",
-        description: "Profile picture must be 2MB or smaller.",
+        description: "Profile picture must be 10MB or smaller.",
         variant: "error",
       });
       return;
     }
 
+    if (avatarCropImageUrl) {
+      URL.revokeObjectURL(avatarCropImageUrl);
+    }
+
+    setAvatarCropImageUrl(URL.createObjectURL(file));
+    setAvatarCrop({ x: 0, y: 0 });
+    setAvatarZoom(1);
+    setAvatarCroppedAreaPixels(null);
+    setAvatarMessage("");
+  }
+
+  async function uploadAvatarFile(file: File) {
     setIsUploadingAvatar(true);
     setAvatarMessage("");
 
@@ -2387,6 +2477,7 @@ export function CustomerDashboard({
         title: "Profile photo updated",
         variant: "success",
       });
+      closeAvatarCropModal();
       router.refresh();
     } catch {
       setAvatarMessage("Something went wrong while uploading your photo.");
@@ -2397,6 +2488,27 @@ export function CustomerDashboard({
       });
     } finally {
       setIsUploadingAvatar(false);
+    }
+  }
+
+  async function handleConfirmAvatarCrop() {
+    if (!avatarCropImageUrl || !avatarCroppedAreaPixels) {
+      return;
+    }
+
+    try {
+      const croppedFile = await getCroppedAvatarFile(
+        avatarCropImageUrl,
+        avatarCroppedAreaPixels
+      );
+      await uploadAvatarFile(croppedFile);
+    } catch {
+      setAvatarMessage("Something went wrong while cropping your photo.");
+      showToast({
+        title: "Photo not updated",
+        description: "Something went wrong while cropping your photo.",
+        variant: "error",
+      });
     }
   }
 
@@ -2844,7 +2956,7 @@ export function CustomerDashboard({
                         {greeting}, {firstName}
                       </h1>
                       <p className="mt-3 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
-                        Order your favorite coffee, check nutrition facts,
+                        Check nutrients before ordering, choose your coffee,
                         and track every cup live from queue to pickup.
                       </p>
                     </div>
@@ -4731,9 +4843,6 @@ export function CustomerDashboard({
                           <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
                             Nutrition facts
                           </p>
-                          <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
-                            Recipe-calculated from KadaServe recipes and supplier labels.
-                          </p>
                         </div>
                         <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
                           {selectedNutrition.servingSizeMl} ml
@@ -5506,7 +5615,7 @@ export function CustomerDashboard({
 
                 <div className="mt-3 rounded-[16px] bg-[#0D2E18] px-3.5 py-2.5 text-[#FFF0D8]">
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#DCCFB8]">
-                    Hall of Fame
+                    Your All time favorite
                   </p>
                   <p className="mt-1 font-sans text-xl font-bold">
                     {monthlyFavorite}
@@ -5602,6 +5711,92 @@ export function CustomerDashboard({
           </div>
         ) : null}
       </aside>
+
+      {avatarCropImageUrl ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0D2E18]/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="avatar-crop-title"
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-[26px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_24px_60px_rgba(13,46,24,0.24)]">
+            <div className="flex items-start justify-between gap-4 px-5 py-4">
+              <div>
+                <h2
+                  id="avatar-crop-title"
+                  className="font-sans text-xl font-black text-[#0D2E18]"
+                >
+                  Crop Photo
+                </h2>
+                <p className="mt-1 font-sans text-sm font-semibold text-[#684B35]">
+                  Position your photo inside the circle.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAvatarCropModal}
+                disabled={isUploadingAvatar}
+                aria-label="Close crop"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#DCCFB8] bg-white text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="relative mx-5 h-72 overflow-hidden rounded-[24px] bg-[#0D2E18]">
+              <Cropper
+                image={avatarCropImageUrl}
+                crop={avatarCrop}
+                zoom={avatarZoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setAvatarCrop}
+                onZoomChange={setAvatarZoom}
+                onCropComplete={(_area, areaPixels) =>
+                  setAvatarCroppedAreaPixels(areaPixels)
+                }
+              />
+            </div>
+
+            <div className="px-5 py-4">
+              <label className="block">
+                <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                  Zoom
+                </span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={avatarZoom}
+                  onChange={(event) => setAvatarZoom(Number(event.target.value))}
+                  className="mt-2 w-full accent-[#0D2E18]"
+                />
+              </label>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmAvatarCrop}
+                  disabled={isUploadingAvatar || !avatarCroppedAreaPixels}
+                  className="rounded-[14px] bg-[#0D2E18] px-4 py-3 font-sans text-sm font-black text-[#FFF0D8] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isUploadingAvatar ? "Uploading..." : "Save Photo"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeAvatarCropModal}
+                  disabled={isUploadingAvatar}
+                  className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-black text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isCartTrayOpen ? (
         <section

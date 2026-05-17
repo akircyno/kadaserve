@@ -310,7 +310,7 @@ export function ItemRankingView({
         <InsightCard className="p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
-              Review Candidates
+              Needs Review
             </h2>
             <AlertTriangle size={18} strokeWidth={1.8} className="text-[#684B35]" />
           </div>

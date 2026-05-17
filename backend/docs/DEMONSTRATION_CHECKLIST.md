@@ -1,126 +1,122 @@
 # Demonstration Checklist
 
-Last updated: 2026-05-11
+Last updated: 2026-05-17
 
-Use this before every demo or defense rehearsal.
+Use this before final defense or rehearsal.
 
 ## Pre-Demo Setup
 
-- Confirm `.env.local` exists.
-- Confirm Supabase keys are working.
-- Confirm cafe coordinates are set:
+- Confirm frontend environment variables are present.
+- Confirm Supabase URL, anon key, and service role key are configured.
+- Confirm PayMongo test keys are configured for test payment demo.
+- Confirm webhook URL is set in PayMongo:
 
-```env
-NEXT_PUBLIC_STORE_LAT=your_cafe_latitude
-NEXT_PUBLIC_STORE_LNG=your_cafe_longitude
+```text
+https://kadaserve.vercel.app/api/paymongo/webhook
 ```
 
-- Keep PayMongo disabled until account is ready:
+- Confirm cafe coordinates:
 
 ```env
-NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT=false
+NEXT_PUBLIC_STORE_LAT=14.851595
+NEXT_PUBLIC_STORE_LNG=120.288585
 ```
 
-- Run build:
+- Run:
 
 ```bash
 cd frontend
+npm run lint
 npm run build
 ```
+
+## Landing Page
+
+- Customer-focused headline appears.
+- Nutrition facts preview appears.
+- Live tracking preview appears.
+- Ratings and comments preview appears.
+- Analytics preview shows demand, hourly orders, popular drinks, and feedback.
+- Facebook link opens Kada Cafe PH.
+- No staff side panel UI appears on the landing page.
 
 ## Customer Flow
 
 - Open customer page.
 - Search menu item.
-- Filter menu by category.
+- Filter by category.
+- Open item/customization modal.
+- Confirm nutrition facts appear.
+- Confirm rating badge appears for rated items.
+- Confirm recent comments are anonymous.
 - Add item to cart.
-- Customize drink options.
-- Confirm cart item appears.
-- Confirm item total price appears beside the quantity controls.
-- Confirm order tracker shows automatic update status without manually refreshing the page.
+- Adjust quantity.
+- Confirm item total and cart total update.
 
 ## Pickup Checkout
 
-- Open cart.
-- Select the `Pickup` checkout card.
-- Confirm payment label is `Pay at Cafe`.
+- Select pickup.
+- Confirm payment method is Pay at Cafe.
 - Place order.
-- Confirm customer is redirected to order tracking.
+- Confirm tracker opens.
+- Confirm tracker status is readable.
 
 ## Delivery Checkout
 
-- Open cart.
-- Select the `Delivery` checkout card.
-- Confirm address field appears.
-- Confirm map appears without overlap.
-- Pin location on map.
-- Confirm the payment panel label is `Delivery Fee`.
-- Confirm delivery fee appears with distance in km.
-- Confirm there is no extra note under the delivery fee row.
-- Confirm payment method appears as a full payment card, not a small unclear pill.
-- Confirm optional phone field is visible.
-- Confirm payment label is `Cash on Delivery`.
+- Select delivery.
+- Confirm address and map controls appear.
+- Pin delivery location.
+- Confirm delivery fee appears.
+- Confirm payment method is Cash on Delivery.
 - Place order.
+
+## PayMongo QR Ph
+
+- Enable online payment with PayMongo test keys.
+- Select online payment.
+- Place order.
+- Confirm QR Ph modal appears.
+- Click tracker.
+- Confirm pending payment status appears.
+- Confirm Show QR Code can reopen the QR while valid.
+- Confirm order remains unpaid until webhook confirmation.
 
 ## Staff Flow
 
-- Open staff dashboard.
-- Confirm staff header is a clean white command bar and controls are readable.
-- Confirm sidebar navigation has clean labels, a professional collapse/expand icon, and a simple `Sign out` action without redundant session text.
-- Open Encode Order and confirm menu summary metrics, category filters, compact product cards, active order rail, fulfillment cards, and payment controls look polished.
-- Encode a staff delivery order and confirm delivery fee is included in the grand total and submits successfully.
-- Confirm new order appears.
-- Keep the customer tracker open and confirm it updates automatically when staff changes order status.
-- Confirm order queue columns are easy to scan with counts, timing, item count, focus label, and next action.
-- Click an order and confirm the detail modal shows queue heat, wait time, item count, payment labels, customer/delivery details, item breakdown, and clear next action.
-- Confirm queue heatmap appears on long-waiting orders:
-  - normal for new orders
-  - warming up around 16 minutes
-  - needs attention around 31 minutes
-  - critical wait around 45 minutes for active non-pending stages
-  - pending orders expire at 45 minutes
-- Confirm payment method labels are clear:
-  - `Pay at Cafe` for pickup cash orders.
-  - `Cash on Delivery` for delivery cash orders.
-  - `Online` for online payment orders.
-  - `Awaiting Payment` for PayMongo pending payment orders.
-- For delivery orders, confirm staff can see items total, delivery fee, and total amount.
-- Advance order:
-  - pending
-  - preparing
-  - ready
-  - out for delivery
-  - delivered
-- Confirm paid requirement before delivery completion.
-- Confirm delivery fee input appears only when a delivery order has no calculated delivery fee.
-- Confirm pending orders use a 45-minute expiry limit.
-- Confirm expired orders move to session summary/order history as `expired`, not `cancelled`.
-- Confirm expired orders show the `Auto-expired after 45m` label in session summary and order history.
+- Open staff workspace.
+- Confirm active orders appear.
+- Search by order code, masked customer name, item, status, payment method, payment status, or total.
+- Open an order.
+- Confirm payment method and payment status are separate.
+- Move order through valid statuses.
+- Confirm customer tracker updates.
+- Confirm session summary uses masked customer names.
+- Encode a walk-in pickup order.
+- Confirm store status control is available in staff.
 
-## Feedback Flow
+## Notifications And Feedback
 
-- Customer receives feedback modal only after order becomes `delivered` or `completed`.
-- Refresh page does not reopen feedback modal by itself.
-- Submit feedback permanently hides prompt for that order.
-- Close/dismiss hides prompt for that order.
-- Maybe Later delays the prompt.
+- Confirm customer notification bell shows order updates.
+- Complete or deliver an order.
+- Confirm receipt/order details appear in notifications.
+- Confirm feedback prompt appears for eligible completed orders.
+- Submit feedback.
+- Confirm feedback appears in admin and rated menu item summaries.
 
-## PayMongo Foundation
+## Admin Flow
 
-- Online Payment button is disabled while PayMongo is not ready.
-- PayMongo webhook route exists:
-
-```text
-/api/paymongo/webhook
-```
-
-- Do not demo live online payment until beneficiary account, API keys, and webhook secret are available.
+- Open admin dashboard.
+- Confirm demand growth visualization appears.
+- Confirm hourly order volume appears.
+- Confirm popular items/ranking appears.
+- Confirm customer satisfaction appears.
+- Confirm feedback review is visible by drink.
+- Confirm store status is read-only in admin.
 
 ## Final Check
 
-- No rewards/voucher UI appears.
-- Login does not require Terms checkbox.
-- Signup requires Terms checkbox.
-- Login/signup pages do not show a hydration overlay from browser-injected input attributes.
-- Signup does not ask for date of birth.
-- Checkout phone is optional.
+- Customer names are masked where privacy is needed.
+- Customer email and phone are not shown on active staff order cards.
+- Online payment is explained as webhook-confirmed.
+- Nutrition is explained as recipe-calculated from supplier labels.
+- Docs describe the current system only.

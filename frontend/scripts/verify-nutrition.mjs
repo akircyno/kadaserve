@@ -20,37 +20,37 @@ const expectedFacts = [
   {
     name: "French Vanilla Latte",
     facts: {
-      calories: 153,
-      protein: 4,
-      carbs: 24.8,
-      fat: 3.8,
-      sugar: 24.6,
-      sodium: 38,
-      servingSizeMl: 265,
+      calories: 221,
+      protein: 4.2,
+      carbs: 38.3,
+      fat: 5.2,
+      sugar: 38.1,
+      sodium: 32,
+      servingSizeMl: 205,
     },
   },
   {
     name: "Hazelnut Latte",
     facts: {
-      calories: 248,
-      protein: 4,
-      carbs: 48.6,
-      fat: 3.8,
-      sugar: 48.3,
-      sodium: 38,
-      servingSizeMl: 265,
+      calories: 316,
+      protein: 4.2,
+      carbs: 62.1,
+      fat: 5.2,
+      sugar: 61.8,
+      sodium: 32,
+      servingSizeMl: 205,
     },
   },
   {
     name: "Brown Sugar Latte",
     facts: {
-      calories: 165,
-      protein: 4,
-      carbs: 43.3,
-      fat: 3.8,
-      sugar: 39.3,
-      sodium: 38,
-      servingSizeMl: 270,
+      calories: 233,
+      protein: 4.2,
+      carbs: 56.8,
+      fat: 5.2,
+      sugar: 52.8,
+      sodium: 32,
+      servingSizeMl: 210,
     },
   },
   {
@@ -62,18 +62,18 @@ const expectedFacts = [
       fat: 0,
       sugar: 0,
       sodium: 4,
-      servingSizeMl: 240,
+      servingSizeMl: 120,
     },
   },
   {
     name: "Strawberry Latte",
     facts: {
-      calories: 206,
-      protein: 3.8,
-      carbs: 39.9,
-      fat: 3.8,
-      sugar: 37.3,
-      sodium: 47,
+      calories: 274,
+      protein: 4,
+      carbs: 53.5,
+      fat: 5.2,
+      sugar: 50.8,
+      sodium: 42,
       servingSizeMl: 160,
     },
   },
@@ -101,7 +101,7 @@ for (const expected of expectedFacts) {
   );
   assert.equal(
     actual.sourceLabel,
-    "Recipe-calculated from KadaServe recipes and supplier labels"
+    "Nutrition estimate from KadaServe recipes and supplier labels"
   );
 }
 

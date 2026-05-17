@@ -64,7 +64,7 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccessMessage(
-        "We sent a 6-digit reset code to your email. Please check your inbox."
+        "If this email is registered, we sent a 6-digit reset code to it."
       );
       
       // Redirect to verify-code page after a few seconds
@@ -125,8 +125,7 @@ export default function ForgotPasswordPage() {
             Reset your password
           </h2>
           <p className="mt-2 font-sans text-base leading-7 text-[#684B35]">
-            Enter your account email and we’ll send a secure link to create a
-            new password.
+            Enter your account email and we will send a code to create a new password.
           </p>
         </div>
 

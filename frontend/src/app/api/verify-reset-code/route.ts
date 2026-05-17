@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       .select("*")
       .eq("user_id", user.id)
       .eq("reset_code", code)
-      .eq("is_used", false)
+      .is("used_at", null)
       .gt("expires_at", new Date().toISOString())
       .maybeSingle();
 
@@ -72,23 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Mark the reset code as used (Moved to the final password reset step)
-    /*
-    const { error: updateError } = await supabase
-      .from("password_resets")
-      .update({ is_used: true })
-      .eq("id", resetRecords.id);
-
-    if (updateError) {
-      console.error("Error marking reset code as used:", updateError);
-      return NextResponse.json(
-        { error: "Unable to process request right now." },
-        { status: 500 }
-      );
-    }
-    */
-
-    // 4. Create a session for the user to allow password reset
+    // 3. Create a session marker for the user to allow password reset
     // Store a temporary flag in user metadata or create a session token
     const { error: sessionError } = await supabase.auth.admin.updateUserById(
       user.id,

@@ -147,30 +147,6 @@ function SignalChip({ signal }: { signal: MenuSignal }) {
   );
 }
 
-function IntelligenceCard({
-  detail,
-  label,
-  value,
-}: {
-  detail: string;
-  label: string;
-  value: string;
-}) {
-  return (
-    <article className="rounded-[22px] border border-[#D8C8AA] bg-[#FFFCF7] px-4 py-4 shadow-[0_12px_28px_rgba(75,50,24,0.07)]">
-      <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8C6C48]">
-        {label}
-      </p>
-      <p className="mt-2 font-sans text-2xl font-black leading-tight text-[#0D2E18]">
-        {value}
-      </p>
-      <p className="mt-2 font-sans text-sm leading-relaxed text-[#6D5B48]">
-        {detail}
-      </p>
-    </article>
-  );
-}
-
 function loadImage(imageUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new window.Image();
@@ -265,59 +241,6 @@ export function MenuView({
       ),
     [maxPerformanceOrders, menuItems, performanceByName]
   );
-  const menuIntelligence = useMemo(() => {
-    const availableItems = menuItems.filter((item) => item.isAvailable);
-    const categoryStats = adminMenuCategories
-      .map((category) => {
-        const categoryItems = menuItems.filter(
-          (item) => item.category === category.value
-        );
-        const signals = categoryItems.map(
-          (item) => menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1)
-        );
-
-        return {
-          label: category.label,
-          available: categoryItems.filter((item) => item.isAvailable).length,
-          orders: signals.reduce((sum, signal) => sum + signal.orders, 0),
-          revenue: signals.reduce((sum, signal) => sum + signal.revenue, 0),
-        };
-      })
-      .sort((first, second) => second.orders - first.orders);
-    const strongestCategory = categoryStats[0];
-    const recommendationCandidate = [...menuItems]
-      .filter((item) => item.isAvailable)
-      .map((item) => ({
-        item,
-        signal: menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1),
-      }))
-      .sort(
-        (first, second) =>
-          second.signal.orders * 2 +
-          second.signal.rating * 10 -
-          (first.signal.orders * 2 + first.signal.rating * 10)
-      )[0];
-    const reviewCandidate = [...menuItems]
-      .filter((item) => item.isAvailable)
-      .map((item) => ({
-        item,
-        signal: menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1),
-      }))
-      .sort(
-        (first, second) =>
-          first.signal.orders - second.signal.orders ||
-          first.signal.rating - second.signal.rating
-      )[0];
-
-    return {
-      availableCount: availableItems.length,
-      categoryCount: categoryStats.filter((category) => category.available > 0).length,
-      recommendationCandidate,
-      reviewCandidate,
-      strongestCategory,
-    };
-  }, [menuItems, menuSignals]);
-
   const filteredMenuItems = useMemo(() => {
     const keyword = menuSearch.trim().toLowerCase();
 
@@ -596,54 +519,6 @@ export function MenuView({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-[26px] border border-[#D8C8AA] bg-white/88 p-4 shadow-[0_16px_38px_rgba(75,50,24,0.08)]">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8C6C48]">
-              Menu Intelligence
-            </p>
-            <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-              Recommendation, category, review, and coverage
-            </h2>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          <IntelligenceCard
-            label="Recommendation Candidate"
-            value={menuIntelligence.recommendationCandidate?.item.name ?? "No item yet"}
-            detail={
-              menuIntelligence.recommendationCandidate
-                ? `${menuIntelligence.recommendationCandidate.signal.orders} orders and ${menuIntelligence.recommendationCandidate.signal.rating.toFixed(1)} rating.`
-                : "Waiting for order data."
-            }
-          />
-          <IntelligenceCard
-            label="Strongest Category"
-            value={menuIntelligence.strongestCategory?.label ?? "No category yet"}
-            detail={
-              menuIntelligence.strongestCategory
-                ? `${menuIntelligence.strongestCategory.orders} orders across ${menuIntelligence.strongestCategory.available} available items.`
-                : "No category demand has been detected yet."
-            }
-          />
-          <IntelligenceCard
-            label="Review Candidate"
-            value={menuIntelligence.reviewCandidate?.item.name ?? "No item yet"}
-            detail={
-              menuIntelligence.reviewCandidate
-                ? `${menuIntelligence.reviewCandidate.signal.orders} orders. ${menuIntelligence.reviewCandidate.signal.rating.toFixed(1)} rating.`
-                : "No available item needs review yet."
-            }
-          />
-          <IntelligenceCard
-            label="Active Coverage"
-            value={`${menuIntelligence.availableCount}/${menuItems.length}`}
-            detail={`${menuIntelligence.categoryCount} categories currently have available items for ordering.`}
-          />
-        </div>
-      </section>
-
       <div className="flex justify-end">
         <button
           type="button"

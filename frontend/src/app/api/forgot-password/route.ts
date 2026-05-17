@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, escapeHtml } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 
 const emailPattern =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
@@ -8,6 +8,10 @@ const emailPattern =
 const resetAttempts = new Map<string, number[]>();
 const maxAttempts = 3;
 const windowMs = 60 * 60 * 1000;
+const genericResetResponse = {
+  success: true,
+  message: "If this email is registered, we sent a password reset code to it.",
+};
 
 function getClientIp(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -78,10 +82,7 @@ export async function POST(request: Request) {
     const user = users.users.find((u) => u.email === normalizedEmail);
 
     if (!user) {
-      return NextResponse.json(
-        { error: "No account found with this email address." },
-        { status: 404 }
-      );
+      return NextResponse.json(genericResetResponse);
     }
 
     // 2. Generate a 6-digit reset code
@@ -105,7 +106,6 @@ export async function POST(request: Request) {
 
     // 4. Send the code via email
     try {
-      const safeEmail = escapeHtml(normalizedEmail);
       await sendEmail({
         to: normalizedEmail,
         subject: "Your Password Reset Code",
@@ -133,10 +133,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "If this email is registered, we sent a password reset code to it.",
-    });
+    return NextResponse.json(genericResetResponse);
   } catch (error) {
     console.error("Forgot password route error:", error);
     return NextResponse.json(

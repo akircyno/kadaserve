@@ -6,15 +6,11 @@ function getPasswordIssues(password: string) {
   const issues: string[] = [];
 
   if (password.length < 8) {
-    issues.push("At least 8 characters");
-  }
-
-  if (!/[A-Za-z]/.test(password)) {
-    issues.push("At least 1 letter");
+    issues.push("8 characters");
   }
 
   if (!/\d/.test(password)) {
-    issues.push("At least 1 number");
+    issues.push("1 number");
   }
 
   return issues;

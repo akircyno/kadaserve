@@ -229,7 +229,7 @@ function InsightCard({
   icon: OverviewIcon
 }) {
   return (
-    <article className="group relative overflow-hidden rounded-[18px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-4 py-3.5 shadow-[0_6px_16px_rgba(75,50,24,0.04)] transition-all hover:shadow-[0_12px_32px_rgba(75,50,24,0.1)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
+    <article className="group relative h-full overflow-hidden rounded-[18px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-4 py-3.5 shadow-[0_6px_16px_rgba(75,50,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#D8C8AA]/80 hover:shadow-[0_12px_32px_rgba(75,50,24,0.1)]">
       <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#4A6B4D]/6 transition-transform group-hover:scale-125" />
       
       <div className="relative z-10">
@@ -295,19 +295,18 @@ function NeedsAttentionItem({
   const style = typeStyles[type];
 
   return (
-    <div className={`flex gap-3 rounded-[14px] border ${style.border} ${style.bg} px-3 py-2.5 transition-all hover:shadow-[0_4px_12px_rgba(75,50,24,0.08)] group hover:translate-y-[-1px]`}>
-      <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg ${style.iconBg} transition-transform group-hover:scale-110`}>
-        <Icon size={14} strokeWidth={1.8} className={style.icon} />
+    <div className={`group flex gap-2.5 rounded-[13px] border ${style.border} ${style.bg} px-3 py-2 transition-all hover:translate-y-[-1px] hover:shadow-[0_4px_12px_rgba(75,50,24,0.08)]`}>
+      <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${style.iconBg} transition-transform group-hover:scale-105`}>
+        <Icon size={13} strokeWidth={1.9} className={style.icon} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className={`font-sans text-xs font-semibold ${style.title}`}>
+        <p className={`truncate font-sans text-xs font-bold ${style.title}`}>
           {title}
         </p>
         <p className="mt-0.5 font-sans text-[0.65rem] leading-relaxed text-[#6D5B48]">
           {description}
         </p>
       </div>
-      <div className={`${style.dotColor} h-1 w-1 flex-shrink-0 rounded-full mt-1.5 opacity-60`} />
     </div>
   );
 }
@@ -1208,61 +1207,67 @@ export function DashboardView({
         </div>
       ) : null}
 
-      {/* Needs Attention Section */}
-      {showNeedsAttention ? (
-        <section
-          id="admin-needs-attention"
-          className="scroll-mt-28 overflow-hidden rounded-[20px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] to-[#FFF8F0] p-3.5 shadow-[0_8px_20px_rgba(75,50,24,0.06)]"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Zap size={16} strokeWidth={1.8} className="text-[#684B35]" />
-            <h3 className="font-sans text-[0.7rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
-              Needs Attention
-            </h3>
-          </div>
-          <div className="space-y-1.5">
-            {needsAttentionItems.map((item, idx) => (
-              <NeedsAttentionItem
-                key={idx}
-                icon={item.icon}
-                title={item.title}
-                description={item.description}
-                type={item.type}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {showNeedsAttention || showInsights ? (
+        <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(360px,0.86fr)_minmax(0,1.55fr)]">
+          {/* Needs Attention Section */}
+          {showNeedsAttention ? (
+            <section
+              id="admin-needs-attention"
+              className="scroll-mt-28 h-full overflow-hidden rounded-[18px] border border-[#D8C8AA]/60 bg-[#FFFCF7] p-3 shadow-[0_8px_18px_rgba(75,50,24,0.05)]"
+            >
+              <div className="mb-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFF0DA] text-[#684B35]">
+                    <Zap size={14} strokeWidth={1.8} />
+                  </span>
+                  <h3 className="font-sans text-[0.68rem] font-bold uppercase tracking-[0.12em] text-[#8C6C48]">
+                    Needs Attention
+                  </h3>
+                </div>
+                <span className="rounded-full bg-[#F7E7CE] px-2.5 py-1 font-sans text-[0.65rem] font-bold text-[#684B35]">
+                  {needsAttentionItems.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {needsAttentionItems.map((item, idx) => (
+                  <NeedsAttentionItem
+                    key={idx}
+                    icon={item.icon}
+                    title={item.title}
+                    description={item.description}
+                    type={item.type}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
-      {/* Insights Cards - Quick Summary */}
-      {showInsights ? (
-        <section
-          id="admin-decision-support"
-          className="scroll-mt-28"
-        >
-          <div className="mb-2.5">
-            <p className="font-sans text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#8C6C48]">
-              Quick Insights
-            </p>
-          </div>
-          {visibleInsights.length > 0 ? (
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-              {visibleInsights.map((insight) => (
-                <InsightCard
-                  key={insight.label}
-                  detail={insight.detail}
-                  label={insight.label}
-                  value={insight.value}
-                  icon={insight.icon}
-                />
-              ))}
-            </div>
-          ) : (
-            <div>
-              <EmptyState label="No insights match this search" />
-            </div>
-          )}
-        </section>
+          {/* Insights Cards - Quick Summary */}
+          {showInsights ? (
+            <section
+              id="admin-decision-support"
+              className="scroll-mt-28 h-full"
+            >
+              {visibleInsights.length > 0 ? (
+                <div className="grid h-full gap-2.5 sm:grid-cols-2">
+                  {visibleInsights.map((insight) => (
+                    <InsightCard
+                      key={insight.label}
+                      detail={insight.detail}
+                      label={insight.label}
+                      value={insight.value}
+                      icon={insight.icon}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <EmptyState label="No insights match this search" />
+                </div>
+              )}
+            </section>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Charts Grid */}

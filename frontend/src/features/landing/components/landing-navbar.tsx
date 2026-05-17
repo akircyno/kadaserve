@@ -7,8 +7,8 @@ import { useState } from "react";
 
 const navLinks = [
   { href: "#features", label: "Features" },
-  { href: "#dashboard", label: "Analytics" },
-  { href: "#workflow", label: "Workflow" },
+  { href: "#ratings", label: "Ratings" },
+  { href: "#analytics", label: "Analytics" },
 ];
 
 export function LandingNavbar() {

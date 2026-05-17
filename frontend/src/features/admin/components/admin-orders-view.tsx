@@ -10,6 +10,8 @@ import {
   getAdminOrderTotals,
   getAdminReportOrders,
   getAdminReportRangeLabel,
+  type AdminPaymentFilter,
+  type AdminStatusFilter,
   type AdminTimeFilter,
 } from "@/lib/admin-order-totals";
 import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
@@ -111,6 +113,8 @@ function getTimeFilterLabel(timeFilter: TimeFilter) {
       return "This Month";
     case "year":
       return "This Year";
+    case "custom":
+      return "Custom Range";
   }
 }
 
@@ -196,8 +200,20 @@ function escapeHtml(value: string | number) {
     .replaceAll("'", "&#039;");
 }
 
-function buildPdfReportHtml(orders: StaffOrder[], timeFilter: TimeFilter) {
-  const revenue = orders.reduce((sum, order) => sum + order.total_amount, 0);
+function buildPdfReportHtml(
+  orders: StaffOrder[],
+  timeFilter: TimeFilter,
+  customStartDate?: string,
+  customEndDate?: string
+) {
+  const revenue = orders
+    .filter((order) => order.status !== "cancelled" && order.status !== "expired")
+    .reduce((sum, order) => sum + order.total_amount, 0);
+  const rangeLabel = getAdminReportRangeLabel(
+    timeFilter,
+    customStartDate,
+    customEndDate
+  );
   return `
     <!doctype html>
     <html>
@@ -219,7 +235,7 @@ function buildPdfReportHtml(orders: StaffOrder[], timeFilter: TimeFilter) {
       <body>
         <div class="brand">KadaServe</div>
         <section class="summary">
-          <h1>Sales Report: ${escapeHtml(getAdminReportRangeLabel(timeFilter))}</h1>
+          <h1>Sales Report: ${escapeHtml(rangeLabel)}</h1>
           <p>Total Orders: ${orders.length} | Revenue: ${escapeHtml(peso(revenue))} | Filter: ${escapeHtml(getTimeFilterLabel(timeFilter))}</p>
         </section>
         <table>
@@ -276,8 +292,18 @@ function downloadPrintableReport(html: string, timeFilter: TimeFilter) {
   URL.revokeObjectURL(url);
 }
 
-function openPdfReport(orders: StaffOrder[], timeFilter: TimeFilter) {
-  const html = buildPdfReportHtml(orders, timeFilter);
+function openPdfReport(
+  orders: StaffOrder[],
+  timeFilter: TimeFilter,
+  customStartDate?: string,
+  customEndDate?: string
+) {
+  const html = buildPdfReportHtml(
+    orders,
+    timeFilter,
+    customStartDate,
+    customEndDate
+  );
   const reportWindow = window.open("", "_blank");
 
   if (!reportWindow) {
@@ -338,14 +364,14 @@ export function OrdersView({
   filteredOrders: StaffOrder[];
   onOpenOrder: (order: StaffOrder) => void;
 }) {
-  const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<AdminStatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | StaffOrder["order_type"]>(
     "all"
   );
-  const [paymentFilter, setPaymentFilter] = useState<
-    "all" | "paid" | "unpaid" | "cash" | "gcash"
-  >("all");
+  const [paymentFilter, setPaymentFilter] = useState<AdminPaymentFilter>("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("month");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExportingReport, setIsExportingReport] = useState(false);
 
@@ -355,22 +381,40 @@ export function OrdersView({
       statusFilter,
       timeFilter,
       typeFilter,
+      customEndDate,
+      customStartDate,
     });
-  }, [filteredOrders, paymentFilter, statusFilter, timeFilter, typeFilter]);
+  }, [
+    customEndDate,
+    customStartDate,
+    filteredOrders,
+    paymentFilter,
+    statusFilter,
+    timeFilter,
+    typeFilter,
+  ]);
 
   const visibleTotals = useMemo(
     () => getAdminOrderTotals(visibleOrders),
     [visibleOrders]
   );
+  const visibleRangeLabel = getAdminReportRangeLabel(
+    timeFilter,
+    customStartDate,
+    customEndDate
+  );
 
-  const statusOptions: Array<{ value: "all" | OrderStatus; label: string }> = [
-    { value: "all", label: "All Active" },
+  const statusOptions: Array<{ value: AdminStatusFilter; label: string }> = [
+    { value: "all", label: "All Orders" },
+    { value: "active", label: "Active" },
+    { value: "pending_payment", label: "Pending Payment" },
     { value: "pending", label: "Pending" },
     { value: "preparing", label: "Preparing" },
     { value: "ready", label: "Ready" },
     { value: "out_for_delivery", label: "Out for Delivery" },
     { value: "delivered", label: "Delivered" },
     { value: "completed", label: "Completed" },
+    { value: "expired", label: "Expired" },
     { value: "cancelled", label: "Cancelled" },
   ];
 
@@ -384,7 +428,7 @@ export function OrdersView({
   ];
 
   const paymentOptions: Array<{
-    value: "all" | "paid" | "unpaid" | "cash" | "gcash";
+    value: AdminPaymentFilter;
     label: string;
   }> = [
     { value: "all", label: "All Payments" },
@@ -392,6 +436,7 @@ export function OrdersView({
     { value: "unpaid", label: "Unpaid" },
     { value: "cash", label: "Cash" },
     { value: "gcash", label: "GCash" },
+    { value: "online", label: "Online" },
   ];
 
   const timeOptions: Array<{ value: TimeFilter; label: string }> = [
@@ -399,6 +444,7 @@ export function OrdersView({
     { value: "week", label: "This Week" },
     { value: "month", label: "This Month" },
     { value: "year", label: "This Year" },
+    { value: "custom", label: "Custom" },
   ];
 
   return (
@@ -413,7 +459,7 @@ export function OrdersView({
                 ORDER RECORDS
               </p>
               <p className="mt-1.5 font-sans text-sm font-medium text-[#684B35]">
-                {getAdminReportRangeLabel(timeFilter)} · Showing {visibleTotals.totalOrders} orders · {peso(visibleTotals.totalRevenue)}
+                {visibleRangeLabel} - Showing {visibleTotals.totalOrders} orders - {peso(visibleTotals.totalRevenue)}
               </p>
             </div>
             
@@ -439,7 +485,12 @@ export function OrdersView({
                     type="button"
                     onClick={() => {
                       setIsExportingReport(true);
-                      openPdfReport(visibleOrders, timeFilter);
+                      openPdfReport(
+                        visibleOrders,
+                        timeFilter,
+                        customStartDate,
+                        customEndDate
+                      );
                       setIsExportOpen(false);
                       window.setTimeout(() => setIsExportingReport(false), 450);
                     }}
@@ -482,6 +533,34 @@ export function OrdersView({
             ))}
           </div>
 
+          {timeFilter === "custom" ? (
+            <div className="grid gap-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="font-sans text-xs text-[#8C7A64]">
+                  Start date
+                </span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(event) => setCustomStartDate(event.target.value)}
+                  className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="font-sans text-xs text-[#8C7A64]">
+                  End date
+                </span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(event) => setCustomEndDate(event.target.value)}
+                  className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
+                />
+              </label>
+            </div>
+          ) : null}
+
           {/* Filter Dropdowns */}
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="block">
@@ -491,7 +570,7 @@ export function OrdersView({
               <select
                 value={statusFilter}
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as "all" | OrderStatus)
+                  setStatusFilter(event.target.value as AdminStatusFilter)
                 }
                 className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
@@ -529,9 +608,7 @@ export function OrdersView({
               <select
                 value={paymentFilter}
                 onChange={(event) =>
-                  setPaymentFilter(
-                    event.target.value as "all" | "paid" | "unpaid" | "cash" | "gcash"
-                  )
+                  setPaymentFilter(event.target.value as AdminPaymentFilter)
                 }
                 className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >

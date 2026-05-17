@@ -24,7 +24,7 @@ The admin experience should move toward decision support:
 - Icons: `lucide-react`.
 - Auth and database: Supabase.
 - Email: Nodemailer where configured.
-- Payments: PayMongo foundation, feature-flagged until account readiness.
+- Payments: PayMongo QR Ph online payment with webhook-confirmed payment status.
 - Maps/delivery: coordinate-based delivery fee computation using store/customer coordinates.
 - State patterns: local React state, `useMemo`, `useCallback`, focused component state.
 - Main frontend areas:
@@ -111,7 +111,7 @@ The intended admin redesign direction is:
 - Customer Intelligence
 - Menu
 
-Stock-management workflows should stay out of the thesis-facing admin panel because they make the system feel more like a generic IT/business management system.
+Stock-management workflows are outside the thesis-facing admin panel because the product direction is ordering, analytics, nutrition, feedback, and recommendations.
 
 Model evaluation should not be a main sidebar module. If needed, expose it as a small `System Metrics` section inside Customer Intelligence or Dashboard for defense/demo use.
 
@@ -132,5 +132,5 @@ For admin intelligence work, define first:
 
 Then design the screen.
 
-Do not put in the docs the changes from the original or what we removed. Just put the exact system
+Do not write comparison notes in the docs. Write the exact current system behavior only.
 Do not ask any permission, i set it to Fully Access

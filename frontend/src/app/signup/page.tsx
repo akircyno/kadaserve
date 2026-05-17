@@ -23,15 +23,11 @@ const inputClass =
 
 const passwordRequirements = [
   {
-    label: "At least 8 characters",
+    label: "8 characters",
     test: (value: string) => value.length >= 8,
   },
   {
-    label: "At least 1 letter",
-    test: (value: string) => /[A-Za-z]/.test(value),
-  },
-  {
-    label: "At least 1 number",
+    label: "1 number",
     test: (value: string) => /\d/.test(value),
   },
 ];
@@ -267,29 +263,29 @@ export default function SignupPage() {
                 Customer Account
               </p>
               <h2 className="mt-3 max-w-lg font-sans text-4xl font-semibold leading-[1.02] text-[#FFF0DA] xl:text-5xl">
-                Order easier.
+                See nutrition.
                 <br />
-                Track clearer.
+                Choose better.
               </h2>
               <p className="mt-3 max-w-md font-sans text-sm leading-relaxed text-[#FFF0DA]/75">
-                Create a customer account for browsing, checkout, order
-                tracking, and feedback.
+                Sign up to check nutrition facts, read ratings, track orders,
+                and share feedback.
               </p>
             </div>
 
             <div className="grid gap-2">
               {[
                 {
-                  title: "Smart Order Monitoring",
-                  description: "Real-time tracking for peace of mind.",
+                  title: "Nutrition Facts",
+                  description: "See calories, sugar, protein, sodium, and more.",
                 },
                 {
-                  title: "Faster Checkout",
-                  description: "Saved preferences for quick reordering.",
+                  title: "Ratings and Feedback",
+                  description: "Read what customers say before choosing a drink.",
                 },
                 {
-                  title: "Personalized Recommendations",
-                  description: "Discover new drinks you'll love.",
+                  title: "Live Order Tracking",
+                  description: "Follow your order from checkout to completion.",
                 },
               ].map((item) => (
                 <div
@@ -517,9 +513,7 @@ export default function SignupPage() {
                       className={`h-4 w-4 ${requirement.isMet ? "fill-[#0F441D] text-white" : ""
                         }`}
                     />
-                    {requirement.label
-                      .replace("At least ", "")
-                      .replace("one ", "1 ")}
+                    {requirement.label}
                   </div>
                 ))}
               </div>
