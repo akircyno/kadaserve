@@ -13,7 +13,6 @@ import {
   Search,
 } from "lucide-react";
 import {
-  CustomerPreferenceView,
   ItemRankingView,
   SatisfactionView,
 } from "@/features/admin/components/admin-insights-views";
@@ -28,10 +27,7 @@ import {
   type PeakHourWindow,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
-import type {
-  StoreOverrideStatus,
-  StoreStatusPayload,
-} from "@/lib/store-status";
+import type { StoreStatusPayload } from "@/lib/store-status";
 import {
   getAdminOrderTotals,
   getAdminOrdersMetricLabel,
@@ -41,11 +37,12 @@ import {
   getAnalyticsOrderCount,
   sortAnalyticsItemsByGlobalRanking,
 } from "@/lib/analytics-ranking";
+import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
 import type { AdminMenuItem } from "@/types/menu";
 import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
-const hourNumbers = Array.from({ length: 24 }, (_, hour) => hour);
+const hourNumbers = [17, 18, 19, 20, 21, 22, 23, 0];
 
 function getTimeOfDay() {
   const hour = new Date().getHours();
@@ -58,24 +55,12 @@ function formatOrderCode(id: string) {
   return `#KD-${id.slice(0, 4).toUpperCase()}`;
 }
 
-function formatNameFromEmail(email: string | null) {
-  if (!email) return null;
-
-  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-
-  if (!name) return null;
-
-  return name
-    .split(" ")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function getOrderDisplayName(order: StaffOrder) {
-  return (
+  return maskCustomerName(
     order.walkin_name?.trim() ||
     formatNameFromEmail(order.delivery_email) ||
-    (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
+    null,
+    order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer"
   );
 }
 
@@ -185,7 +170,6 @@ type AdminSearchSuggestion = {
 
 type DemandView = "orders" | "time-series" | "peak-hours";
 type CustomerIntelligenceView =
-  | "customer-pref"
   | "item-ranking"
   | "satisfaction"
   | "feedback";
@@ -216,10 +200,6 @@ const customerIntelligenceViews: Array<{
   key: CustomerIntelligenceView;
   label: string;
 }> = [
-  {
-    key: "customer-pref",
-    label: "Preferences",
-  },
   {
     key: "item-ranking",
     label: "Ranking",
@@ -443,9 +423,11 @@ function FeedbackManagementView({
                     {selectedFeedback.menu_items?.name || "Menu item"}
                   </p>
                   <p className="mt-1 font-sans text-xs font-bold text-[#8C7A64]">
-                    {selectedFeedback.profiles?.full_name ||
-                      selectedFeedback.profiles?.email ||
-                      "Customer"}{" "}
+                    {maskCustomerName(
+                      selectedFeedback.profiles?.full_name ||
+                        formatNameFromEmail(selectedFeedback.profiles?.email),
+                      "Customer"
+                    )}{" "}
                     - {formatFeedbackDateTime(selectedFeedback.created_at)}
                   </p>
                 </div>
@@ -504,7 +486,10 @@ function FeedbackManagementView({
                       {row.menu_items?.name || "Menu item"}
                     </p>
                     <p className="mt-1 truncate font-sans text-xs font-bold text-[#8C7A64]">
-                      {row.profiles?.full_name || row.profiles?.email || "Customer"}
+                      {maskCustomerName(
+                        row.profiles?.full_name || formatNameFromEmail(row.profiles?.email),
+                        "Customer"
+                      )}
                     </p>
                   </div>
                   <div className="text-right">
@@ -541,7 +526,7 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [demandView, setDemandView] = useState<DemandView>("orders");
   const [customerIntelligenceView, setCustomerIntelligenceView] =
-    useState<CustomerIntelligenceView>("customer-pref");
+    useState<CustomerIntelligenceView>("item-ranking");
   const [orders, setOrders] = useState<StaffOrder[]>([]);
   const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
   const [analyticsHourly, setAnalyticsHourly] = useState<AdminAnalyticsHourlyRow[]>(
@@ -561,11 +546,9 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [error, setError] = useState("");
   const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
-  const [storeOverrideStatus, setStoreOverrideStatus] =
-    useState<StoreOverrideStatus>("auto");
-  const [isStoreStatusUpdating, setIsStoreStatusUpdating] = useState(false);
   const [storeStatusError, setStoreStatusError] = useState("");
 
   const nonCancelledOrders = useMemo(
@@ -774,30 +757,6 @@ export function AdminDashboard() {
         .includes(keyword)
     );
   }, [activeTab, customerIntelligenceView, debouncedSearch, feedbackRows]);
-  const scopedCustomerPreferenceOrders = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-
-    if (
-      activeTab !== "customer-intelligence" ||
-      customerIntelligenceView !== "customer-pref" ||
-      !keyword
-    ) {
-      return orders;
-    }
-
-    return orders.filter((order) =>
-      [
-        getOrderDisplayName(order),
-        formatOrderItems(order),
-        order.order_type,
-        order.status,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword)
-    );
-  }, [activeTab, customerIntelligenceView, debouncedSearch, orders]);
-
   const weekdayCounts = useMemo(() => {
     const counts = new Map<string, number>();
 
@@ -998,7 +957,7 @@ export function AdminDashboard() {
             query: getOrderDisplayName(order),
           });
           addSuggestion({
-            category: "Fulfillment",
+            category: "Order Type",
             label: normalizeSuggestion(order.order_type),
             query: order.order_type,
           });
@@ -1035,7 +994,7 @@ export function AdminDashboard() {
           });
         }
       } else {
-        ["Peak Hours", "Hourly Order Volume", "12AM", "6AM", "12PM", "6PM"].forEach(
+        ["Peak Hours", "Hourly Order Volume", "5PM", "8PM", "10PM", "12AM"].forEach(
           (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
         );
       }
@@ -1059,10 +1018,11 @@ export function AdminDashboard() {
       } else if (customerIntelligenceView === "feedback") {
         feedbackRows.slice(0, 14).forEach((row) => {
           if (row.profiles?.full_name) {
+            const customerLabel = maskCustomerName(row.profiles.full_name, "Customer");
             addSuggestion({
               category: "Customers",
-              label: row.profiles.full_name,
-              query: row.profiles.full_name,
+              label: customerLabel,
+              query: customerLabel,
             });
           }
           if (row.menu_items?.name) {
@@ -1125,7 +1085,6 @@ export function AdminDashboard() {
 
   const applyStoreStatus = useCallback((status: StoreStatusPayload) => {
     setStoreStatus(status);
-    setStoreOverrideStatus(status.overrideStatus);
     setStoreStatusError(
       status.setupRequired ? "Run backend/seed/store-settings.sql in Supabase." : ""
     );
@@ -1342,12 +1301,14 @@ export function AdminDashboard() {
       router.push("/login");
       router.refresh();
     } finally {
+      setIsLogoutConfirmOpen(false);
       setIsLoggingOut(false);
     }
   }
 
   async function handleRefreshAnalytics() {
     setError("");
+    setIsLoading(true);
 
     try {
       const [
@@ -1355,7 +1316,6 @@ export function AdminDashboard() {
         hourlyResponse,
         weeklyResponse,
         itemsResponse,
-        customerPreferencesResponse,
       ] = await Promise.all([
         fetch("/api/admin/analytics/daily", {
           method: "POST",
@@ -1369,31 +1329,23 @@ export function AdminDashboard() {
         fetch("/api/admin/analytics/items", {
           method: "POST",
         }),
-        fetch("/api/admin/analytics/customer-preferences", {
-          method: "POST",
-        }),
       ]);
       const dailyResult = (await dailyResponse.json()) as { error?: string };
       const hourlyResult = (await hourlyResponse.json()) as { error?: string };
       const weeklyResult = (await weeklyResponse.json()) as { error?: string };
       const itemsResult = (await itemsResponse.json()) as { error?: string };
-      const customerPreferencesResult = (await customerPreferencesResponse.json()) as {
-        error?: string;
-      };
 
       if (
         !dailyResponse.ok ||
         !hourlyResponse.ok ||
         !weeklyResponse.ok ||
-        !itemsResponse.ok ||
-        !customerPreferencesResponse.ok
+        !itemsResponse.ok
       ) {
         const message =
           dailyResult.error ||
           hourlyResult.error ||
           weeklyResult.error ||
           itemsResult.error ||
-          customerPreferencesResult.error ||
           "Failed to refresh analytics.";
         setError(message);
         showToast({
@@ -1421,7 +1373,10 @@ export function AdminDashboard() {
         return;
       }
 
-      await loadAdminData({ showLoading: true });
+      await loadAdminData({ showLoading: false });
+      void fetch("/api/admin/analytics/customer-preferences", {
+        method: "POST",
+      });
       showToast({
         title: "Analytics refreshed",
         description: "Dashboard and demand signals are now up to date.",
@@ -1435,54 +1390,8 @@ export function AdminDashboard() {
         description: message,
         variant: "error",
       });
-    }
-  }
-
-  async function handleStoreOverrideChange(overrideStatus: StoreOverrideStatus) {
-    setIsStoreStatusUpdating(true);
-    setStoreStatusError("");
-
-    try {
-      const response = await fetch("/api/store-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ overrideStatus }),
-      });
-      const result = (await response.json()) as StoreStatusPayload & {
-        error?: string;
-      };
-
-      if (!response.ok) {
-        const message = result.error || "Failed to update store status.";
-        setStoreStatusError(message);
-        showToast({
-          title: "Store status not updated",
-          description: message,
-          variant: "error",
-        });
-        return;
-      }
-
-      applyStoreStatus(result);
-      showToast({
-        title: "Store status updated",
-        description: result.label
-          ? `Customer ordering now shows ${result.label.toLowerCase()}.`
-          : "Customer ordering status has been updated.",
-        variant: "success",
-      });
-    } catch {
-      const message = "Something went wrong while updating store status.";
-      setStoreStatusError(message);
-      showToast({
-        title: "Store status not updated",
-        description: message,
-        variant: "error",
-      });
     } finally {
-      setIsStoreStatusUpdating(false);
+      setIsLoading(false);
     }
   }
 
@@ -1537,7 +1446,7 @@ export function AdminDashboard() {
           }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[238px] flex-col overflow-hidden bg-[#0D2E18] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[238px] flex-col overflow-hidden rounded-r-[24px] bg-[#083C1F] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
             }`}
         >
           <div
@@ -1605,10 +1514,10 @@ export function AdminDashboard() {
           <div className={`mt-auto pb-5 ${isSidebarOpen ? "px-3" : "px-2"}`}>
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => setIsLogoutConfirmOpen(true)}
               disabled={isLoggingOut}
               title="Logout"
-              className={`flex w-full items-center gap-2.5 rounded-[14px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-3 py-2.5 font-sans text-xs font-semibold text-[#FFF0DA]/88 transition hover:bg-[#FFF0DA]/12 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
+              className={`flex w-full items-center gap-2.5 rounded-[14px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-3 py-2.5 font-sans text-xs font-semibold text-[#FFF0DA]/88 transition hover:bg-[#9C543D]/18 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
                 }`}
             >
               <LogOut size={18} strokeWidth={1.8} className="shrink-0" />
@@ -1731,23 +1640,6 @@ export function AdminDashboard() {
                     {storeStatus?.label ?? "Loading"}
                   </span>
 
-                  <select
-                    value={storeOverrideStatus}
-                    onChange={(event) =>
-                      handleStoreOverrideChange(
-                        event.target.value as StoreOverrideStatus
-                      )
-                    }
-                    disabled={isStoreStatusUpdating}
-                    aria-label="Master store status override"
-                    className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-2.5 font-sans text-[0.7rem] font-semibold text-[#684B35] outline-none transition hover:bg-white disabled:opacity-60"
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="open">Force Open</option>
-                    <option value="busy">Busy</option>
-                    <option value="closed">Force Closed</option>
-                  </select>
-
                 </div>
 
                 <p className="font-sans text-[11px] text-[#8C7A64]">
@@ -1856,7 +1748,7 @@ export function AdminDashboard() {
 
             {activeTab === "customer-intelligence" ? (
               <div className="space-y-4">
-                <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2 xl:w-fit xl:grid-cols-4">
+                <div className="grid gap-2 rounded-[28px] border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-3 xl:w-fit">
                   {customerIntelligenceViews.map((view) => {
                     const isActive = customerIntelligenceView === view.key;
 
@@ -1876,15 +1768,6 @@ export function AdminDashboard() {
                     );
                   })}
                 </div>
-
-                {customerIntelligenceView === "customer-pref" ? (
-                  <CustomerPreferenceView
-                    feedbackRows={feedbackRows}
-                    globalAnalyticsItems={analyticsItems}
-                    menuItems={menuItems}
-                    orders={scopedCustomerPreferenceOrders}
-                  />
-                ) : null}
 
                 {customerIntelligenceView === "item-ranking" ? (
                   <ItemRankingView
@@ -1920,6 +1803,45 @@ export function AdminDashboard() {
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
         />
+      ) : null}
+
+      {isLogoutConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#0D2E18]/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-logout-title"
+        >
+          <div className="w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-white p-5 shadow-[0_24px_60px_rgba(13,46,24,0.24)]">
+            <h2
+              id="admin-logout-title"
+              className="font-sans text-xl font-black text-[#0D2E18]"
+            >
+              Log out?
+            </h2>
+            <p className="mt-2 font-sans text-sm font-semibold leading-relaxed text-[#684B35]">
+              Are you sure you want to log out?
+            </p>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="rounded-[14px] bg-[#9C543D] px-4 py-3 font-sans text-sm font-black text-[#FFF0D8] transition hover:bg-[#8A4632] disabled:opacity-60"
+              >
+                {isLoggingOut ? "Logging out..." : "Logout"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+                className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-black text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+              >
+                Stay
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );

@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  expireOverduePendingOrders,
+  getPendingExpirySetupMessage,
+} from "@/lib/orders/expire-pending-orders";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { CustomerOrder } from "@/types/orders";
 
@@ -12,6 +17,21 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const adminSupabase = createAdminClient();
+  const { error: expiryError } =
+    await expireOverduePendingOrders(adminSupabase);
+
+  if (expiryError) {
+    return NextResponse.json(
+      {
+        error:
+          getPendingExpirySetupMessage(expiryError) ??
+          "Failed to update expired orders.",
+      },
+      { status: 500 }
+    );
   }
 
   const { data, error } = await supabase

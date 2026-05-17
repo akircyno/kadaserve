@@ -28,6 +28,7 @@ const DAY_INDEX_BY_NAME: Record<string, number> = {
   friday: 5,
   saturday: 6,
 };
+const OPERATING_HOURS = [17, 18, 19, 20, 21, 22, 23, 0];
 
 const PEAK_HOUR_CONSTRAINT_SQL = `create unique index if not exists peak_hour_windows_day_of_week_hour_start_key
 on public.peak_hour_windows (day_of_week, hour_start);`;
@@ -88,7 +89,9 @@ function getIntensity(avgOrderCount: number, avgThreshold: number) {
 function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowRow[] {
   const rowsByDate = new Map<string, AnalyticsHourlyRow[]>();
 
-  hourlyRows.forEach((row) => {
+  hourlyRows
+    .filter((row) => OPERATING_HOURS.includes(Math.trunc(getNumberValue(row.hour_of_day))))
+    .forEach((row) => {
     if (!row.order_date) {
       return;
     }

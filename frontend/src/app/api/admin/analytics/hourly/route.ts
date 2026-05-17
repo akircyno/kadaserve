@@ -28,6 +28,7 @@ type AnalyticsHourlyRow = {
 };
 
 const ANALYTICS_TIME_ZONE = "Asia/Manila";
+const OPERATING_HOURS = [17, 18, 19, 20, 21, 22, 23, 0];
 
 function analyticsSetupError(message: string) {
   return message.toLowerCase().includes("analytics_hourly")
@@ -74,6 +75,11 @@ function getNumberValue(value: unknown) {
   return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
+function getOperatingHourIndex(hour: number) {
+  const index = OPERATING_HOURS.indexOf(hour);
+  return index === -1 ? OPERATING_HOURS.length : index;
+}
+
 function getFeedbackScore(row: AnalyticsFeedbackRow) {
   return (
     getNumberValue(row.taste_rating) +
@@ -85,7 +91,7 @@ function getFeedbackScore(row: AnalyticsFeedbackRow) {
 function buildEmptyHourlyRows(orderDate: string): AnalyticsHourlyRow[] {
   const updatedAt = new Date().toISOString();
 
-  return Array.from({ length: 24 }, (_, hour) => ({
+  return OPERATING_HOURS.map((hour) => ({
     order_date: orderDate,
     day_of_week: formatDayOfWeek(`${orderDate}T00:00:00+08:00`),
     hour_of_day: hour,
@@ -126,7 +132,7 @@ function buildHourlyAnalytics(
       dateByOrderId.set(order.id, orderDate);
       hourByOrderId.set(order.id, hour);
 
-      for (let bucketHour = 0; bucketHour < 24; bucketHour += 1) {
+      for (const bucketHour of OPERATING_HOURS) {
         const bucketKey = `${orderDate}:${bucketHour}`;
 
         if (!buckets.has(bucketKey)) {
@@ -141,7 +147,9 @@ function buildHourlyAnalytics(
         }
       }
 
-      const currentBucket = buckets.get(`${orderDate}:${hour}`);
+      const currentBucket = OPERATING_HOURS.includes(hour)
+        ? buckets.get(`${orderDate}:${hour}`)
+        : null;
 
       if (!currentBucket) {
         return;
@@ -172,7 +180,7 @@ function buildHourlyAnalytics(
   return Array.from(buckets.values())
     .sort((left, right) =>
       left.orderDate === right.orderDate
-        ? left.hour - right.hour
+        ? getOperatingHourIndex(left.hour) - getOperatingHourIndex(right.hour)
         : left.orderDate.localeCompare(right.orderDate)
     )
     .map((bucket) => {
@@ -271,6 +279,7 @@ export async function GET(request: Request) {
         "id, order_date, day_of_week, hour_of_day, hour_label, order_count, total_revenue, avg_order_value, avg_rating, updated_at"
       )
       .eq("order_date", targetDate)
+      .in("hour_of_day", OPERATING_HOURS)
       .order("hour_of_day", { ascending: true });
 
     if (error) {
@@ -282,7 +291,14 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       analyticsDate: targetDate,
-      analyticsHourly: data && data.length > 0 ? data : buildEmptyHourlyRows(targetDate),
+      analyticsHourly:
+        data && data.length > 0
+          ? [...data].sort(
+              (left, right) =>
+                getOperatingHourIndex(Number(left.hour_of_day)) -
+                getOperatingHourIndex(Number(right.hour_of_day))
+            )
+          : buildEmptyHourlyRows(targetDate),
     });
   } catch {
     return NextResponse.json(

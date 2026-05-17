@@ -12,6 +12,7 @@ import {
   getAdminReportRangeLabel,
   type AdminTimeFilter,
 } from "@/lib/admin-order-totals";
+import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type TimeFilter = AdminTimeFilter;
@@ -67,26 +68,14 @@ function formatOrderTypeLabel(orderType: StaffOrder["order_type"]) {
   return orderType === "pickup" ? "Pickup" : "Delivery";
 }
 
-function formatNameFromEmail(email: string | null) {
-  if (!email) return null;
-
-  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-
-  if (!name) return null;
-
-  return name
-    .split(" ")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function getOrderDisplayName(order: StaffOrder) {
-  return (
+  return maskCustomerName(
     order.customer_profile?.full_name?.trim() ||
     order.walkin_name?.trim() ||
     formatNameFromEmail(order.customer_profile?.email ?? null) ||
     formatNameFromEmail(order.delivery_email) ||
-    (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
+    null,
+    order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer"
   );
 }
 

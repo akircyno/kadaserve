@@ -5,6 +5,9 @@ import {
 } from "@/lib/delivery-fee";
 import { createClient } from "@/lib/supabase/server";
 import {
+  onlinePaymentTimeoutMinutes,
+} from "@/lib/orders/expire-pending-orders";
+import {
   normalizeStoreOverride,
   resolveStoreStatus,
   STORE_STATUS_SETTING_KEY,
@@ -436,7 +439,9 @@ export async function POST(request: Request) {
           deliveryAddress: orderType === "delivery" ? deliveryAddress : null,
           totalAmount,
         });
-        const qrExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+        const qrExpiresAt = new Date(
+          Date.now() + onlinePaymentTimeoutMinutes * 60 * 1000
+        ).toISOString();
 
         const { error: paymentUpdateError } = await supabase
           .from("orders")
@@ -462,7 +467,7 @@ export async function POST(request: Request) {
           paymentProvider: "paymongo",
           paymentFlow: "qrph",
           paymongoMode: payMongoQrPh.mode,
-          qrCodeExpiresInMinutes: 30,
+          qrCodeExpiresInMinutes: onlinePaymentTimeoutMinutes,
           qrCodeId: payMongoQrPh.qrCodeId,
           qrCodeImageUrl: payMongoQrPh.qrCodeImageUrl,
           qrCodeLabel: payMongoQrPh.qrCodeLabel,

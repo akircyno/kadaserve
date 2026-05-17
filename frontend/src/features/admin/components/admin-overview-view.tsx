@@ -13,6 +13,7 @@ import {
   Package,
   Smile,
   Star,
+  X,
   Zap,
 } from "lucide-react";
 import type { StaffOrder } from "@/types/orders";
@@ -20,6 +21,11 @@ import type { StaffOrder } from "@/types/orders";
 const STORE_HOURS_LABEL = "Store Hours: 5:00 PM – 12:00 AM";
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const peakHourLabels = ["5P", "6P", "7P", "8P", "9P", "10P", "11P", "12A"];
+type OverviewIcon = React.ComponentType<{
+  size: number;
+  className?: string;
+  strokeWidth?: number;
+}>;
 
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
@@ -153,17 +159,15 @@ function MetricCard({
   icon: Icon,
   trend,
   trendUp = true,
-  description,
   formulaTitle,
   formula,
   formulaExplanation
 }: { 
   label: string
   value: string
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: OverviewIcon
   trend?: string
   trendUp?: boolean
-  description?: string
   formulaTitle?: string
   formula?: string
   formulaExplanation?: string
@@ -203,11 +207,6 @@ function MetricCard({
                 </span>
               )}
             </div>
-            {description && (
-              <p className="mt-2 font-sans text-[0.7rem] leading-relaxed text-[#6D5B48]">
-                {description}
-              </p>
-            )}
           </div>
           <div className="ml-3 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-[#0D2E18]/8 transition-all group-hover:bg-[#0D2E18]/12">
             <Icon size={20} strokeWidth={1.8} className="text-[#0D2E18]" />
@@ -227,7 +226,7 @@ function InsightCard({
   detail: string
   label: string
   value: string
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: OverviewIcon
 }) {
   return (
     <article className="group relative overflow-hidden rounded-[18px] border border-[#D8C8AA]/50 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8F0] to-[#FFF3E6] px-4 py-3.5 shadow-[0_6px_16px_rgba(75,50,24,0.04)] transition-all hover:shadow-[0_12px_32px_rgba(75,50,24,0.1)] hover:border-[#D8C8AA]/80 hover:-translate-y-0.5">
@@ -261,7 +260,7 @@ function NeedsAttentionItem({
   description,
   type = "info",
 }: {
-  icon: React.ComponentType<{ size: number; className?: string }>
+  icon: OverviewIcon
   title: string
   description: string
   type?: "warning" | "success" | "info"
@@ -991,6 +990,7 @@ export function DashboardView({
   weekdayCounts: Array<{ day: string; orders: number }>;
 }) {
   const keyword = search?.trim().toLowerCase() ?? "";
+  const [isDemandGrowthOpen, setIsDemandGrowthOpen] = useState(false);
   
   // Calculate key metrics
   const busiestHour = hourlyCounts.reduce(
@@ -1029,7 +1029,6 @@ export function DashboardView({
       icon: Package,
       trend: totalOrders > 10 ? "+12%" : undefined,
       trendUp: true,
-      description: "All confirmed orders",
       formulaTitle: "Order Count Formula",
       formula: "Order Count = Σ completed, non-cancelled orders",
       formulaExplanation: "Counts all successfully completed customer orders. Only includes orders placed during store hours (5PM–12AM)."
@@ -1041,7 +1040,6 @@ export function DashboardView({
       icon: PhilippinePeso,
       trend: grossIncomeSales > 1000 ? "+8%" : undefined,
       trendUp: true,
-      description: "Total sales today",
       formulaTitle: "Revenue Formula",
       formula: "Revenue = Σ order_total",
       formulaExplanation: "Sum of all order totals for the day. Reflects actual cash collected from completed orders."
@@ -1051,7 +1049,6 @@ export function DashboardView({
       label: "Avg Order Value", 
       value: peso(averageOrderValue),
       icon: Coffee,
-      description: "Per customer",
       formulaTitle: "Average Order Value Formula",
       formula: "Average Order Value = Total Revenue ÷ Total Orders",
       formulaExplanation: "Shows typical customer spending. Higher values indicate larger basket sizes or premium items."
@@ -1063,7 +1060,6 @@ export function DashboardView({
       icon: Star,
       trend: feedbackCount > 0 ? `${feedbackCount} reviews` : undefined,
       trendUp: averageRating >= 4,
-      description: "Customer ratings",
       formulaTitle: "Satisfaction Rating Formula",
       formula: "Average Rating = Σ customer_ratings ÷ feedback_count",
       formulaExplanation: "Mean of all 1–5 star ratings from customers. 4.5+ is excellent, 3–3.5 needs attention, <3 requires action."
@@ -1074,8 +1070,7 @@ export function DashboardView({
     ? kpiCards.filter(
         (metric) =>
           matchesSearch(metric.label, keyword) || 
-          matchesSearch(metric.value, keyword) ||
-          matchesSearch(metric.description, keyword)
+          matchesSearch(metric.value, keyword)
       )
     : kpiCards;
 
@@ -1204,7 +1199,6 @@ export function DashboardView({
                 icon={metric.icon}
                 trend={metric.trend}
                 trendUp={metric.trendUp}
-                description={metric.description}
                 formulaTitle={metric.formulaTitle}
                 formula={metric.formula}
                 formulaExplanation={metric.formulaExplanation}
@@ -1275,7 +1269,20 @@ export function DashboardView({
       {showWeekly || showPeakHours ? (
         <div className="grid gap-3 xl:grid-cols-2">
           {showWeekly ? (
-            <div id="admin-weekly-trend" className="scroll-mt-28 xl:h-[300px]">
+            <div
+              id="admin-weekly-trend"
+              className="scroll-mt-28 xl:h-[300px]"
+              role="button"
+              tabIndex={0}
+              title="Open Demand Growth"
+              onClick={() => setIsDemandGrowthOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setIsDemandGrowthOpen(true);
+                }
+              }}
+            >
               <Panel 
                 className="h-full" 
                 title="Demand Growth" 
@@ -1449,6 +1456,48 @@ export function DashboardView({
 
       {!hasDashboardResults ? (
         <EmptyState label="No dashboard results match this search" />
+      ) : null}
+
+      {isDemandGrowthOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0D2E18]/35 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="demand-growth-dialog-title"
+          onClick={() => setIsDemandGrowthOpen(false)}
+        >
+          <div
+            className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[24px] border border-[#D8C8AA] bg-[#FFFCF7] p-5 shadow-[0_24px_70px_rgba(13,46,24,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="font-sans text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#8C6C48]">
+                  Demand Growth
+                </p>
+                <h2
+                  id="demand-growth-dialog-title"
+                  className="mt-1 font-sans text-2xl font-black text-[#0D2E18]"
+                >
+                  Weekly order trend
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDemandGrowthOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-full border border-[#D8C8AA] bg-white text-[#0D2E18] transition hover:bg-[#FFF0DA]"
+                aria-label="Close Demand Growth"
+              >
+                <X size={18} strokeWidth={2} />
+              </button>
+            </div>
+            {weeklyTrendCounts.length > 0 ? (
+              <DemandGrowthChart points={weeklyTrendCounts} />
+            ) : (
+              <EmptyState label="No demand growth data yet" />
+            )}
+          </div>
+        </div>
       ) : null}
     </div>
   );

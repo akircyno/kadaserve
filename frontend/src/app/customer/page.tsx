@@ -51,9 +51,91 @@ type InitialTopRecommendation = {
   item: CustomerMenuItem;
 };
 
+type PublicMenuFeedbackRow = {
+  menu_item_id: string | null;
+  overall_rating: number | null;
+  comment: string | null;
+  created_at: string | null;
+};
+
+type PublicMenuFeedbackSummary = {
+  averageRating: number;
+  ratingCount: number;
+  comments: Array<{
+    rating: number;
+    comment: string;
+    createdAt: string;
+  }>;
+};
+
 function getNumberValue(value: unknown) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function sanitizePublicComment(value: string | null) {
+  const trimmed = value?.replace(/\s+/g, " ").trim() ?? "";
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.length > 140 ? `${trimmed.slice(0, 137).trim()}...` : trimmed;
+}
+
+function buildMenuFeedbackSummaries(rows: PublicMenuFeedbackRow[]) {
+  const buckets = new Map<
+    string,
+    {
+      ratings: number[];
+      comments: Array<{
+        rating: number;
+        comment: string;
+        createdAt: string;
+      }>;
+    }
+  >();
+
+  rows.forEach((row) => {
+    const menuItemId = row.menu_item_id;
+    const rating = Number(row.overall_rating);
+
+    if (!menuItemId || !Number.isFinite(rating) || rating <= 0) {
+      return;
+    }
+
+    const current = buckets.get(menuItemId) ?? { ratings: [], comments: [] };
+    current.ratings.push(rating);
+
+    const comment = sanitizePublicComment(row.comment);
+
+    if (comment && current.comments.length < 3) {
+      current.comments.push({
+        rating,
+        comment,
+        createdAt: row.created_at ?? new Date().toISOString(),
+      });
+    }
+
+    buckets.set(menuItemId, current);
+  });
+
+  return Object.fromEntries(
+    Array.from(buckets.entries()).map(([menuItemId, bucket]) => {
+      const averageRating =
+        bucket.ratings.reduce((sum, rating) => sum + rating, 0) /
+        bucket.ratings.length;
+
+      return [
+        menuItemId,
+        {
+          averageRating: Math.round(averageRating * 10) / 10,
+          ratingCount: bucket.ratings.length,
+          comments: bucket.comments,
+        } satisfies PublicMenuFeedbackSummary,
+      ];
+    })
+  );
 }
 
 function makeInitialRecommendation({
@@ -120,6 +202,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
   let globalRecommendationOrders: RecommendationOrder[] = [];
   let globalRecommendationFeedback: RecommendationFeedback[] = [];
   let globalRecommendationRanking: RecommendationGlobalRankItem[] = [];
+  let menuFeedbackByItemId: Record<string, PublicMenuFeedbackSummary> = {};
   const initialTopRecommendations: InitialTopRecommendation[] = [];
   let initialRecommendationSource: "customer_preferences" | "analytics_items" =
     "analytics_items";
@@ -177,6 +260,15 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       strengthRating: Number(item.strength_rating),
       overallRating: Number(item.overall_rating),
     })) ?? [];
+
+  const { data: publicFeedbackRows } = await adminSupabase
+    .from("feedback")
+    .select("menu_item_id, overall_rating, comment, created_at")
+    .not("menu_item_id", "is", null)
+    .order("created_at", { ascending: false })
+    .returns<PublicMenuFeedbackRow[]>();
+
+  menuFeedbackByItemId = buildMenuFeedbackSummaries(publicFeedbackRows ?? []);
 
   let orders: CustomerOrder[] = fallbackOrders;
   let feedbackItems: FeedbackItem[] = [];
@@ -425,6 +517,7 @@ export default async function CustomerPage({ searchParams }: PageProps) {
       isAuthenticated={Boolean(user)}
       initialTopRecommendations={initialTopRecommendations}
       initialRecommendationSource={initialRecommendationSource}
+      menuFeedbackByItemId={menuFeedbackByItemId}
     />
   );
 }

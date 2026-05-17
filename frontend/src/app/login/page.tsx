@@ -165,8 +165,8 @@ function LoginForm() {
             <ul className="space-y-3 font-sans text-sm text-[#FFF0DA]/78">
               {[
                 "Live Order Tracking",
-                "Preference-Based Insights",
-                "Seamless Staff Management",
+                "Nutrition Estimates",
+                "Pick Your Favorite Drink",
               ].map((item) => (
                 <li key={item} className="flex items-center gap-3">
                   <CheckCircle2 className="h-4 w-4 text-[#CDB898]" />

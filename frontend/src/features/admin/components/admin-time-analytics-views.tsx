@@ -68,7 +68,7 @@ function TimeSeriesMetricCard({
   value,
 }: {
   detail: string;
-  icon: ComponentType<{ className?: string; size?: number }>;
+  icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
   label: string;
   value: string;
 }) {
@@ -587,10 +587,10 @@ export function TimeSeriesView({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                All-Day Scan
+                Store-Hours Scan
               </p>
               <h3 className="mt-1 font-sans text-xl font-bold text-[#0D2E18]">
-                24-hour volume
+                5PM-12AM volume
               </h3>
             </div>
             <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">

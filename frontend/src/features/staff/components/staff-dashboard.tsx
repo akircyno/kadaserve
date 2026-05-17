@@ -24,6 +24,7 @@ import {
 import { createPortal } from "react-dom";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
+import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
@@ -33,6 +34,12 @@ type StaffProfile = {
   email: string | null;
   phone: string | null;
   role: string | null;
+};
+type StaffSearchSuggestion = {
+  category: string;
+  label: string;
+  query: string;
+  orderId?: string;
 };
 type BoardOrderStatus = Exclude<
   OrderStatus,
@@ -103,35 +110,15 @@ function formatOrderCode(id: string) {
   return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
-function formatNameFromEmail(email: string | null) {
-  if (!email) return null;
-
-  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-
-  if (!name) return null;
-
-  return name
-    .split(" ")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function getOrderDisplayName(order: StaffOrder) {
-  return (
+  return maskCustomerName(
     order.walkin_name?.trim() ||
     order.customer_profile?.full_name?.trim() ||
     formatNameFromEmail(order.delivery_email) ||
     formatNameFromEmail(order.customer_profile?.email ?? null) ||
-    (order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer")
+    null,
+    order.order_type === "delivery" ? "Delivery Customer" : "Walk-in Customer"
   );
-}
-
-function getOrderEmail(order: StaffOrder) {
-  return order.delivery_email || order.customer_profile?.email || null;
-}
-
-function getOrderPhone(order: StaffOrder) {
-  return order.delivery_phone || order.customer_profile?.phone || null;
 }
 
 function hasDeliveryPin(order: StaffOrder) {
@@ -251,30 +238,6 @@ function getQueueAccent(status: OrderStatus) {
 
 function getOrderItemQuantity(order: StaffOrder) {
   return order.order_items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
-}
-
-function getQueueFocusLabel(order: StaffOrder, minutesUntilExpiry: number | null) {
-  if (order.status === "pending_payment") {
-    return "Waiting online payment";
-  }
-
-  if (minutesUntilExpiry !== null && minutesUntilExpiry <= 10) {
-    return "Expires soon";
-  }
-
-  if (requiresPaymentBeforeNextAction(order)) {
-    return "Collect payment first";
-  }
-
-  if (requiresFinalDeliveryFee(order)) {
-    return "Missing delivery fee";
-  }
-
-  if (order.status === "ready") {
-    return order.order_type === "delivery" ? "Ready to dispatch" : "Ready for pickup";
-  }
-
-  return order.order_type === "delivery" ? "Delivery order" : "Pickup order";
 }
 
 function getMinutesUntilExpiration(value: string, now: Date) {
@@ -567,6 +530,8 @@ export function StaffDashboard() {
   const [orders, setOrders] = useState<StaffOrder[]>(fallbackOrders);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [stationStatus, setStationStatus] =
@@ -606,8 +571,16 @@ export function StaffDashboard() {
   }, [orders]);
 
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
   const filteredOrders = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = debouncedSearch.trim().toLowerCase();
 
     return activeOrders.filter((order) => {
       const matchesType =
@@ -620,17 +593,96 @@ export function StaffDashboard() {
         .toLowerCase();
       const orderType = order.order_type.toLowerCase();
       const customerName = getOrderDisplayName(order).toLowerCase();
+      const status = formatStatus(order.status).toLowerCase();
+      const paymentMethod = getPaymentLabel(order).toLowerCase();
+      const paymentStatus = getPaymentStatusLabel(order).toLowerCase();
+      const total = peso(order.total_amount).toLowerCase();
 
       const matchesSearch =
         !keyword ||
         orderCode.includes(keyword) ||
         itemNames.includes(keyword) ||
         orderType.includes(keyword) ||
-        customerName.includes(keyword);
+        customerName.includes(keyword) ||
+        status.includes(keyword) ||
+        paymentMethod.includes(keyword) ||
+        paymentStatus.includes(keyword) ||
+        total.includes(keyword);
 
       return matchesType && matchesSearch;
     });
-  }, [activeOrders, orderFilter, search]);
+  }, [activeOrders, debouncedSearch, orderFilter]);
+
+  const searchSuggestions = useMemo<StaffSearchSuggestion[]>(() => {
+    const suggestions: StaffSearchSuggestion[] = [];
+    const seen = new Set<string>();
+
+    function addSuggestion(suggestion: StaffSearchSuggestion) {
+      const key = `${suggestion.category}:${suggestion.label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      suggestions.push(suggestion);
+    }
+
+    activeOrders.slice(0, 18).forEach((order) => {
+      const orderCode = formatOrderCode(order.id);
+      addSuggestion({
+        category: "Orders",
+        label: orderCode,
+        query: orderCode,
+        orderId: order.id,
+      });
+      addSuggestion({
+        category: "Customers",
+        label: getOrderDisplayName(order),
+        query: getOrderDisplayName(order),
+      });
+      addSuggestion({
+        category: "Status",
+        label: formatStatus(order.status),
+        query: formatStatus(order.status),
+      });
+      addSuggestion({
+        category: "Order Type",
+        label: order.order_type === "pickup" ? "Pickup" : "Delivery",
+        query: order.order_type,
+      });
+      addSuggestion({
+        category: "Payment",
+        label: getPaymentLabel(order),
+        query: getPaymentLabel(order),
+      });
+      addSuggestion({
+        category: "Payment",
+        label: getPaymentStatusLabel(order),
+        query: getPaymentStatusLabel(order),
+      });
+      addSuggestion({
+        category: "Total",
+        label: peso(order.total_amount),
+        query: String(order.total_amount),
+      });
+      order.order_items.slice(0, 3).forEach((item) => {
+        const itemName = item.menu_items?.name ?? "Menu item";
+        addSuggestion({
+          category: "Items",
+          label: itemName,
+          query: itemName,
+        });
+      });
+    });
+
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return suggestions.slice(0, 10);
+
+    return suggestions
+      .filter((suggestion) =>
+        [suggestion.category, suggestion.label, suggestion.query].some((value) =>
+          value.toLowerCase().includes(keyword)
+        )
+      )
+      .slice(0, 10);
+  }, [activeOrders, search]);
 
   const groupedOrders = useMemo(() => {
     function sortOldestFirst(items: StaffOrder[]) {
@@ -726,14 +778,6 @@ export function StaffDashboard() {
   const selectedOrderItemQuantity = selectedOrder
     ? getOrderItemQuantity(selectedOrder)
     : 0;
-  const selectedOrderFocusLabel = selectedOrder
-    ? getQueueFocusLabel(
-        selectedOrder,
-        selectedOrder.status === "pending"
-          ? getMinutesUntilExpiration(selectedOrder.ordered_at, now)
-          : null
-      )
-    : "";
   const selectedOrderRemarks = selectedOrder
     ? getOrderSpecialRemarks(selectedOrder)
     : [];
@@ -821,6 +865,18 @@ export function StaffDashboard() {
     ) as HTMLElement | null;
   }, []);
 
+  function handleSearchSuggestionSelect(suggestion: StaffSearchSuggestion) {
+    setSearch(suggestion.query);
+    setIsSearchFocused(false);
+
+    if (suggestion.orderId) {
+      const order = activeOrders.find((item) => item.id === suggestion.orderId);
+      if (order) {
+        setSelectedOrder(order);
+      }
+    }
+  }
+
   function TopbarControlsPortal() {
     if (!headerContainerRef.current) return null;
 
@@ -844,15 +900,47 @@ export function StaffDashboard() {
           </span>
         </button>
 
-        <label className="hidden h-10 min-w-[220px] flex-1 items-center gap-2 rounded-full border border-[#E7DDCC] bg-white px-3 sm:flex sm:max-w-sm 2xl:w-72 2xl:flex-none">
-          <Search size={16} className="text-[#8C7A64]" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search orders..."
-            className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
-          />
-        </label>
+        <div className="relative hidden min-w-[220px] flex-1 sm:block sm:max-w-sm 2xl:w-72 2xl:flex-none">
+          <label className="flex h-10 items-center gap-2 rounded-full border border-[#E7DDCC] bg-white px-3">
+            <Search size={16} className="text-[#8C7A64]" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => {
+                window.setTimeout(() => setIsSearchFocused(false), 140);
+              }}
+              placeholder="Search orders..."
+              className="w-full bg-transparent font-sans text-sm text-[#0D2E18] outline-none placeholder:text-[#9B8A74]"
+            />
+          </label>
+
+          {isSearchFocused && searchSuggestions.length > 0 ? (
+            <div className="absolute left-0 right-0 top-12 z-40 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-white shadow-[0_14px_28px_rgba(13,46,24,0.14)]">
+              <p className="border-b border-[#EFE3CF] px-3 py-2 font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                Suggested searches
+              </p>
+              <div className="max-h-64 overflow-y-auto py-1">
+                {searchSuggestions.map((suggestion) => (
+                  <button
+                    key={`${suggestion.category}-${suggestion.label}`}
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSearchSuggestionSelect(suggestion)}
+                    className="block w-full px-3 py-2 text-left transition hover:bg-[#FFF0DA]"
+                  >
+                    <span className="block font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
+                      {suggestion.category}
+                    </span>
+                    <span className="block truncate font-sans text-sm font-semibold text-[#0D2E18]">
+                      {suggestion.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         <span
           className={`hidden h-10 items-center gap-2 rounded-full px-3 font-sans text-xs font-semibold xl:inline-flex ${
@@ -1467,14 +1555,8 @@ export function StaffDashboard() {
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
                     const isUpdatingOrder = updatingOrderIds.includes(order.id);
                     const isExpiringOrder = expiringOrderIds.includes(order.id);
-                    const orderEmail = getOrderEmail(order);
-                    const orderPhone = getOrderPhone(order);
                     const elapsedMinutes = getElapsedMinutes(order.ordered_at, now);
                     const heatmapStyle = getQueueHeatmapStyle(elapsedMinutes);
-                    const queueFocusLabel = getQueueFocusLabel(
-                      order,
-                      minutesUntilExpiry
-                    );
                     const itemQuantity = getOrderItemQuantity(order);
                     const isSelectedOrder = selectedOrder?.id === order.id;
 
@@ -1503,11 +1585,6 @@ export function StaffDashboard() {
                                 {getOrderDisplayName(order)}
                               </span>
                             </div>
-                            {orderEmail || orderPhone ? (
-                              <p className="mt-1 max-h-0 overflow-hidden font-sans text-[11px] leading-snug text-[#8C7A64] opacity-0 transition-all duration-200 group-hover/order:max-h-10 group-hover/order:opacity-100 group-focus-within/order:max-h-10 group-focus-within/order:opacity-100">
-                                {[orderEmail, orderPhone].filter(Boolean).join(" | ")}
-                              </p>
-                            ) : null}
                           </div>
 
                           <span
@@ -1576,15 +1653,6 @@ export function StaffDashboard() {
                           >
                             {getPaymentStatusLabel(order)}
                           </span>
-                        </div>
-
-                        <div className={`mt-2 rounded-[14px] border px-3 py-2 ${heatmapStyle.panel}`}>
-                          <p className="font-sans text-[11px] font-black uppercase tracking-[0.12em] text-[#8C7A64]">
-                            Focus
-                          </p>
-                          <p className="mt-0.5 font-sans text-sm font-bold text-[#0D2E18]">
-                            {queueFocusLabel}
-                          </p>
                         </div>
 
                         <div className="mt-2 flex items-center justify-between gap-3 font-sans">
@@ -1886,31 +1954,12 @@ export function StaffDashboard() {
                 </button>
               </div>
 
-              <div className={`mt-3 flex flex-wrap items-center gap-2 rounded-2xl border px-3 py-2 font-sans text-xs ${selectedOrderHeatmapStyle.panel}`}>
-                <span className="font-black uppercase tracking-[0.12em] text-[#8C7A64]">
-                  Queue Heat
-                </span>
-                <span className="font-black text-[#0D2E18]">
-                  {selectedOrderHeatmapStyle.label}
-                </span>
-                <span className="text-[#B59A79]">|</span>
-                <span className="font-bold text-[#684B35]">
-                  {formatElapsed(selectedOrder.ordered_at, now)}
-                </span>
-                <span className="text-[#B59A79]">|</span>
-                <span className="font-bold text-[#684B35]">
-                  {selectedOrderItemQuantity} item{selectedOrderItemQuantity === 1 ? "" : "s"}
-                </span>
-              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3">
               <div className="grid gap-2">
                 <div className="rounded-[16px] border border-[#DCCFB8] bg-white p-3">
-                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
-                    Fulfillment
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 font-sans text-xs font-bold ${getOrderTypeStyle(
                         selectedOrder.order_type
@@ -1937,14 +1986,6 @@ export function StaffDashboard() {
                   </div>
                 </div>
 
-                <div className={`rounded-[16px] border p-3 ${selectedOrderHeatmapStyle.panel}`}>
-                  <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
-                    Current Focus
-                  </p>
-                  <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
-                    {selectedOrderFocusLabel}
-                  </p>
-                </div>
               </div>
 
               <div className="mt-2 grid gap-2">
@@ -1973,9 +2014,6 @@ export function StaffDashboard() {
                     <div>
                       <p className="font-sans text-xs font-black uppercase tracking-[0.12em] text-[#684B35]">
                         Delivery Fee
-                      </p>
-                      <p className="mt-1 font-sans text-xs text-[#6E5D49]">
-                        Distance-based checkout total
                       </p>
                     </div>
                     <Truck size={20} className="text-[#684B35]" />
@@ -2042,25 +2080,6 @@ export function StaffDashboard() {
                 </div>
 
                 <div className="mt-3 grid gap-2 font-sans text-sm text-[#3C332A]">
-                  <div className="grid gap-2">
-                    <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
-                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
-                        Phone
-                      </p>
-                      <p className="mt-1 font-semibold text-[#0D2E18]">
-                        {getOrderPhone(selectedOrder) || "No phone"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
-                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
-                        Email
-                      </p>
-                      <p className="mt-1 truncate font-semibold text-[#0D2E18]">
-                        {getOrderEmail(selectedOrder) || "No email"}
-                      </p>
-                    </div>
-                  </div>
-
                   {selectedOrder.order_type === "delivery" ? (
                     <div className="rounded-xl bg-[#FFF8EF] px-3 py-2">
                       <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#8C7A64]">
@@ -2199,18 +2218,6 @@ export function StaffDashboard() {
                 </div>
               ) : (
                 <div className="grid gap-3">
-                  <div>
-                    <p className="font-sans text-base font-black text-[#0D2E18]">
-                      Order actions
-                    </p>
-                    {!getFinalStatusMessage(selectedOrder.status) ? (
-                      <p className="mt-1 font-sans text-sm text-[#8C7A64]">
-                        Next move:{" "}
-                        {requiresPaymentBeforeNextAction(selectedOrder)
-                          ? "Collect payment first"
-                          : getDrawerActionLabel(selectedOrder) ?? "No action needed"}
-                      </p>
-                    ) : null}
                   {getFinalStatusMessage(selectedOrder.status) ? (
                       <p className="mt-1 font-sans text-sm text-[#8C7A64]">
                         {getFinalStatusMessage(selectedOrder.status)}
@@ -2221,7 +2228,6 @@ export function StaffDashboard() {
                         {getExpiredOrderLabel(selectedOrder.status)}
                       </p>
                     ) : null}
-                  </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {canMarkPaid(selectedOrder) ? (

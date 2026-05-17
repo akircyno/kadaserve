@@ -32,6 +32,7 @@ import {
   getMenuItemNutrition,
   nutritionMetricLabels,
 } from "@/lib/nutrition";
+import type { CustomerOrder } from "@/types/orders";
 import type { StoreStatusPayload } from "@/lib/store-status";
 
 type CustomerAddress = {
@@ -48,14 +49,26 @@ type QrPhPayment = {
   qrCodeImageUrl: string;
   qrCodeLabel: string;
   totalAmount: number;
+  expiresAt: string | null;
   expiresInMinutes: number;
 };
 
 const isPayMongoCheckoutEnabled =
   process.env.NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT === "true";
+const checkoutOrderTypeStorageKey = "kadaserve_checkout_order_type";
 
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
+}
+
+function getQrPhMinutesLeft(payment: QrPhPayment, nowMs: number) {
+  const expiresAt = payment.expiresAt ? new Date(payment.expiresAt).getTime() : 0;
+
+  if (!expiresAt) {
+    return payment.expiresInMinutes;
+  }
+
+  return Math.max(0, Math.ceil((expiresAt - nowMs) / 60000));
 }
 
 function formatAddonLabel(value: string) {
@@ -116,6 +129,21 @@ export default function CartPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isReturningToMenu, setIsReturningToMenu] = useState(false);
   const [qrPhPayment, setQrPhPayment] = useState<QrPhPayment | null>(null);
+  const [qrCountdownNow, setQrCountdownNow] = useState(() => Date.now());
+  const qrPhMinutesLeft = qrPhPayment
+    ? getQrPhMinutesLeft(qrPhPayment, qrCountdownNow)
+    : 0;
+
+  useEffect(() => {
+    const savedOrderType = window.sessionStorage.getItem(
+      checkoutOrderTypeStorageKey
+    );
+
+    if (savedOrderType === "pickup" || savedOrderType === "delivery") {
+      setOrderType(savedOrderType);
+      window.sessionStorage.removeItem(checkoutOrderTypeStorageKey);
+    }
+  }, []);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -128,6 +156,74 @@ export default function CartPage() {
       return [...retainedIds, ...newIds];
     });
   }, [items]);
+
+  useEffect(() => {
+    if (!qrPhPayment) {
+      return;
+    }
+
+    const activeQrPayment = qrPhPayment;
+    let isActive = true;
+
+    async function syncQrOrderStatus() {
+      setQrCountdownNow(Date.now());
+
+      try {
+        const response = await fetch("/api/customer/orders", {
+          method: "GET",
+          cache: "no-store",
+        });
+        const result = (await response.json()) as {
+          orders?: CustomerOrder[];
+          error?: string;
+        };
+
+        if (!isActive || !response.ok) {
+          return;
+        }
+
+        const matchingOrder = result.orders?.find(
+          (order) => order.id === activeQrPayment.orderId
+        );
+
+        if (
+          matchingOrder?.payment_status === "paid" &&
+          matchingOrder.status !== "pending_payment"
+        ) {
+          setQrPhPayment(null);
+          showToast({
+            title: "Thank you for ordering",
+            description: `Order ${activeQrPayment.orderId.slice(0, 8).toUpperCase()} is paid and ready for tracking.`,
+            variant: "success",
+          });
+          router.replace(`/customer?tab=orders&orderId=${activeQrPayment.orderId}`);
+          return;
+        }
+
+        if (
+          matchingOrder &&
+          ["cancelled", "expired"].includes(matchingOrder.status)
+        ) {
+          setQrPhPayment(null);
+          showToast({
+            title: "Payment expired",
+            description: "The unpaid QR Ph checkout was cancelled.",
+            variant: "error",
+          });
+        }
+      } catch {
+        // Keep the QR visible; the next poll or customer tracker can recover.
+      }
+    }
+
+    void syncQrOrderStatus();
+    const intervalId = window.setInterval(syncQrOrderStatus, 3000);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [qrPhPayment, router, showToast]);
 
   async function loadSavedAddresses() {
     try {
@@ -535,6 +631,10 @@ export default function CartPage() {
               : "KadaServe QR Ph",
           totalAmount:
             typeof result.totalAmount === "number" ? result.totalAmount : grandTotal,
+          expiresAt:
+            typeof result.qrCodeExpiresAt === "string"
+              ? result.qrCodeExpiresAt
+              : null,
           expiresInMinutes:
             typeof result.qrCodeExpiresInMinutes === "number"
               ? result.qrCodeExpiresInMinutes
@@ -545,7 +645,7 @@ export default function CartPage() {
         );
         showToast({
           title: "QR Ph ready",
-          description: "Scan the PayMongo QR to complete payment.",
+          description: "Scan the PayMongo QR within 5 minutes to complete payment.",
           variant: "info",
         });
         clearCart();
@@ -857,7 +957,7 @@ export default function CartPage() {
                             {itemNutrition ? (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
-                                  {itemNutrition.calories} cal est.
+                                  {itemNutrition.calories} cal
                                 </span>
                                 <span className="rounded-full bg-[#FFF8EF] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
                                   Sugar {itemNutrition.sugar}g
@@ -984,10 +1084,10 @@ export default function CartPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#684B35]">
-                            Nutrition estimate
+                            Nutrition facts
                           </p>
                           <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                            Selected items only, calculated from staff recipes.
+                            Selected items, recipe-calculated from supplier labels.
                           </p>
                         </div>
                         <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
@@ -1312,13 +1412,14 @@ export default function CartPage() {
               </p>
               <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
                 Pay with any QR Ph-supported wallet or banking app. This QR
-                expires in about {qrPhPayment.expiresInMinutes} minutes.
+                expires in about {qrPhMinutesLeft} minute
+                {qrPhMinutesLeft === 1 ? "" : "s"}.
               </p>
             </div>
 
             <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
-              KadaServe will move this order to the staff queue after PayMongo
-              sends the paid webhook.
+              KadaServe will close this QR and open tracking after PayMongo
+              confirms payment.
             </div>
 
             <button

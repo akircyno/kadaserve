@@ -7,7 +7,8 @@
     "dev:turbo": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:nutrition": "node scripts/verify-nutrition.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

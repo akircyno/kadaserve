@@ -96,7 +96,7 @@ export default function StaffLayout({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden border-r border-[#FFF8EF]/5 bg-[#0D2E18] text-[#FFF8EF] transition-all duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden rounded-r-[24px] bg-[#083C1F] text-[#FFF8EF] shadow-[12px_0_30px_rgba(0,0,0,0.16)] transition-all duration-300 ease-in-out lg:translate-x-0 ${
           isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } ${
           isSidebarCollapsed ? "w-16" : "w-56"
@@ -194,7 +194,7 @@ export default function StaffLayout({
             title={isSidebarCollapsed ? "Sign out" : undefined}
             className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
               isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
-            } text-[#8C7A64] hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]`}
+            } text-[#FFF0D8]/76 hover:bg-[#9C543D]/18 hover:text-[#FFF8EF]`}
           >
             <LogOut size={20} className="shrink-0" />
             <span
@@ -229,7 +229,7 @@ export default function StaffLayout({
 
               <div className="min-w-0 flex-1 2xl:flex-none">
                 <p className="font-sans text-[11px] font-black uppercase tracking-[0.18em] text-[#684B35]">
-                  Staff Command Center
+                  Staff Workspace
                 </p>
                 <h1 className="truncate font-sans text-[1.45rem] font-black leading-tight text-[#0D2E18] sm:text-[1.65rem]">
                   {isEncodeOrder
@@ -268,30 +268,27 @@ export default function StaffLayout({
             className="fixed inset-0 bg-[#0D2E18]/45 backdrop-blur-sm"
             onClick={() => !isLoggingOut && setIsLogoutConfirmOpen(false)}
           />
-          <div className="relative w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-[#FFF0DA] p-6 shadow-[0_20px_50px_rgba(13,46,24,0.15)]">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF8EF] text-[#684B35]">
-              <LogOut size={24} />
-            </div>
-            <h2 className="mt-4 font-sans text-xl font-black text-[#0D2E18]">
-              Ready to leave?
+          <div className="relative w-full max-w-sm rounded-[24px] border border-[#DCCFB8] bg-white p-5 shadow-[0_20px_50px_rgba(13,46,24,0.15)]">
+            <h2 className="font-sans text-xl font-black text-[#0D2E18]">
+              Log out?
             </h2>
-            <p className="mt-2 font-sans text-sm font-medium text-[#7D6B55]">
-              Are you sure you want to log out of your staff account? Any unsaved progress may be lost.
+            <p className="mt-2 font-sans text-sm font-semibold leading-6 text-[#684B35]">
+              Are you sure you want to log out?
             </p>
-            <div className="mt-6 flex flex-col gap-2">
+            <div className="mt-5 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#143E21] disabled:opacity-60"
+                className="rounded-[14px] bg-[#9C543D] px-4 py-3 font-sans text-sm font-black text-[#FFF0D8] transition hover:bg-[#8A4632] disabled:opacity-60"
               >
-                {isLoggingOut ? "Signing out..." : "Yes, Sign out"}
+                {isLoggingOut ? "Logging out..." : "Logout"}
               </button>
               <button
                 type="button"
                 onClick={() => setIsLogoutConfirmOpen(false)}
                 disabled={isLoggingOut}
-                className="w-full rounded-xl border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+                className="rounded-[14px] border border-[#DCCFB8] bg-white px-4 py-3 font-sans text-sm font-black text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
               >
                 Cancel
               </button>

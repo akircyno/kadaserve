@@ -425,10 +425,10 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
-                        Nutrition estimate
+                        Nutrition facts
                       </p>
                       <p className="mt-1 text-xs font-semibold leading-5 text-[#684B35]">
-                        Per selected serving, calculated from KadaServe staff recipe.
+                        Recipe-calculated from KadaServe recipes and supplier labels.
                       </p>
                     </div>
                     <span className="rounded-full bg-[#E9F5E7] px-3 py-1 text-xs font-black text-[#2D7A40]">

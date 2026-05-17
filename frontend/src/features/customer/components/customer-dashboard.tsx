@@ -13,7 +13,6 @@ import {
   Bell,
   Camera,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CheckCircle2,
   ClipboardList,
@@ -70,6 +69,7 @@ type CustomerDashboardProps = {
   menuItems: CustomerMenuItem[];
   orders: CustomerOrder[];
   feedbackItems: FeedbackItem[];
+  menuFeedbackByItemId?: Record<string, PublicMenuFeedbackSummary>;
   initialTopRecommendations?: TopRecommendation[];
   initialRecommendationSource?: "customer_preferences" | "analytics_items";
   preferenceSignals?: Array<{
@@ -91,6 +91,16 @@ type CustomerDashboardProps = {
     satisfactionAverage: number | null;
   };
   isAuthenticated?: boolean;
+};
+
+type PublicMenuFeedbackSummary = {
+  averageRating: number;
+  ratingCount: number;
+  comments: Array<{
+    rating: number;
+    comment: string;
+    createdAt: string;
+  }>;
 };
 
 type TopRecommendation = {
@@ -148,6 +158,7 @@ type ReopenableQrPhPayment = {
   qrCodeImageUrl: string;
   qrCodeLabel: string;
   totalAmount: number;
+  expiresAt: string | null;
   expiresInMinutes: number;
 };
 
@@ -224,6 +235,7 @@ const feedbackDismissedOrdersStorageKey =
 const feedbackMaybeLaterStorageKey = "kadaserve_feedback_maybe_later_orders";
 const notificationsReadStorageKey = "kadaserve_read_notifications";
 const feedbackMaybeLaterDelayMs = 30 * 60 * 1000;
+const checkoutOrderTypeStorageKey = "kadaserve_checkout_order_type";
 const promotionImages = [
   "/images/promotions/promotion1.png",
   "/images/promotions/promotion2.png",
@@ -257,6 +269,23 @@ function formatDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatRating(value: number) {
+  return Number(value).toFixed(1);
+}
+
+function formatRatingCount(value: number) {
+  return `${value} rating${value === 1 ? "" : "s"}`;
+}
+
+function getMenuFeedback(
+  feedbackByItemId: Record<string, PublicMenuFeedbackSummary>,
+  item: Pick<CustomerMenuItem, "id">
+) {
+  const feedback = feedbackByItemId[item.id];
+
+  return feedback && feedback.ratingCount > 0 ? feedback : null;
 }
 
 function formatNotificationTime(value: string) {
@@ -531,10 +560,21 @@ function getReopenableQrPhPayment(order: CustomerOrder | null) {
     qrCodeImageUrl: order.paymongo_qr_code_image_url,
     qrCodeLabel: order.paymongo_qr_code_label || "KadaServe QR Ph",
     totalAmount: order.total_amount,
+    expiresAt: order.paymongo_qr_expires_at ?? null,
     expiresInMinutes: expiresAt
       ? Math.max(1, Math.ceil((expiresAt - Date.now()) / 60000))
       : 30,
   };
+}
+
+function getQrPhMinutesLeft(payment: ReopenableQrPhPayment, nowMs: number) {
+  const expiresAt = payment.expiresAt ? new Date(payment.expiresAt).getTime() : 0;
+
+  if (!expiresAt) {
+    return payment.expiresInMinutes;
+  }
+
+  return Math.max(0, Math.ceil((expiresAt - nowMs) / 60000));
 }
 
 function hasExpiredQrPhPayment(order: CustomerOrder | null) {
@@ -565,14 +605,6 @@ function canCustomerCancelOrder(order: CustomerOrder | null) {
   }
 
   return order.status === "pending" || order.status === "pending_payment";
-}
-
-function getCustomerCancelHelp(order: CustomerOrder) {
-  if (order.status === "pending_payment") {
-    return "You can cancel this unpaid online order before payment is confirmed.";
-  }
-
-  return "You can cancel this order before staff starts preparing it.";
 }
 
 function getCustomerCancelUnavailableMessage(order: CustomerOrder) {
@@ -796,9 +828,9 @@ function getMonthlyFavorite(orders: CustomerOrder[]) {
 }
 
 function getTasteProfile(orders: CustomerOrder[]) {
-  let coffee = 0;
+  let latte = 0;
+  let nonCoffee = 0;
   let pastries = 0;
-  let other = 0;
 
   orders.forEach((order) => {
     order.order_items.forEach((item) => {
@@ -810,8 +842,16 @@ function getTasteProfile(orders: CustomerOrder[]) {
 
       if (category === "pastries" || category === "best-deals") {
         pastries += quantity;
-      } else if (category === "coffee" || category === "non-coffee") {
-        coffee += quantity;
+      } else if (category === "non-coffee") {
+        nonCoffee += quantity;
+      } else if (
+        category === "coffee" ||
+        name.includes("latte") ||
+        name.includes("americano") ||
+        name.includes("mocha") ||
+        name.includes("macchiato")
+      ) {
+        latte += quantity;
       } else if (
         name.includes("cookie") ||
         name.includes("panini") ||
@@ -820,37 +860,34 @@ function getTasteProfile(orders: CustomerOrder[]) {
       ) {
         pastries += quantity;
       } else if (name) {
-        coffee += quantity;
-      } else {
-        other += quantity;
+        nonCoffee += quantity;
       }
     });
   });
 
-  const total = coffee + pastries + other;
+  const total = latte + nonCoffee + pastries;
 
   if (total === 0) {
-    return { coffee: 0, pastries: 0, other: 0 };
+    return { latte: 0, nonCoffee: 0, pastries: 0 };
   }
 
   return {
-    coffee: Math.round((coffee / total) * 100),
+    latte: Math.round((latte / total) * 100),
+    nonCoffee: Math.round((nonCoffee / total) * 100),
     pastries: Math.round((pastries / total) * 100),
-    other: Math.round((other / total) * 100),
   };
 }
 
 function getFlavorBadges(orders: CustomerOrder[]) {
-  const text = orders
-    .flatMap((order) =>
-      order.order_items.map((item) => item.menu_items?.name ?? "")
-    )
-    .join(" ")
-    .toLowerCase();
-  const badges = [];
+  const items = orders.flatMap((order) => order.order_items);
+  const text = items.map((item) => item.menu_items?.name ?? "").join(" ").toLowerCase();
+  const badges = new Set<string>();
+  let nutritionCount = 0;
+  let totalCalories = 0;
+  let totalSugar = 0;
 
   if (text.includes("latte") || text.includes("milk")) {
-    badges.push("Loves Creamy");
+    badges.add("Creamy Latte Fan");
   }
 
   if (
@@ -858,24 +895,55 @@ function getFlavorBadges(orders: CustomerOrder[]) {
     text.includes("espresso") ||
     text.includes("macchiato")
   ) {
-    badges.push("Frequent Espresso Drinker");
+    badges.add("Coffee-Forward");
   }
 
   if (text.includes("matcha") || text.includes("strawberry")) {
-    badges.push("Fruit + Matcha Fan");
+    badges.add("Fruit + Matcha Fan");
   }
 
   if (text.includes("cookie") || text.includes("pastry")) {
-    badges.push("Pastry Pairing");
+    badges.add("Pastry Pairing");
   }
 
-  return badges.length > 0 ? badges.slice(0, 3) : ["Discovering Preferences"];
+  items.forEach((item) => {
+    if (!item.menu_items) return;
+
+    const facts = getMenuItemNutrition(item.menu_items, {
+      quantity: item.quantity,
+      sugarLevel: 50,
+      size: "medium",
+      addons: [],
+    });
+
+    if (!facts) return;
+
+    nutritionCount += 1;
+    totalCalories += facts.calories;
+    totalSugar += facts.sugar;
+  });
+
+  if (nutritionCount > 0) {
+    const averageCalories = totalCalories / nutritionCount;
+    const averageSugar = totalSugar / nutritionCount;
+
+    if (averageCalories >= 180) {
+      badges.add("High Calorie Picks");
+    }
+
+    if (averageSugar <= 24) {
+      badges.add("Lower Sugar Choices");
+    }
+  }
+
+  return badges.size > 0 ? Array.from(badges).slice(0, 4) : ["Discovering Preferences"];
 }
 
 export function CustomerDashboard({
   menuItems,
   orders,
   feedbackItems,
+  menuFeedbackByItemId = {},
   preferenceSignals = [],
   globalRecommendationOrders = [],
   globalRecommendationFeedback = [],
@@ -892,8 +960,8 @@ export function CustomerDashboard({
   const { showToast } = useToast();
   const { addItem, cartCount, items: cartItems } = useCart();
   const [customerOrders, setCustomerOrders] = useState(orders);
-  const [isOrderSyncing, setIsOrderSyncing] = useState(false);
-  const [lastOrderSyncAt, setLastOrderSyncAt] = useState<Date | null>(null);
+  const [, setIsOrderSyncing] = useState(false);
+  const [, setLastOrderSyncAt] = useState<Date | null>(null);
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [isSplashVisible, setIsSplashVisible] = useState(false);
   const [isTaglineVisible, setIsTaglineVisible] = useState(false);
@@ -928,6 +996,7 @@ export function CustomerDashboard({
   const [qrPhPayment, setQrPhPayment] = useState<ReopenableQrPhPayment | null>(
     null
   );
+  const [qrCountdownNow, setQrCountdownNow] = useState(() => Date.now());
   const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
@@ -941,6 +1010,7 @@ export function CustomerDashboard({
   const [feedbackComment, setFeedbackComment] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [topRecommendations, setTopRecommendations] =
     useState<TopRecommendation[]>(initialTopRecommendations);
   const [recommendationSource, setRecommendationSource] = useState<
@@ -960,6 +1030,7 @@ export function CustomerDashboard({
   const [profilePhoneDraft, setProfilePhoneDraft] = useState(
     formatProfilePhone(customerProfile?.phone ?? "")
   );
+  const [isProfilePhoneEditing, setIsProfilePhoneEditing] = useState(false);
   const [profileLanguage, setProfileLanguage] = useState<"English" | "Filipino">(
     "English"
   );
@@ -1450,14 +1521,83 @@ export function CustomerDashboard({
         };
       })
       .slice(0, 4) ?? [];
-  const orderSyncLabel = isOrderSyncing
-    ? "Syncing order status..."
-    : lastOrderSyncAt
-    ? `Last updated ${lastOrderSyncAt.toLocaleTimeString("en-PH", {
-        hour: "numeric",
-        minute: "2-digit",
-      })}`
-    : "Automatic updates enabled";
+  const qrPhMinutesLeft = qrPhPayment
+    ? getQrPhMinutesLeft(qrPhPayment, qrCountdownNow)
+    : 0;
+
+  useEffect(() => {
+    if (!qrPhPayment) {
+      return;
+    }
+
+    setQrCountdownNow(Date.now());
+    const intervalId = window.setInterval(() => {
+      setQrCountdownNow(Date.now());
+      void syncCustomerOrders();
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [qrPhPayment, syncCustomerOrders]);
+
+  useEffect(() => {
+    if (!qrPhPayment) {
+      return;
+    }
+
+    const matchingOrder = customerOrders.find(
+      (order) => order.id === qrPhPayment.orderId
+    );
+
+    if (
+      matchingOrder?.payment_status === "paid" &&
+      matchingOrder.status !== "pending_payment"
+    ) {
+      setQrPhPayment(null);
+      setActiveSection("orders");
+      setTrackingActionMessage("");
+      setSelectedCurrentOrderId(qrPhPayment.orderId);
+      setTrackingOrderId(qrPhPayment.orderId);
+      showToast({
+        title: "Thank you for ordering",
+        description: `${formatOrderCode(qrPhPayment.orderId)} is paid and ready for tracking.`,
+        variant: "success",
+      });
+
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", "orders");
+      params.set("orderId", qrPhPayment.orderId);
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}?${params.toString()}`
+      );
+      return;
+    }
+
+    if (
+      matchingOrder &&
+      ["cancelled", "expired"].includes(matchingOrder.status)
+    ) {
+      setQrPhPayment(null);
+      setTrackingActionMessage("Payment expired. Please place a new order.");
+      showToast({
+        title: "Payment expired",
+        description: "The unpaid QR Ph checkout was cancelled.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (qrPhMinutesLeft <= 0) {
+      void syncCustomerOrders();
+    }
+  }, [
+    customerOrders,
+    qrPhMinutesLeft,
+    qrPhPayment,
+    showToast,
+    syncCustomerOrders,
+  ]);
   const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
   const hasOrderAttention = currentOrders.some((order) =>
     ["preparing", "ready", "out_for_delivery"].includes(order.status)
@@ -1722,9 +1862,6 @@ export function CustomerDashboard({
       ? "Good afternoon"
       : "Good evening";
   const feedbackMissionAvailable = feedbackItems.length > 0;
-  const activePromotionImage =
-    promotionImages[activePromotionIndex] ?? promotionImages[0];
-
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setActivePromotionIndex((current) =>
@@ -1870,6 +2007,9 @@ export function CustomerDashboard({
         addons: selectedAddons,
       })
     : null;
+  const selectedMenuFeedback = selectedMenuItem
+    ? getMenuFeedback(menuFeedbackByItemId, selectedMenuItem)
+    : null;
 
   useEffect(() => {
     if (
@@ -1894,16 +2034,6 @@ export function CustomerDashboard({
       return;
     }
 
-    if (!isAuthenticated) {
-      setGuestActionMessage("Login to Order");
-      router.push(
-        `/login?callbackUrl=${encodeURIComponent(
-          `/customer?customize=${customizeId}`
-        )}&intent=login-to-order`
-      );
-      return;
-    }
-
     const menuItem = uniqueMenuItems.find((item) => item.id === customizeId);
 
     if (menuItem?.is_available && isPastryMenuItem(menuItem)) {
@@ -1917,7 +2047,7 @@ export function CustomerDashboard({
       resetCustomization(menuItem);
       setSelectedMenuItem(menuItem);
     }
-  }, [isAuthenticated, router, selectedMenuItem, uniqueMenuItems]);
+  }, [selectedMenuItem, uniqueMenuItems]);
 
   function resetCustomization(item: CustomerMenuItem) {
     setQuantity(1);
@@ -1950,10 +2080,6 @@ export function CustomerDashboard({
   }
 
   function openCustomizeModal(item: CustomerMenuItem) {
-    if (!requireCustomerAccount()) {
-      return;
-    }
-
     if (!item.is_available) {
       return;
     }
@@ -2310,6 +2436,7 @@ export function CustomerDashboard({
 
       setDisplayProfileName(result.profile?.fullName ?? normalizedProfileName);
       setProfilePhoneDraft(formatProfilePhone(result.profile?.phone ?? ""));
+      setIsProfilePhoneEditing(false);
       setProfileSettingsMessage("Profile changes saved.");
       showToast({
         title: "Profile saved",
@@ -2341,6 +2468,7 @@ export function CustomerDashboard({
       router.refresh();
     } finally {
       setIsLoggingOut(false);
+      setIsLogoutConfirmOpen(false);
     }
   }
 
@@ -2494,18 +2622,6 @@ export function CustomerDashboard({
     setFilter("all");
   }
 
-  function openMenuSearch() {
-    setActiveSection("menu");
-    setIsSearchOpen(true);
-  }
-
-  function scrollRecommendations(direction: "left" | "right") {
-    recommendationScrollerRef.current?.scrollBy({
-      left: direction === "left" ? -320 : 320,
-      behavior: "smooth",
-    });
-  }
-
   return (
     <main className="min-h-screen bg-[#F8EBCF] text-[#123E26]">
       <div className="flex min-h-screen">
@@ -2556,18 +2672,7 @@ export function CustomerDashboard({
 
         <section className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 hidden items-center justify-between gap-3 border-b border-[#D7C7A9] bg-white px-4 py-3 backdrop-blur sm:flex sm:px-5">
-            {activeSection !== "home" ? (
-              <button
-                type="button"
-                onClick={openMenuSearch}
-                aria-label="Search menu"
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_24px_rgba(13,46,24,0.16)] transition hover:bg-[#0F441D]"
-              >
-                <Search size={20} />
-              </button>
-            ) : (
-              <span aria-hidden="true" className="h-11 w-11" />
-            )}
+            <span aria-hidden="true" className="h-11 w-11" />
 
             <div className="flex min-w-0 items-center gap-2">
               <button
@@ -2650,9 +2755,6 @@ export function CustomerDashboard({
               <div className="mx-auto w-full max-w-[1440px]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-sans text-[11px] font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                      KadaServe Menu
-                    </p>
                     <h1 className="truncate font-sans text-2xl font-black leading-tight text-[#0D2E18] sm:text-3xl">
                       Menu
                     </h1>
@@ -2742,8 +2844,8 @@ export function CustomerDashboard({
                         {greeting}, {firstName}
                       </h1>
                       <p className="mt-3 max-w-2xl font-sans text-base leading-7 text-[#684B35]">
-                        Your next favorite cup is a tap away. Pick an intent,
-                        track live orders, and improve recommendations as you rate.
+                        Order your favorite coffee, check nutrition facts,
+                        and track every cup live from queue to pickup.
                       </p>
                     </div>
 
@@ -2756,6 +2858,10 @@ export function CustomerDashboard({
                           key={label}
                           type="button"
                           onClick={() => {
+                            window.sessionStorage.setItem(
+                              checkoutOrderTypeStorageKey,
+                              label === "Delivery" ? "delivery" : "pickup"
+                            );
                             setFilter("coffee");
                             setActiveSection("menu");
                           }}
@@ -2781,21 +2887,48 @@ export function CustomerDashboard({
                 </section>
 
                 <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                  <div className="-mx-4 sm:mx-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      key={activePromotionImage}
-                      src={activePromotionImage}
-                      alt="KadaServe promotion"
-                      loading="lazy"
-                      className="block aspect-[4/3] w-full max-w-none rounded-none object-cover shadow-[0_18px_36px_rgba(15,68,29,0.2)] sm:aspect-[16/9] sm:rounded-[22px] lg:rounded-[26px]"
-                    />
+                  <div className="-mx-4 overflow-hidden sm:mx-0 sm:rounded-[22px] lg:rounded-[26px]">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-none shadow-[0_18px_36px_rgba(15,68,29,0.2)] sm:aspect-[16/9] sm:rounded-[22px] lg:rounded-[26px]">
+                      <div
+                        className="flex h-full transition-transform duration-700 ease-out"
+                        style={{
+                          width: `${promotionImages.length * 100}%`,
+                          transform: `translateX(-${activePromotionIndex * (100 / promotionImages.length)}%)`,
+                        }}
+                      >
+                        {promotionImages.map((image, index) => (
+                          <div
+                            key={image}
+                            className="h-full"
+                            style={{ width: `${100 / promotionImages.length}%` }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={image}
+                              alt={`KadaServe promotion ${index + 1}`}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#0D2E18]/35 px-2 py-1 backdrop-blur-sm">
+                        {promotionImages.map((image, index) => (
+                          <span
+                            key={`${image}-dot`}
+                            aria-hidden="true"
+                            className={`h-2 rounded-full transition-all ${
+                              index === activePromotionIndex
+                                ? "w-5 bg-[#FFF0D8]"
+                                : "w-2 bg-[#FFF0D8]/55"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="border-y border-[#DCCFB8] py-4 lg:border-y-0 lg:border-l lg:py-1 lg:pl-5">
-                    <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#684B35]">
-                      Feedback Loop
-                    </p>
                     <h2 className="mt-1 font-sans text-3xl font-bold leading-tight text-[#0D2E18]">
                       Got thoughts?
                     </h2>
@@ -2831,9 +2964,6 @@ export function CustomerDashboard({
                   <section className="rounded-[26px] border border-[#DCCFB8] bg-white/88 p-4 shadow-[0_8px_20px_rgba(0,0,0,0.06)] sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                          Active Pulse
-                        </p>
                         <h2 className="mt-1 font-sans text-2xl font-black text-[#123E26]">
                           {formatOrderCode(activeOrder.id)} is{" "}
                           {formatStatus(activeOrder.status).toLowerCase()}
@@ -2869,30 +2999,13 @@ export function CustomerDashboard({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => scrollRecommendations("left")}
-                    aria-label="Scroll recommendations left"
-                    className="absolute left-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => scrollRecommendations("right")}
-                    aria-label="Scroll recommendations right"
-                    className="absolute right-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#FFF8EF] text-[#123E26] opacity-0 shadow-lg transition group-hover:opacity-100 lg:flex"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
-
                   <div
                     ref={recommendationScrollerRef}
-                    className="mt-4 flex snap-x gap-4 overflow-x-auto pr-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    className="mt-4 flex snap-x gap-4 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
                     {displayRecommendedItems.map(({ item, displayMeta, reason }) => {
                       const menuImage = getMenuImage(item);
+                      const itemFeedback = getMenuFeedback(menuFeedbackByItemId, item);
 
                       return (
                         <article
@@ -2938,6 +3051,13 @@ export function CustomerDashboard({
                               <h3 className="mt-1 line-clamp-2 font-sans text-xl font-black leading-tight">
                                 {item.name}
                               </h3>
+                              {itemFeedback ? (
+                                <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-[#FFE9A8] px-2.5 py-1 font-sans text-[11px] font-black text-[#684B35]">
+                                  <Star className="h-3 w-3 fill-current" />
+                                  {formatRating(itemFeedback.averageRating)} (
+                                  {itemFeedback.ratingCount})
+                                </div>
+                              ) : null}
                               <p className="mt-1 line-clamp-2 font-sans text-[11px] font-semibold leading-snug text-[#684B35]">
                                 {reason}
                               </p>
@@ -3009,6 +3129,7 @@ export function CustomerDashboard({
                             const menuImage = getMenuImage(item);
                             const isQuickAdded = quickAddFeedback?.itemId === item.id;
                             const itemNutrition = getMenuItemNutrition(item);
+                            const itemFeedback = getMenuFeedback(menuFeedbackByItemId, item);
 
                             return (
                       <article
@@ -3073,9 +3194,16 @@ export function CustomerDashboard({
                           <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
                             {formatPrice(item.base_price)}
                           </p>
+                          {itemFeedback ? (
+                            <p className="mx-auto mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-[#FFE9A8] px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
+                              <Star className="h-3 w-3 fill-current" />
+                              {formatRating(itemFeedback.averageRating)} (
+                              {itemFeedback.ratingCount})
+                            </p>
+                          ) : null}
                           {itemNutrition ? (
                             <p className="mx-auto mt-1 w-fit rounded-full bg-white/75 px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
-                              {itemNutrition.calories} cal est.
+                              {itemNutrition.calories} cal
                             </p>
                           ) : null}
                           <span
@@ -3111,9 +3239,6 @@ export function CustomerDashboard({
                   <h1 className="font-sans text-4xl font-bold tracking-tight text-[#123E26]">
                     My Orders
                   </h1>
-                  <p className="mt-1 text-sm text-[#6F634E]">
-                    Track live orders first, then quickly reorder your usuals.
-                  </p>
                 </div>
 
                 {currentOrders.length > 0 ? (
@@ -3152,9 +3277,6 @@ export function CustomerDashboard({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
-                          Live Pulse
-                        </p>
                         <h2 className="mt-1 font-sans text-2xl font-black text-[#123E26]">
                           {formatOrderCode(activeOrder.id)}
                         </h2>
@@ -4012,10 +4134,6 @@ export function CustomerDashboard({
                   <h2 className="font-sans text-2xl font-black text-[#0D2E18]">
                     Updates
                   </h2>
-                  <p className="mt-0.5 font-sans text-xs font-semibold text-[#8A755D]">
-                    {notifications.length} update
-                    {notifications.length === 1 ? "" : "s"} synced from KadaServe
-                  </p>
                 </div>
               </div>
               <button
@@ -4556,15 +4674,65 @@ export function CustomerDashboard({
                     </p>
                   ) : null}
 
+                  {selectedMenuFeedback ? (
+                    <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
+                            Customer Rating
+                          </p>
+                          <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
+                            Anonymous feedback from completed orders.
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-full bg-[#FFE9A8] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
+                          <span className="inline-flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-current" />
+                            {formatRating(selectedMenuFeedback.averageRating)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                        {formatRatingCount(selectedMenuFeedback.ratingCount)}
+                      </p>
+
+                      {selectedMenuFeedback.comments.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {selectedMenuFeedback.comments.map((comment) => (
+                            <article
+                              key={`${comment.createdAt}-${comment.comment}`}
+                              className="rounded-[14px] bg-white px-3 py-2 font-sans"
+                            >
+                              <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.12em] text-[#8A755D]">
+                                <span>Anonymous</span>
+                                <span className="inline-flex items-center gap-1 text-[#684B35]">
+                                  <Star className="h-3 w-3 fill-current" />
+                                  {formatRating(comment.rating)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm font-semibold leading-5 text-[#0D2E18]">
+                                {comment.comment}
+                              </p>
+                              <p className="mt-1 text-[11px] font-semibold text-[#8A755D]">
+                                {formatDateTime(comment.createdAt)}
+                              </p>
+                            </article>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   {selectedNutrition ? (
                     <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
-                            Nutrition estimate
+                            Nutrition facts
                           </p>
                           <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
-                            Per selected serving, calculated from KadaServe staff recipe.
+                            Recipe-calculated from KadaServe recipes and supplier labels.
                           </p>
                         </div>
                         <span className="rounded-full bg-[#E9F5E7] px-3 py-1 font-sans text-xs font-black text-[#2D7A40]">
@@ -4783,18 +4951,7 @@ export function CustomerDashboard({
                 </section>
 
                 <section className="rounded-[24px] border border-[#DCCFB8] bg-white p-4">
-                  <h3 className="font-sans text-2xl font-bold text-[#0D2E18]">
-                    What Happens Next
-                  </h3>
-                  <p className="mt-2 font-sans text-sm leading-6 text-[#6F634E]">
-                    This tracker updates automatically when staff moves your
-                    order through the queue. No refresh needed.
-                  </p>
-                  <p className="mt-2 font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#8A755D]">
-                    {orderSyncLabel}
-                  </p>
-
-                  <div className="mt-4 rounded-[18px] bg-[#E9F5E7] p-3 font-sans text-sm text-[#2D7A40]">
+                  <div className="rounded-[18px] bg-[#E9F5E7] p-3 font-sans text-sm text-[#2D7A40]">
                     Current step:{" "}
                     <span className="font-black">
                       {formatStatus(trackingOrder.status)}
@@ -4851,9 +5008,6 @@ export function CustomerDashboard({
 
                   {canCancelTrackingOrder ? (
                     <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3">
-                      <p className="font-sans text-sm font-semibold text-[#9C543D]">
-                        {getCustomerCancelHelp(trackingOrder)}
-                      </p>
                       {trackingActionMessage ? (
                         <p className="mt-2 font-sans text-xs font-semibold text-[#9C543D]">
                           {trackingActionMessage}
@@ -4928,12 +5082,13 @@ export function CustomerDashboard({
               </p>
               <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
                 Pay with any QR Ph-supported wallet or banking app. This QR
-                expires in about {qrPhPayment.expiresInMinutes} minutes.
+                expires in about {qrPhMinutesLeft} minute
+                {qrPhMinutesLeft === 1 ? "" : "s"}.
               </p>
             </div>
 
             <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
-              KadaServe will move this order to the staff queue after PayMongo
+              KadaServe will close this QR and open tracking after PayMongo
               confirms payment.
             </div>
 
@@ -5055,9 +5210,6 @@ export function CustomerDashboard({
 
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#DCCFB8]">
-                {isProfileSettingsOpen ? "Profile Settings" : "Your Profile"}
-              </p>
               <h2 className="mt-1.5 font-sans text-3xl font-bold leading-tight">
                 {isProfileSettingsOpen ? "Settings" : displayProfileName}
               </h2>
@@ -5118,29 +5270,20 @@ export function CustomerDashboard({
                 className="hidden"
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate font-sans text-sm font-bold text-[#684B35]">
-                  Profile Status
-                </p>
-                <p className="font-sans text-sm font-black">
-                  Active
-                </p>
-              </div>
-              <div
-                className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#DCCFB8]"
-                title="Profile ready"
-              >
-                <div
-                  className="h-full rounded-full bg-[#0F441D]"
-                  style={{ width: "100%" }}
-                />
-              </div>
-              <p className="mt-1.5 font-sans text-[11px] leading-4 text-[#684B35]">
-                {isUploadingAvatar
-                  ? "Uploading your profile picture..."
-                  : avatarMessage || "Your account is ready for ordering and feedback."}
+            <div className="min-w-0 flex-1 font-sans">
+              <p className="truncate text-sm font-black text-[#0D2E18]">
+                {displayProfileName}
               </p>
+              {profileEmail ? (
+                <p className="mt-0.5 truncate text-xs font-semibold text-[#684B35]">
+                  {profileEmail}
+                </p>
+              ) : null}
+              {isUploadingAvatar || avatarMessage ? (
+                <p className="mt-1.5 font-sans text-[11px] leading-4 text-[#684B35]">
+                  {isUploadingAvatar ? "Uploading your profile picture..." : avatarMessage}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -5175,25 +5318,64 @@ export function CustomerDashboard({
                     ) : null}
                   </label>
 
-                  <label className="block">
+                  <div className="block">
                     <span className="font-sans text-xs font-bold uppercase tracking-[0.14em] text-[#684B35]">
                       Phone
                     </span>
-                    <input
-                      value={profilePhoneDraft}
-                      onChange={(event) =>
-                        setProfilePhoneDraft(formatProfilePhone(event.target.value))
-                      }
-                      inputMode="tel"
-                      placeholder="0917-123-4567"
-                      className="mt-1 w-full rounded-[14px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5 font-sans text-sm text-[#0D2E18] outline-none focus:border-[#0F441D]"
-                    />
-                    {!isValidOptionalPhone(profilePhoneDraft) ? (
-                      <span className="mt-1 block font-sans text-xs text-[#A14E32]">
-                        Use a valid Philippine mobile number.
-                      </span>
-                    ) : null}
-                  </label>
+                    {!isProfilePhoneEditing ? (
+                      <div className="mt-1 flex items-center justify-between gap-2 rounded-[14px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5">
+                        <span className="min-w-0 truncate font-sans text-sm font-bold text-[#0D2E18]">
+                          {profilePhoneDraft || "No number saved"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsProfilePhoneEditing(true)}
+                          className="rounded-full border border-[#DCCFB8] bg-white px-3 py-1.5 font-sans text-xs font-black text-[#684B35] transition hover:bg-[#FFF0DA]"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-1 space-y-2">
+                        <input
+                          value={profilePhoneDraft}
+                          onChange={(event) =>
+                            setProfilePhoneDraft(formatProfilePhone(event.target.value))
+                          }
+                          inputMode="tel"
+                          placeholder="0917-123-4567"
+                          className="w-full rounded-[14px] border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-2.5 font-sans text-sm text-[#0D2E18] outline-none focus:border-[#0F441D]"
+                        />
+                        {!isValidOptionalPhone(profilePhoneDraft) ? (
+                          <span className="block font-sans text-xs text-[#A14E32]">
+                            Use a valid Philippine mobile number.
+                          </span>
+                        ) : null}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSaveProfileSettings}
+                            disabled={!canSaveProfileSettings}
+                            className="rounded-[12px] bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0D8] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:bg-[#8AA083]"
+                          >
+                            Save Number
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfilePhoneDraft(
+                                formatProfilePhone(customerProfile?.phone ?? "")
+                              );
+                              setIsProfilePhoneEditing(false);
+                            }}
+                            className="rounded-[12px] border border-[#DCCFB8] px-3 py-2 font-sans text-xs font-black text-[#684B35] transition hover:bg-[#FFF0DA]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                 </div>
               </section>
@@ -5293,9 +5475,9 @@ export function CustomerDashboard({
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   {[
-                    ["Latte", tasteProfile.coffee],
+                    ["Latte", tasteProfile.latte],
+                    ["Non-Coffee", tasteProfile.nonCoffee],
                     ["Pastries", tasteProfile.pastries],
-                    ["Other", tasteProfile.other],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -5411,9 +5593,9 @@ export function CustomerDashboard({
 
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             disabled={isLoggingOut}
-            className="w-full rounded-[14px] border border-[#DCCFB8] px-4 py-2.5 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+            className="w-full rounded-[14px] border border-[#E0A38F] bg-[#FFF1EC] px-4 py-2.5 font-sans text-sm font-bold text-[#9C543D] transition hover:bg-[#FBE4DC] disabled:opacity-60"
           >
             {isLoggingOut ? "Logging out..." : "Logout"}
           </button>
@@ -5496,6 +5678,37 @@ export function CustomerDashboard({
           ) : null}
         </button>
       )}
+
+      {isLogoutConfirmOpen ? (
+        <div className="fixed inset-0 z-[95] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-sm sm:items-center sm:p-6">
+          <section className="w-full max-w-sm rounded-t-[24px] border border-[#DCCFB8] bg-white p-5 shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[24px]">
+            <h2 className="font-sans text-xl font-black text-[#0D2E18]">
+              Log out?
+            </h2>
+            <p className="mt-2 font-sans text-sm font-semibold leading-6 text-[#684B35]">
+              Are you sure you want to log out?
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="rounded-[14px] bg-[#9C543D] px-4 py-3 font-sans text-sm font-black text-[#FFF0D8] transition hover:bg-[#8A4632] disabled:opacity-60"
+              >
+                {isLoggingOut ? "Logging out..." : "Logout"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+                className="rounded-[14px] border border-[#DCCFB8] px-4 py-3 font-sans text-sm font-black text-[#684B35] transition hover:bg-[#FFF0DA] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

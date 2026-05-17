@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useRef, useState, useEffect } from "react";
+import { FormEvent, Suspense, useRef, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -14,7 +14,7 @@ import {
 
 const LOGO_SRC = "/images/logo/logo.png";
 
-export default function VerifyCodePage() {
+function VerifyCodeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -267,5 +267,19 @@ export default function VerifyCodePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function VerifyCodePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#FFF0DA]">
+          <LoaderCircle className="h-6 w-6 animate-spin text-[#0D2E18]" />
+        </main>
+      }
+    >
+      <VerifyCodeContent />
+    </Suspense>
   );
 }

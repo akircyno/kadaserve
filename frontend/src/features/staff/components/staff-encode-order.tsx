@@ -691,9 +691,6 @@ export function StaffEncodeOrder() {
                     <div className="shrink-0 border-b border-[#E6D7C0] bg-[#FFF8EF] px-4 py-4">
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <p className="font-sans text-[10px] font-black uppercase tracking-[0.18em] text-[#8C7A64]">
-                                    Active Order
-                                </p>
                                 <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
                                     {cartCount} item{cartCount === 1 ? "" : "s"}
                                 </h2>
@@ -711,9 +708,6 @@ export function StaffEncodeOrder() {
                     <div className="min-w-0 flex-1 overflow-y-auto">
                         {/* Order Type */}
                         <div className="shrink-0 border-b border-[#E6D7C0] px-4 py-4">
-                            <p className="mb-2 font-sans text-xs font-black uppercase tracking-[0.16em] text-[#684B35]">
-                                Fulfillment
-                            </p>
                             <div className="rounded-[24px] border border-[#0D2E18] bg-[#0D2E18] p-3 font-sans text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.16)]">
                                 <PackageCheck size={18} />
                                 <p className="mt-2 text-sm font-black">Walk-in</p>
