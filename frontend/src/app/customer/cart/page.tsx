@@ -692,7 +692,7 @@ export default function CartPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FFF0DA] px-4 pb-28 pt-5 text-[#0D2E18]">
+    <main className="kada-motion-root min-h-screen bg-[#FFF0DA] px-4 pb-28 pt-5 text-[#0D2E18]">
       {isReturningToMenu ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#FFF0DA]">
           <div
@@ -707,7 +707,7 @@ export default function CartPage() {
           <button
             type="button"
             onClick={handleBackToMenu}
-            className="inline-flex items-center gap-2 rounded-full border border-[#0D2E18]/20 bg-white/75 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm transition hover:bg-white"
+            className="kada-hover-lift inline-flex items-center gap-2 rounded-full border border-[#0D2E18]/20 bg-white/75 px-4 py-2 font-sans text-sm font-bold text-[#0D2E18] shadow-sm transition hover:bg-white"
           >
             <ArrowLeft size={16} />
             Back to Menu
@@ -715,7 +715,7 @@ export default function CartPage() {
 
           <Link
             href="/customer?tab=menu"
-            className="inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-sm font-bold text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.18)] transition hover:bg-[#0F441D]"
+            className="kada-glow-ring inline-flex items-center gap-2 rounded-full bg-[#0D2E18] px-4 py-2 font-sans text-sm font-bold text-[#FFF0DA] shadow-[0_10px_22px_rgba(13,46,24,0.18)] transition hover:bg-[#0F441D]"
           >
             <Plus size={16} />
             Add Item
@@ -742,7 +742,7 @@ export default function CartPage() {
                       setOrderType(method);
                       setError("");
                     }}
-                    className={`flex min-h-20 items-center gap-3 rounded-[18px] border px-4 py-3 text-left font-sans transition ${
+                    className={`kada-hover-lift flex min-h-20 items-center gap-3 rounded-[18px] border px-4 py-3 text-left font-sans transition ${
                       orderType === method
                         ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.14)]"
                         : "border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35] hover:bg-white"
@@ -818,7 +818,7 @@ export default function CartPage() {
                     onClick={openAddressPicker}
                     title="Choose delivery address"
                     aria-label="Choose delivery address"
-                    className="mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#0D2E18] transition hover:bg-white"
+                    className="kada-hover-lift mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#0D2E18] transition hover:bg-white"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -902,7 +902,7 @@ export default function CartPage() {
                   return (
                     <article
                       key={item.id}
-                      className={`py-4 ${
+                      className={`kada-slide-up py-4 ${
                         isSelected ? "border-l-4 border-[#0D2E18] pl-3" : ""
                       }`}
                     >
@@ -923,7 +923,7 @@ export default function CartPage() {
                             type="button"
                             onClick={() => toggleSelectedItem(item.id)}
                             aria-label={`Select ${item.name}`}
-                            className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border font-sans text-xs font-bold ${
+                            className={`kada-press mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border font-sans text-xs font-bold ${
                               isSelected
                                 ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                                 : "border-[#BDAE92] bg-white text-transparent"
@@ -975,7 +975,7 @@ export default function CartPage() {
                             type="button"
                             onClick={() => removeItem(item.id)}
                             aria-label={`Remove ${item.name}`}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/60 text-[#9C543D]"
+                          className="kada-hover-lift flex h-9 w-9 items-center justify-center rounded-full bg-white/60 text-[#9C543D]"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -987,7 +987,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => handleQuantityChange(item, -1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                            className="kada-press flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
                             aria-label={`Decrease ${item.name}`}
                           >
                             -
@@ -998,7 +998,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => handleQuantityChange(item, 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
+                            className="kada-press flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8EF] text-[#0D2E18]"
                             aria-label={`Increase ${item.name}`}
                           >
                             +
@@ -1124,7 +1124,7 @@ export default function CartPage() {
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("cash")}
-                        className={`flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
+                        className={`kada-hover-lift flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
                           paymentMethod === "cash"
                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                             : "border-[#D8C8A7] bg-white text-[#684B35] hover:border-[#0D2E18]/40"
@@ -1161,7 +1161,7 @@ export default function CartPage() {
                             ? "Pay with QR Ph through PayMongo"
                             : "Online payment is coming soon"
                         }
-                        className={`flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
+                        className={`kada-hover-lift flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
                           paymentMethod === "online"
                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                             : "border-[#D8C8A7] bg-white text-[#684B35] hover:border-[#0D2E18]/40"
@@ -1226,7 +1226,7 @@ export default function CartPage() {
                       isCheckoutBlocked ||
                       selectedItems.length === 0
                     }
-                    className="fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
+                    className="kada-glow-ring fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
                   >
                     {isCheckingOut || isStoreStatusLoading ? (
                       <LoadingSpinner
@@ -1255,7 +1255,7 @@ export default function CartPage() {
 
       {isAddressPickerOpen ? (
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="w-full max-w-lg rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+          <section className="kada-soft-pop w-full max-w-lg rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
 
             <div className="flex items-start justify-between gap-4">
@@ -1378,7 +1378,7 @@ export default function CartPage() {
 
       {qrPhPayment ? (
         <div className="fixed inset-0 z-[95] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+          <section className="kada-soft-pop w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1400,7 +1400,7 @@ export default function CartPage() {
               </span>
             </div>
 
-            <div className="mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
+            <div className="kada-cart-pulse mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={qrPhPayment.qrCodeImageUrl}
@@ -1425,7 +1425,7 @@ export default function CartPage() {
             <button
               type="button"
               onClick={closeQrPhPayment}
-              className="mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+              className="kada-glow-ring mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
             >
               View Order Tracker
             </button>

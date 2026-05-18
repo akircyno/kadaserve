@@ -175,17 +175,17 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
+    <main className="kada-motion-root min-h-screen bg-[#F8EBCF] px-4 py-6 text-[#123E26]">
       <div className="mx-auto max-w-3xl">
         <Link
           href="/customer"
-          className="mb-5 inline-flex items-center gap-2 rounded-full bg-[#0B3F22] px-4 py-2 text-sm font-semibold text-[#FFF0D8]"
+          className="kada-glow-ring mb-5 inline-flex items-center gap-2 rounded-full bg-[#0B3F22] px-4 py-2 text-sm font-semibold text-[#FFF0D8]"
         >
           <ArrowLeft size={16} />
           Back to Menu
         </Link>
 
-        <section className="overflow-hidden rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
+        <section className="kada-soft-pop overflow-hidden rounded-[32px] border border-[#D8C8A7] bg-[#FAECD3] shadow-[0_20px_60px_rgba(11,46,24,0.16)]">
           <div className="border-b border-[#DECFAF] px-5 py-5 sm:px-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="flex aspect-square h-40 w-40 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-6xl sm:h-48 sm:w-48">
@@ -248,7 +248,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         type="button"
                         onClick={() => setSugarLevel(item.value)}
                         aria-pressed={sugarLevel === item.value}
-                        className={`rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
+                        className={`kada-press rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
                           sugarLevel === item.value
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
@@ -270,7 +270,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         key={item.value}
                         type="button"
                         onClick={() => setIceLevel(item.value)}
-                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        className={`kada-press rounded-full border px-4 py-2 text-sm font-semibold transition ${
                           iceLevel === item.value
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
@@ -292,7 +292,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         key={item.value}
                         type="button"
                         onClick={() => setSize(item.value)}
-                        className={`rounded-[18px] border px-4 py-4 text-left transition ${
+                        className={`kada-hover-lift rounded-[18px] border px-4 py-4 text-left transition ${
                           size === item.value
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
@@ -317,7 +317,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         key={item.value}
                         type="button"
                         onClick={() => setTemperature(item.value)}
-                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        className={`kada-press rounded-full border px-4 py-2 text-sm font-semibold transition ${
                           temperature === item.value
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
@@ -342,7 +342,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         key={item.value}
                         type="button"
                         onClick={() => toggleAddon(item.value)}
-                        className={`rounded-[18px] border px-4 py-4 text-left transition ${
+                        className={`kada-hover-lift rounded-[18px] border px-4 py-4 text-left transition ${
                           selected
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
@@ -394,7 +394,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   <button
                     type="button"
                     onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[#123E26] text-white"
+                    className="kada-glow-ring flex h-10 w-10 items-center justify-center rounded-full bg-[#123E26] text-white"
                   >
                     <Minus size={16} />
                   </button>
@@ -404,7 +404,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                   <button
                     type="button"
                     onClick={() => setQuantity((current) => current + 1)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[#123E26] text-white"
+                    className="kada-glow-ring flex h-10 w-10 items-center justify-center rounded-full bg-[#123E26] text-white"
                   >
                     <Plus size={16} />
                   </button>
@@ -421,7 +421,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
               </div>
 
               {selectedNutrition ? (
-                <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                <div className="kada-slide-up mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
@@ -455,7 +455,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 type="button"
                 onClick={handleSaveCartItem}
                 disabled={!menuItem.is_available}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                className="kada-glow-ring mt-6 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ShoppingCart size={18} />
                 {isEditing ? "Update Cart" : "Add to Cart"}

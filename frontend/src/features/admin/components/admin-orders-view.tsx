@@ -18,6 +18,7 @@ import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type TimeFilter = AdminTimeFilter;
+const adminOrdersPageSize = 20;
 
 function peso(value: number) {
   return `\u20B1${Math.round(value).toLocaleString("en-PH")}`;
@@ -357,6 +358,58 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
+function AdminTablePagination({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-[#D8C8AA]/70 bg-[#FFF8EF] px-4 py-4">
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Prev
+      </button>
+      {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+        (pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => onPageChange(pageNumber)}
+            disabled={pageNumber === page}
+            className={`h-9 min-w-9 rounded-full px-3 font-sans text-xs font-black transition hover:-translate-y-0.5 ${
+              pageNumber === page
+                ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.16)]"
+                : "border border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
+            } disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70`}
+          >
+            {pageNumber}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+        disabled={page === pageCount}
+        className="h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 export function OrdersView({
   filteredOrders,
   onOpenOrder,
@@ -374,6 +427,7 @@ export function OrdersView({
   const [customEndDate, setCustomEndDate] = useState("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExportingReport, setIsExportingReport] = useState(false);
+  const [page, setPage] = useState(1);
 
   const visibleOrders = useMemo(() => {
     return getAdminReportOrders(filteredOrders, {
@@ -398,6 +452,15 @@ export function OrdersView({
     () => getAdminOrderTotals(visibleOrders),
     [visibleOrders]
   );
+  const pageCount = Math.max(
+    1,
+    Math.ceil(visibleOrders.length / adminOrdersPageSize)
+  );
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const paginatedOrders = useMemo(() => {
+    const start = (safePage - 1) * adminOrdersPageSize;
+    return visibleOrders.slice(start, start + adminOrdersPageSize);
+  }, [safePage, visibleOrders]);
   const visibleRangeLabel = getAdminReportRangeLabel(
     timeFilter,
     customStartDate,
@@ -450,7 +513,7 @@ export function OrdersView({
   return (
     <div className="space-y-4">
       {/* Controls Section */}
-      <div className="rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7] p-5">
+      <div className="rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7] p-5 shadow-[0_16px_34px_rgba(104,75,53,0.07)]">
         <div className="space-y-4">
           {/* Header */}
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
@@ -521,7 +584,10 @@ export function OrdersView({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setTimeFilter(option.value)}
+                onClick={() => {
+                  setTimeFilter(option.value);
+                  setPage(1);
+                }}
                 className={`rounded-full px-4 py-1.5 font-sans text-sm font-medium transition ${
                   timeFilter === option.value
                     ? "bg-[#0D2E18] text-[#FFF8EF]"
@@ -542,7 +608,10 @@ export function OrdersView({
                 <input
                   type="date"
                   value={customStartDate}
-                  onChange={(event) => setCustomStartDate(event.target.value)}
+                  onChange={(event) => {
+                    setCustomStartDate(event.target.value);
+                    setPage(1);
+                  }}
                   className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
                 />
               </label>
@@ -554,7 +623,10 @@ export function OrdersView({
                 <input
                   type="date"
                   value={customEndDate}
-                  onChange={(event) => setCustomEndDate(event.target.value)}
+                  onChange={(event) => {
+                    setCustomEndDate(event.target.value);
+                    setPage(1);
+                  }}
                   className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
                 />
               </label>
@@ -569,9 +641,10 @@ export function OrdersView({
               </span>
               <select
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as AdminStatusFilter)
-                }
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as AdminStatusFilter);
+                  setPage(1);
+                }}
                 className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {statusOptions.map((option) => (
@@ -588,9 +661,10 @@ export function OrdersView({
               </span>
               <select
                 value={typeFilter}
-                onChange={(event) =>
-                  setTypeFilter(event.target.value as "all" | StaffOrder["order_type"])
-                }
+                onChange={(event) => {
+                  setTypeFilter(event.target.value as "all" | StaffOrder["order_type"]);
+                  setPage(1);
+                }}
                 className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {typeOptions.map((option) => (
@@ -607,9 +681,10 @@ export function OrdersView({
               </span>
               <select
                 value={paymentFilter}
-                onChange={(event) =>
-                  setPaymentFilter(event.target.value as AdminPaymentFilter)
-                }
+                onChange={(event) => {
+                  setPaymentFilter(event.target.value as AdminPaymentFilter);
+                  setPage(1);
+                }}
                 className="mt-2 h-10 w-full rounded-xl border border-[#DCCFB8] bg-white px-3.5 font-sans text-sm text-[#0D2E18] outline-none transition hover:border-[#D8C8AA] focus:border-[#0D2E18] focus:ring-1 focus:ring-[#0D2E18]/20"
               >
                 {paymentOptions.map((option) => (
@@ -624,7 +699,7 @@ export function OrdersView({
       </div>
 
       {/* Data Table Card */}
-      <div className="overflow-hidden rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7]">
+      <div className="overflow-hidden rounded-[24px] border border-[#D8C8AA]/60 bg-[#FFFCF7] shadow-[0_16px_34px_rgba(104,75,53,0.07)]">
         {/* Table Header */}
         <div className="grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] gap-4 border-b border-[#D8C8AA]/70 px-6 py-4 font-sans text-xs font-medium text-[#8C7A64]">
           <span>Order</span>
@@ -640,10 +715,10 @@ export function OrdersView({
 
         {/* Table Rows */}
         <div>
-          {visibleOrders.map((order, idx) => (
+          {paginatedOrders.map((order, idx) => (
             <div
               key={order.id}
-              className={`group grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 border-b border-[#D8C8AA]/70 px-6 py-4 font-sans text-sm transition hover:bg-[#FFF8EF] ${
+              className={`group grid grid-cols-[110px_1.5fr_120px_105px_1.1fr_1fr_95px_90px_52px] items-start gap-4 border-b border-[#D8C8AA]/70 px-6 py-4 font-sans text-sm transition hover:-translate-y-0.5 hover:bg-[#FFF8EF] hover:shadow-[0_10px_22px_rgba(104,75,53,0.09)] ${
                 idx % 2 === 0 ? "bg-white/40" : ""
               }`}
             >
@@ -722,6 +797,11 @@ export function OrdersView({
             </div>
           ) : null}
         </div>
+        <AdminTablePagination
+          page={safePage}
+          pageCount={pageCount}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

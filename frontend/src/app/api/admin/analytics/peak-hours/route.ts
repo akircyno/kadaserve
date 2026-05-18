@@ -9,6 +9,12 @@ type AnalyticsHourlyRow = {
   total_revenue: number;
 };
 
+type PeakOrderRow = {
+  id: string;
+  ordered_at: string;
+  status: string;
+};
+
 type PeakHourWindowRow = {
   id?: string;
   day_of_week: number;
@@ -36,11 +42,15 @@ on public.peak_hour_windows (day_of_week, hour_start);`;
 function analyticsSetupError(message: string) {
   const normalized = message.toLowerCase();
 
-  return normalized.includes("peak_hour_windows")
+  return normalized.includes("relation")
+    && normalized.includes("peak_hour_windows")
+    && (normalized.includes("does not exist") || normalized.includes("schema cache"))
     ? "peak_hour_windows is not set up yet. Run backend/seed/peak-hour-windows.sql in Supabase."
-    : normalized.includes("analytics_hourly")
-      ? "analytics_hourly is not set up yet. Run backend/seed/analytics-hourly.sql in Supabase."
-      : message;
+    : normalized.includes("relation")
+      && normalized.includes("analytics_hourly")
+      && (normalized.includes("does not exist") || normalized.includes("schema cache"))
+        ? "analytics_hourly is not set up yet. Run backend/seed/analytics-hourly.sql in Supabase."
+        : message;
 }
 
 function isMissingConflictConstraint(message: string) {
@@ -52,6 +62,32 @@ function isMissingConflictConstraint(message: string) {
 function getNumberValue(value: unknown) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function formatDateKey(value: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDayOfWeek(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "long",
+  }).format(new Date(value));
+}
+
+function getManilaHour(value: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0);
 }
 
 function getDayOfWeekNumber(row: AnalyticsHourlyRow) {
@@ -68,18 +104,52 @@ function getDayOfWeekNumber(row: AnalyticsHourlyRow) {
   return Number.isFinite(fallbackDay) ? fallbackDay : 0;
 }
 
-function getIntensity(avgOrderCount: number, avgThreshold: number) {
-  if (avgThreshold <= 0) {
+function getManilaMonthRange() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? 0);
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? 1);
+  const monthText = String(month).padStart(2, "0");
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  return {
+    startDate: `${year}-${monthText}-01`,
+    endDate: `${year}-${monthText}-${String(daysInMonth).padStart(2, "0")}`,
+  };
+}
+
+function getDateRange(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const monthRange = getManilaMonthRange();
+  const startDate = searchParams.get("startDate") ?? monthRange.startDate;
+  const endDate = searchParams.get("endDate") ?? monthRange.endDate;
+  const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+  return {
+    startDate: isDate(startDate) ? startDate : monthRange.startDate,
+    endDate: isDate(endDate) ? endDate : monthRange.endDate,
+  };
+}
+
+function getIntensity(orderCount: number, maxOrderCount: number) {
+  if (orderCount <= 0) {
     return "low";
   }
 
-  const ratio = avgOrderCount / avgThreshold;
+  const ratio = orderCount / Math.max(1, maxOrderCount);
 
-  if (ratio >= 2) {
+  if (ratio >= 0.8) {
     return "high";
   }
 
-  if (ratio >= 1.25) {
+  if (ratio >= 0.5) {
+    return "high";
+  }
+
+  if (ratio >= 0.25) {
     return "medium";
   }
 
@@ -87,48 +157,19 @@ function getIntensity(avgOrderCount: number, avgThreshold: number) {
 }
 
 function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowRow[] {
-  const rowsByDate = new Map<string, AnalyticsHourlyRow[]>();
-
-  hourlyRows
-    .filter((row) => OPERATING_HOURS.includes(Math.trunc(getNumberValue(row.hour_of_day))))
-    .forEach((row) => {
-    if (!row.order_date) {
-      return;
-    }
-
-    const currentRows = rowsByDate.get(row.order_date) ?? [];
-    currentRows.push(row);
-    rowsByDate.set(row.order_date, currentRows);
-  });
-
-  const peakBuckets = new Map<
+  const monthlyBuckets = new Map<
     string,
     {
       dayOfWeek: number;
       hourStart: number;
       totalOrderCount: number;
-      totalThreshold: number;
-      occurrences: number;
     }
   >();
 
-  rowsByDate.forEach((dateRows) => {
-    const intervalCount = dateRows.length;
-    const totalOrders = dateRows.reduce(
-      (sum, row) => sum + getNumberValue(row.order_count),
-      0
-    );
-
-    if (intervalCount === 0 || totalOrders <= 0) {
-      return;
-    }
-
-    const threshold = totalOrders / intervalCount;
-
-    dateRows.forEach((row) => {
-      const orderCount = getNumberValue(row.order_count);
-
-      if (orderCount <= 0 || orderCount < threshold) {
+  hourlyRows
+    .filter((row) => OPERATING_HOURS.includes(Math.trunc(getNumberValue(row.hour_of_day))))
+    .forEach((row) => {
+      if (!row.order_date) {
         return;
       }
 
@@ -136,45 +177,50 @@ function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowR
       const hourStart = Math.trunc(getNumberValue(row.hour_of_day));
       const bucketKey = `${dayOfWeek}:${hourStart}`;
       const currentBucket =
-        peakBuckets.get(bucketKey) ?? {
+        monthlyBuckets.get(bucketKey) ?? {
           dayOfWeek,
           hourStart,
           totalOrderCount: 0,
-          totalThreshold: 0,
-          occurrences: 0,
         };
 
-      currentBucket.totalOrderCount += orderCount;
-      currentBucket.totalThreshold += threshold;
-      currentBucket.occurrences += 1;
-      peakBuckets.set(bucketKey, currentBucket);
+      currentBucket.totalOrderCount += getNumberValue(row.order_count);
+      monthlyBuckets.set(bucketKey, currentBucket);
     });
-  });
 
   const detectedAt = new Date().toISOString();
+  const buckets = Array.from(monthlyBuckets.values());
+  const maxOrderCount = Math.max(
+    1,
+    ...buckets.map((bucket) => bucket.totalOrderCount)
+  );
 
-  return Array.from(peakBuckets.values())
-    .map((bucket) => {
-      const avgOrderCount = Number(
-        (bucket.totalOrderCount / bucket.occurrences).toFixed(2)
-      );
-      const avgThreshold = bucket.totalThreshold / bucket.occurrences;
-
-      return {
-        day_of_week: bucket.dayOfWeek,
-        hour_start: bucket.hourStart,
-        hour_end: (bucket.hourStart + 1) % 24,
-        avg_order_count: avgOrderCount,
-        intensity: getIntensity(avgOrderCount, avgThreshold),
-        detected_at: detectedAt,
-      };
-    })
+  return buckets
+    .map((bucket) => ({
+      day_of_week: bucket.dayOfWeek,
+      hour_start: bucket.hourStart,
+      hour_end: (bucket.hourStart + 1) % 24,
+      avg_order_count: Number(bucket.totalOrderCount.toFixed(2)),
+      intensity: getIntensity(bucket.totalOrderCount, maxOrderCount),
+      detected_at: detectedAt,
+    }))
     .sort(
       (left, right) =>
-        right.avg_order_count - left.avg_order_count ||
         left.day_of_week - right.day_of_week ||
         left.hour_start - right.hour_start
     );
+}
+
+function buildMonthlyHourlyRows(orders: PeakOrderRow[]): AnalyticsHourlyRow[] {
+  return orders
+    .filter((order) => !["cancelled", "expired"].includes(order.status))
+    .map((order) => ({
+      order_date: formatDateKey(order.ordered_at),
+      day_of_week: formatDayOfWeek(order.ordered_at),
+      hour_of_day: getManilaHour(order.ordered_at),
+      order_count: 1,
+      total_revenue: 0,
+    }))
+    .filter((row) => OPERATING_HOURS.includes(row.hour_of_day));
 }
 
 async function assertAdminAccess() {
@@ -207,7 +253,7 @@ async function assertAdminAccess() {
   return { supabase };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const access = await assertAdminAccess();
     if ("error" in access) {
@@ -215,11 +261,16 @@ export async function GET() {
     }
 
     const { supabase } = access;
-    const { data, error } = await supabase
-      .from("peak_hour_windows")
-      .select("id, day_of_week, hour_start, hour_end, avg_order_count, intensity, detected_at")
-      .order("day_of_week", { ascending: true })
-      .order("hour_start", { ascending: true });
+    const { startDate, endDate } = getDateRange(request);
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("id, ordered_at, status")
+      .gte("ordered_at", `${startDate}T00:00:00+08:00`)
+      .lte("ordered_at", `${endDate}T23:59:59+08:00`)
+      .neq("status", "cancelled")
+      .neq("status", "expired")
+      .order("ordered_at", { ascending: true })
+      .returns<PeakOrderRow[]>();
 
     if (error) {
       return NextResponse.json(
@@ -228,7 +279,12 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ peakHourWindows: data ?? [] });
+    return NextResponse.json({
+      peakHourWindows: buildPeakHourWindows(buildMonthlyHourlyRows(orders ?? [])),
+      range: "month",
+      startDate,
+      endDate,
+    });
   } catch {
     return NextResponse.json(
       { error: "Something went wrong while loading peak-hour windows." },
@@ -237,7 +293,7 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const access = await assertAdminAccess();
     if ("error" in access) {
@@ -245,21 +301,25 @@ export async function POST() {
     }
 
     const { supabase } = access;
-    const { data: hourlyRows, error: hourlyError } = await supabase
-      .from("analytics_hourly")
-      .select("order_date, day_of_week, hour_of_day, order_count, total_revenue")
-      .order("order_date", { ascending: true })
-      .order("hour_of_day", { ascending: true })
-      .returns<AnalyticsHourlyRow[]>();
+    const { startDate, endDate } = getDateRange(request);
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, ordered_at, status")
+      .gte("ordered_at", `${startDate}T00:00:00+08:00`)
+      .lte("ordered_at", `${endDate}T23:59:59+08:00`)
+      .neq("status", "cancelled")
+      .neq("status", "expired")
+      .order("ordered_at", { ascending: true })
+      .returns<PeakOrderRow[]>();
 
-    if (hourlyError) {
+    if (ordersError) {
       return NextResponse.json(
-        { error: analyticsSetupError(hourlyError.message) },
+        { error: analyticsSetupError(ordersError.message) },
         { status: 500 }
       );
     }
 
-    const peakRows = buildPeakHourWindows(hourlyRows ?? []);
+    const peakRows = buildPeakHourWindows(buildMonthlyHourlyRows(orders ?? []));
     const { error: deleteError } = await supabase
       .from("peak_hour_windows")
       .delete()
@@ -276,6 +336,9 @@ export async function POST() {
       return NextResponse.json({
         success: true,
         peakHourWindows: [],
+        range: "month",
+        startDate,
+        endDate,
       });
     }
 
@@ -301,6 +364,9 @@ export async function POST() {
         return NextResponse.json({
           success: true,
           peakHourWindows: insertedRows ?? peakRows,
+          range: "month",
+          startDate,
+          endDate,
           migrationSql: PEAK_HOUR_CONSTRAINT_SQL,
         });
       }
@@ -314,6 +380,9 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       peakHourWindows: savedRows ?? peakRows,
+      range: "month",
+      startDate,
+      endDate,
     });
   } catch {
     return NextResponse.json(

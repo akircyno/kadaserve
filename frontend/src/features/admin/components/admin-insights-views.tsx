@@ -155,11 +155,18 @@ function ProgressBar({
 }) {
   const width = Math.min(100, Math.max(0, (value / Math.max(1, max)) * 100));
   const fill =
-    tone === "green" ? "bg-[#0D2E18]" : tone === "brown" ? "bg-[#684B35]" : "bg-[#7D6B55]";
+    tone === "green"
+      ? "bg-gradient-to-r from-[#0D2E18] via-[#0F441D] to-[#2E6A3A]"
+      : tone === "brown"
+        ? "bg-gradient-to-r from-[#684B35] via-[#8C7A64] to-[#D8C8AA]"
+        : "bg-gradient-to-r from-[#9C543D] via-[#C55432] to-[#D8C8AA]";
 
   return (
-    <div className="h-2.5 overflow-hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF]">
-      <div className={`h-full rounded-full ${fill}`} style={{ width: `${width}%` }} />
+    <div className="h-2.5 overflow-hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF] shadow-inner">
+      <div
+        className={`h-full rounded-full shadow-[0_0_12px_rgba(13,46,24,0.18)] transition-all duration-500 ${fill}`}
+        style={{ width: `${width}%` }}
+      />
     </div>
   );
 }
@@ -280,7 +287,7 @@ export function ItemRankingView({
         <InsightCard className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-[#EFE3CF] bg-[#FFF8EF] px-4 py-3">
             <h2 className="font-sans text-lg font-black text-[#0D2E18]">
-              Ranked Menu Signals
+              Ranked Menu Items
             </h2>
             <span className="rounded-full bg-white px-3 py-1 font-sans text-xs font-bold capitalize text-[#684B35]">
               {rankMode}

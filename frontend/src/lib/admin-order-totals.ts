@@ -207,11 +207,17 @@ export function getAdminReportOrders(
   });
 }
 
+export function isValidAdminOrder(order: StaffOrder) {
+  return order.status !== "cancelled" && order.status !== "expired";
+}
+
+export function isAdminRevenueOrder(order: StaffOrder) {
+  return isValidAdminOrder(order) && order.payment_status === "paid";
+}
+
 export function getAdminOrderTotals(orders: StaffOrder[]) {
   const totalOrders = orders.length;
-  const revenueOrders = orders.filter(
-    (order) => order.status !== "cancelled" && order.status !== "expired"
-  );
+  const revenueOrders = orders.filter(isAdminRevenueOrder);
   const totalRevenue = revenueOrders.reduce(
     (sum, order) => sum + Number(order.total_amount ?? 0),
     0
@@ -220,6 +226,6 @@ export function getAdminOrderTotals(orders: StaffOrder[]) {
   return {
     totalOrders,
     totalRevenue,
-    averageOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
+    averageOrderValue: revenueOrders.length ? totalRevenue / revenueOrders.length : 0,
   };
 }

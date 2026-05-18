@@ -97,6 +97,7 @@ npm run build
 ## Notifications And Feedback
 
 - Confirm customer notification bell shows order updates.
+- Confirm phone view transitions work for notifications, cart tray collapse, quick feedback close, tabs, and menu categories.
 - Complete or deliver an order.
 - Confirm receipt/order details appear in notifications.
 - Confirm feedback prompt appears for eligible completed orders.

@@ -50,6 +50,7 @@ type StaffProfile = {
 
 const categoryButtons: Array<{ key: MenuFilterCategory; label: string }> = [
     { key: "all", label: "All" },
+    { key: "coffee", label: "Latte" },
     { key: "non-coffee", label: "Non-Coffee" },
     { key: "pastries", label: "Pastries" },
     { key: "latte-series", label: "Latte Series" },

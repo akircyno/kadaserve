@@ -307,7 +307,7 @@ const recipes: Recipe[] = [
     ],
   },
   {
-    itemNames: ["Americano"],
+    itemNames: ["Americano", "Iced Americano", "Ice Americano"],
     ingredients: [
       { ingredient: "coffee_shot", amount: 2, unit: "serving" },
       { ingredient: "water", amount: 120, unit: "ml" },

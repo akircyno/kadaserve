@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ClipboardList,
+  ChevronLeft,
+  ChevronRight,
   History,
   LogOut,
   Menu as MenuIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
   PenLine,
   X,
 } from "lucide-react";
@@ -45,6 +45,7 @@ export default function StaffLayout({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const isEncodeOrder = pathname.includes("encode-order");
   const isOrderHistory = pathname.includes("order-history");
+  const isOrderQueue = !isEncodeOrder && !isOrderHistory;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -99,17 +100,21 @@ export default function StaffLayout({
         className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden rounded-r-[24px] bg-[#083C1F] text-[#FFF8EF] shadow-[12px_0_30px_rgba(0,0,0,0.16)] transition-all duration-300 ease-in-out lg:translate-x-0 ${
           isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } ${
-          isSidebarCollapsed ? "w-16" : "w-56"
-        }`}
+          isSidebarCollapsed ? "w-[82px]" : "w-[280px]"
+        } ${isOrderQueue ? "kada-staff-sidebar-enter" : ""}`}
       >
-        <div className="flex items-center justify-between gap-2 px-3 py-5">
+        <div
+          className={`flex items-center gap-3 pb-5 pt-10 ${
+            isSidebarCollapsed ? "justify-center px-2" : "justify-between px-7"
+          }`}
+        >
           <Link
             href="/staff"
             className={`min-w-0 font-sans transition-all duration-300 ${
               isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
             }`}
           >
-            <span className="block text-lg font-bold leading-none text-[#FFF8EF]">
+            <span className="block text-[2rem] font-black leading-none text-[#FFF0D8]">
               KadaServe
             </span>
           </Link>
@@ -120,12 +125,12 @@ export default function StaffLayout({
               onClick={toggleSidebarCollapse}
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="hidden lg:flex items-center justify-center rounded-full p-1.5 text-[#8C7A64] transition hover:bg-[#FFF8EF]/10 hover:text-[#FFF8EF]"
+              className="hidden h-11 w-11 items-center justify-center rounded-full border border-[#FFF0D8]/10 bg-[#0F441D]/80 text-[#FFF0D8] transition hover:bg-[#0F441D] lg:flex"
             >
               {isSidebarCollapsed ? (
-                <PanelLeftOpen size={20} />
+                <ChevronRight size={20} strokeWidth={1.9} />
               ) : (
-                <PanelLeftClose size={20} />
+                <ChevronLeft size={20} strokeWidth={1.9} />
               )}
             </button>
 
@@ -141,8 +146,8 @@ export default function StaffLayout({
         </div>
 
         <nav
-          className={`mb-2 mt-8 space-y-1 transition-all duration-300 ${
-            isSidebarCollapsed ? "px-2" : "px-3"
+          className={`mt-3 flex-1 space-y-2 transition-all duration-300 ${
+            isSidebarCollapsed ? "px-2" : "px-4"
           }`}
         >
           {navItems.map((item) => {
@@ -157,15 +162,15 @@ export default function StaffLayout({
                 href={item.href}
                 onClick={() => setIsMobileSidebarOpen(false)}
                 title={isSidebarCollapsed ? item.label : undefined}
-                className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
+                className={`flex w-full items-center rounded-[14px] px-4 py-3.5 font-sans text-base font-semibold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 ${
                   isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
                 } ${
                   isActive
-                    ? "bg-[#FFF0D8] font-bold text-[#0D2E18] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
-                    : "text-[#FFF0D8]/76 hover:bg-[#0F441D]/45 hover:text-white"
+                    ? "bg-[#FFF0D8] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                    : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
                 }`}
               >
-                <Icon size={20} className="shrink-0" />
+                <Icon size={21} className="shrink-0" />
                 <span
                   className={`text-sm transition-all duration-200 ${
                     isSidebarCollapsed
@@ -182,18 +187,18 @@ export default function StaffLayout({
 
         <div
           className={`mt-auto transition-all duration-300 ${
-            isSidebarCollapsed ? "px-2 pb-5" : "px-3 pb-5"
+            isSidebarCollapsed ? "px-2 pb-5" : "px-4 pb-5"
           }`}
         >
           <button
             type="button"
             onClick={() => setIsLogoutConfirmOpen(true)}
             title={isSidebarCollapsed ? "Sign out" : undefined}
-            className={`flex w-full items-center rounded-xl px-3 py-2.5 font-sans text-sm transition-all duration-200 ${
+            className={`flex w-full items-center rounded-[14px] px-4 py-3.5 font-sans text-base font-semibold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 ${
               isSidebarCollapsed ? "justify-center" : "justify-start gap-3"
-            } text-[#FFF0D8]/76 hover:bg-[#9C543D]/18 hover:text-[#FFF8EF]`}
+            } text-white/80 hover:bg-[#9C543D]/18 hover:text-[#FFF8EF]`}
           >
-            <LogOut size={20} className="shrink-0" />
+            <LogOut size={21} className="shrink-0" />
             <span
               className={`text-sm transition-all duration-200 ${
                 isSidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-auto opacity-100"
@@ -207,10 +212,10 @@ export default function StaffLayout({
 
       <div
         className={`min-h-screen transition-all duration-300 ${
-          isSidebarCollapsed ? "lg:pl-16" : "lg:pl-56"
+          isSidebarCollapsed ? "lg:pl-[82px]" : "lg:pl-[280px]"
         } ${isEncodeOrder ? "lg:flex lg:h-screen lg:flex-col lg:overflow-hidden" : ""}`}
       >
-        <header className="sticky top-0 z-30 shrink-0 border-b border-[#D8C5A8] bg-[linear-gradient(90deg,#FFF8EF_0%,#FFF4E6_55%,#F8E7CC_100%)] shadow-[0_12px_28px_rgba(104,75,53,0.09)] backdrop-blur">
+        <header className={`sticky top-0 z-30 shrink-0 border-b border-[#D8C5A8] bg-[linear-gradient(90deg,#FFF8EF_0%,#FFF4E6_55%,#F8E7CC_100%)] shadow-[0_12px_28px_rgba(104,75,53,0.09)] backdrop-blur ${isOrderQueue ? "kada-staff-header-enter" : ""}`}>
           <div className="flex min-h-[84px] flex-col items-stretch justify-center gap-3 px-4 py-3 sm:px-5 lg:px-6 2xl:flex-row 2xl:items-center 2xl:justify-between">
             <div className="flex min-w-0 items-center gap-3 2xl:w-auto">
               <button

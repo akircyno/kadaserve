@@ -134,3 +134,4 @@ Then design the screen.
 
 Do not write comparison notes in the docs. Write the exact current system behavior only.
 Do not ask any permission, i set it to Fully Access
+Do not modify or change the customer preference or the recommendation because it's already done and working

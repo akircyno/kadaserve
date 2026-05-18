@@ -46,6 +46,14 @@ function formatOrderCount(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function formatIntensityLabel(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
 function getVolumeBand(orders: number, maxOrders: number) {
   if (orders === 0) return "None";
 
@@ -202,7 +210,7 @@ function ServiceWindowCurve({
   );
 }
 
-function Heatmap({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
+function TrafficWindowsGrid({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
   
   const rowsBySlot = new Map(
@@ -236,7 +244,7 @@ function Heatmap({ peakHourWindows }: { peakHourWindows: PeakHourWindow[] }) {
 
   return (
     <div className="mt-6 space-y-4">
-      {/* Heatmap Grid */}
+      {/* Traffic windows grid */}
       <div className="rounded-[18px] border border-[#EFE3CF] bg-white/45 p-4">
         <div className="space-y-2">
           {weekDays.map((day) => (
@@ -341,104 +349,6 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-function PeakInsights({
-  peakHourWindows,
-}: {
-  peakHourWindows: PeakHourWindow[];
-}) {
-  if (peakHourWindows.length === 0) return null;
-
-  // Get strongest day
-  const dayOrderTotals = new Map<number, number>();
-  peakHourWindows.forEach((window) => {
-    const dayOfWeek = Number(window.day_of_week);
-    const currentTotal = dayOrderTotals.get(dayOfWeek) ?? 0;
-    dayOrderTotals.set(dayOfWeek, currentTotal + Number(window.avg_order_count ?? 0));
-  });
-
-  const strongestDay = Array.from(dayOrderTotals.entries()).reduce((max, current) =>
-    current[1] > max[1] ? current : max
-  );
-  const strongestDayLabel = getDayLabel(strongestDay[0]);
-
-  // Get strongest hour
-  const hourOrderTotals = new Map<number, number>();
-  peakHourWindows.forEach((window) => {
-    const hour = Number(window.hour_start);
-    const currentTotal = hourOrderTotals.get(hour) ?? 0;
-    hourOrderTotals.set(hour, currentTotal + Number(window.avg_order_count ?? 0));
-  });
-
-  const strongestHour = Array.from(hourOrderTotals.entries()).reduce((max, current) =>
-    current[1] > max[1] ? current : max
-  );
-  const strongestHourLabel = HOUR_LABELS[OPERATING_HOURS.indexOf(strongestHour[0])] || formatHourNumber(strongestHour[0]);
-
-  // Get average peak window
-  const avgOrderCount = Math.round(
-    peakHourWindows.reduce((sum, w) => sum + Number(w.avg_order_count ?? 0), 0) /
-      peakHourWindows.length
-  );
-
-  // Determine staffing recommendation
-  const maxOrders = Math.max(...peakHourWindows.map((w) => Number(w.avg_order_count ?? 0)));
-  let staffingLevel = "Standard";
-  let staffingColor = "bg-[#E6F2E8] border-[#0F441D]/20";
-  if (maxOrders >= 8) {
-    staffingLevel = "High Alert";
-    staffingColor = "bg-[#FFF1EC] border-[#C55432]/20";
-  } else if (maxOrders >= 5) {
-    staffingLevel = "Elevated";
-    staffingColor = "bg-[#FFF0DA] border-[#DCCFB8]";
-  }
-
-  return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
-          Busiest Day
-        </p>
-        <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
-          {strongestDayLabel}
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
-          Peak Hour
-        </p>
-        <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
-          {strongestHourLabel}
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-[#DCCFB8]/40 bg-white/60 p-4">
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
-          Average Traffic
-        </p>
-        <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
-          {avgOrderCount}
-        </p>
-        <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-          orders per window
-        </p>
-      </div>
-
-      <div className={`rounded-lg border p-4 ${staffingColor}`}>
-        <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-[#684B35]">
-          Staffing Level
-        </p>
-        <p className="mt-2 font-sans text-2xl font-bold text-[#0D2E18]">
-          {staffingLevel}
-        </p>
-        <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-          {maxOrders} max orders
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export function TimeSeriesView({
   hourlyCounts,
   maxHourlyOrders,
@@ -488,7 +398,7 @@ export function TimeSeriesView({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-sans text-xl font-bold text-[#0D2E18]">
-                  5PM-12AM volume
+                  Monthly order volume
                 </h3>
               </div>
               <span className="rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-3 py-1.5 font-sans text-xs font-bold text-[#684B35]">
@@ -607,7 +517,14 @@ export function PeakHoursView({
 }: {
   peakHourWindows: PeakHourWindow[];
 }) {
-  const detectedPeakWindows = [...peakHourWindows]
+  const monthlyWindows = peakHourWindows.filter(
+    (window) => Number(window.avg_order_count ?? 0) > 0
+  );
+  const maxMonthlyOrders = Math.max(
+    1,
+    ...monthlyWindows.map((window) => Number(window.avg_order_count ?? 0))
+  );
+  const detectedPeakWindows = [...monthlyWindows]
     .sort(
       (first, second) =>
         Number(second.avg_order_count ?? 0) - Number(first.avg_order_count ?? 0) ||
@@ -618,41 +535,32 @@ export function PeakHoursView({
 
   return (
     <div className="space-y-5">
-      {/* Peak Insights Cards */}
-      {peakHourWindows.length > 0 && (
-        <div>
-          <PeakInsights peakHourWindows={peakHourWindows} />
-        </div>
-      )}
-
-      {/* Modern Heatmap Section */}
       <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
         <div className="space-y-2 mb-6">
           <div className="flex items-center gap-2">
             <TrendingUp size={18} strokeWidth={1.8} className="text-[#684B35]" />
             <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
-              Hourly Traffic Heatmap
+              Monthly Top Traffic Windows
             </h4>
           </div>
         </div>
 
         <div className="mt-8">
           {peakHourWindows.length > 0 ? (
-            <Heatmap peakHourWindows={peakHourWindows} />
+            <TrafficWindowsGrid peakHourWindows={peakHourWindows} />
           ) : (
             <EmptyState label="Waiting for traffic data..." />
           )}
         </div>
       </section>
 
-      {/* Busiest Service Hours Section */}
       {detectedPeakWindows.length > 0 && (
         <section className="rounded-2xl border border-[#DCCFB8]/40 bg-gradient-to-br from-[#FFFCF7] via-[#FFF8EF] to-[#FFF8EF] p-8 shadow-[0_12px_40px_rgba(75,50,24,0.1)]">
           <div className="space-y-2 mb-6">
             <div className="flex items-center gap-2">
               <Users size={18} strokeWidth={1.8} className="text-[#684B35]" />
               <h4 className="font-sans text-lg font-bold text-[#0D2E18]">
-                Busiest Service Hours
+                Monthly busiest hours
               </h4>
             </div>
           </div>
@@ -664,15 +572,15 @@ export function PeakHoursView({
               
               // Determine intensity styling
               const getIntensityStyle = (intensity: string) => {
-                switch (intensity) {
-                  case "Very High":
-                    return { bg: "#0D2E18", text: "white", badge: "bg-[#0D2E18]/10 text-[#0D2E18]" };
-                  case "High":
-                    return { bg: "#0F441D", text: "white", badge: "bg-[#E6F2E8] text-[#0F441D]" };
-                  case "Medium":
-                    return { bg: "#684B35", text: "white", badge: "bg-[#FFF0DA] text-[#684B35]" };
+                switch (intensity.toLowerCase().replace(/\s+/g, "_")) {
+                  case "very_high":
+                    return { bg: "#0D2E18", badge: "bg-[#0D2E18]/10 text-[#0D2E18]" };
+                  case "high":
+                    return { bg: "#0F441D", badge: "bg-[#E6F2E8] text-[#0F441D]" };
+                  case "medium":
+                    return { bg: "#684B35", badge: "bg-[#FFF0DA] text-[#684B35]" };
                   default:
-                    return { bg: "#8C7A64", text: "white", badge: "bg-[#EFE3CF] text-[#684B35]" };
+                    return { bg: "#8C7A64", badge: "bg-[#EFE3CF] text-[#684B35]" };
                 }
               };
 
@@ -705,7 +613,7 @@ export function PeakHoursView({
                     {/* Intensity Badge */}
                     <div className={`rounded-lg px-3 py-2 text-center ${style.badge}`}>
                       <p className="font-sans text-xs font-bold uppercase tracking-[0.1em]">
-                        {peak.intensity}
+                        {formatIntensityLabel(peak.intensity)}
                       </p>
                     </div>
 
@@ -714,7 +622,7 @@ export function PeakHoursView({
                       <div
                         className="h-full rounded-full transition-all duration-300"
                         style={{
-                          width: `${((Number(peak.avg_order_count ?? 0) / 10) * 100).toFixed(0)}%`,
+                          width: `${Math.min(100, (Number(peak.avg_order_count ?? 0) / maxMonthlyOrders) * 100).toFixed(0)}%`,
                           backgroundColor: style.bg,
                         }}
                       />

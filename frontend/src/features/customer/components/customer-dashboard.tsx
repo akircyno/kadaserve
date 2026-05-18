@@ -13,6 +13,7 @@ import {
   Bell,
   Camera,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CheckCircle2,
   ClipboardList,
@@ -128,6 +129,10 @@ type CustomerOrdersPayload = {
   error?: string;
 };
 
+const CUSTOMER_HISTORY_PAGE_SIZE = 8;
+const CUSTOMER_CURRENT_ORDER_PAGE_SIZE = 5;
+const KADA_EXIT_ANIMATION_MS = 220;
+
 type MenuRecommendationCard = {
   item: CustomerMenuItem;
   label: string;
@@ -197,7 +202,7 @@ const menuFilters: Array<{
   label: string;
 }> = [
   { value: "all", label: "All" },
-  { value: "coffee", label: "Coffee" },
+  { value: "coffee", label: "Latte" },
   { value: "non-coffee", label: "Non-Coffee" },
   { value: "pastries", label: "Pastries" },
   { value: "best-deals", label: "Best Deals" },
@@ -235,7 +240,6 @@ const feedbackDismissedOrdersStorageKey =
   "kadaserve_feedback_dismissed_orders";
 const feedbackMaybeLaterStorageKey = "kadaserve_feedback_maybe_later_orders";
 const notificationsReadStorageKey = "kadaserve_read_notifications";
-const feedbackMaybeLaterDelayMs = 30 * 60 * 1000;
 const checkoutOrderTypeStorageKey = "kadaserve_checkout_order_type";
 const promotionImages = [
   "/images/promotions/promotion1.png",
@@ -376,13 +380,6 @@ function readMaybeLaterOrders() {
   } catch {
     return {};
   }
-}
-
-function writeMaybeLaterOrders(orderMap: Record<string, number>) {
-  window.localStorage.setItem(
-    feedbackMaybeLaterStorageKey,
-    JSON.stringify(orderMap)
-  );
 }
 
 function formatOrderCode(id: string) {
@@ -856,6 +853,63 @@ function getTrackingSteps(orderType: CustomerOrder["order_type"]) {
   ];
 }
 
+function PaginationControls({
+  currentPage,
+  label,
+  onPageChange,
+  pageCount,
+}: {
+  currentPage: number;
+  label: string;
+  onPageChange: (page: number) => void;
+  pageCount: number;
+}) {
+  if (pageCount <= 1) {
+    return null;
+  }
+
+  return (
+    <nav
+      aria-label={label}
+      className="mt-4 flex flex-wrap items-center justify-center gap-2"
+    >
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+        disabled={currentPage === 1}
+        className="h-10 rounded-full border border-[#DCCFB8] bg-white px-4 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] hover:text-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+      >
+        Previous
+      </button>
+
+      {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
+        <button
+          key={page}
+          type="button"
+          onClick={() => onPageChange(page)}
+          aria-current={currentPage === page ? "page" : undefined}
+          className={`h-10 min-w-10 rounded-full px-3 font-sans text-xs font-black transition hover:-translate-y-0.5 ${
+            currentPage === page
+              ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_20px_rgba(13,46,24,0.18)]"
+              : "border border-[#DCCFB8] bg-white text-[#684B35] hover:border-[#0D2E18] hover:text-[#0D2E18]"
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(pageCount, currentPage + 1))}
+        disabled={currentPage === pageCount}
+        className="h-10 rounded-full border border-[#DCCFB8] bg-white px-4 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] hover:text-[#0D2E18] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+      >
+        Next
+      </button>
+    </nav>
+  );
+}
+
 function getMonthlyFavorite(orders: CustomerOrder[]) {
   const counts = new Map<string, number>();
 
@@ -1020,6 +1074,7 @@ export function CustomerDashboard({
   const [activePromotionIndex, setActivePromotionIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCartTrayOpen, setIsCartTrayOpen] = useState(false);
+  const [isCartTrayClosing, setIsCartTrayClosing] = useState(false);
   const [quickAddFeedback, setQuickAddFeedback] = useState<{
     itemId: string;
     name: string;
@@ -1042,6 +1097,8 @@ export function CustomerDashboard({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [selectedCurrentOrderId, setSelectedCurrentOrderId] = useState<string | null>(null);
+  const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
+  const [orderHistoryPage, setOrderHistoryPage] = useState(1);
   const [trackingActionMessage, setTrackingActionMessage] = useState("");
   const [qrPhPayment, setQrPhPayment] = useState<ReopenableQrPhPayment | null>(
     null
@@ -1049,6 +1106,7 @@ export function CustomerDashboard({
   const [qrCountdownNow, setQrCountdownNow] = useState(() => Date.now());
   const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
+  const [isFeedbackPromptClosing, setIsFeedbackPromptClosing] = useState(false);
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
     string | null
   >(null);
@@ -1093,6 +1151,7 @@ export function CustomerDashboard({
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSettingsMessage, setProfileSettingsMessage] = useState("");
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isNotificationsClosing, setIsNotificationsClosing] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -1107,10 +1166,12 @@ export function CustomerDashboard({
   const onboardingScrollerRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const trackingTouchStartYRef = useRef<number | null>(null);
+  const cartTrayCloseTimeoutRef = useRef<number | null>(null);
+  const notificationCloseTimeoutRef = useRef<number | null>(null);
+  const feedbackPromptCloseTimeoutRef = useRef<number | null>(null);
   const previousOrderStatusRef = useRef<
     Map<string, CustomerOrder["status"]> | null
   >(null);
-  const feedbackMaybeLaterTimeoutRef = useRef<number | null>(null);
   const isOrderSyncInFlightRef = useRef(false);
   const isGuest = !isAuthenticated;
 
@@ -1164,7 +1225,13 @@ export function CustomerDashboard({
       return false;
     }
 
+    if (feedbackPromptCloseTimeoutRef.current) {
+      window.clearTimeout(feedbackPromptCloseTimeoutRef.current);
+      feedbackPromptCloseTimeoutRef.current = null;
+    }
+
     resetFeedbackForm();
+    setIsFeedbackPromptClosing(false);
     setSelectedFeedbackOrderId(orderId);
     setSelectedFeedbackItemId(feedbackItem.order_item_id);
     setIsFeedbackPromptOpen(true);
@@ -1497,8 +1564,16 @@ export function CustomerDashboard({
 
   useEffect(() => {
     return () => {
-      if (feedbackMaybeLaterTimeoutRef.current) {
-        window.clearTimeout(feedbackMaybeLaterTimeoutRef.current);
+      if (cartTrayCloseTimeoutRef.current) {
+        window.clearTimeout(cartTrayCloseTimeoutRef.current);
+      }
+
+      if (notificationCloseTimeoutRef.current) {
+        window.clearTimeout(notificationCloseTimeoutRef.current);
+      }
+
+      if (feedbackPromptCloseTimeoutRef.current) {
+        window.clearTimeout(feedbackPromptCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -1539,6 +1614,30 @@ export function CustomerDashboard({
         (order) => !currentOrders.some((currentOrder) => currentOrder.id === order.id)
       ),
     [currentOrders, customerOrders]
+  );
+  const currentOrdersPageCount = Math.max(
+    1,
+    Math.ceil(currentOrders.length / CUSTOMER_CURRENT_ORDER_PAGE_SIZE)
+  );
+  const paginatedCurrentOrders = useMemo(
+    () =>
+      currentOrders.slice(
+        (currentOrdersPage - 1) * CUSTOMER_CURRENT_ORDER_PAGE_SIZE,
+        currentOrdersPage * CUSTOMER_CURRENT_ORDER_PAGE_SIZE
+      ),
+    [currentOrders, currentOrdersPage]
+  );
+  const orderHistoryPageCount = Math.max(
+    1,
+    Math.ceil(orderHistory.length / CUSTOMER_HISTORY_PAGE_SIZE)
+  );
+  const paginatedOrderHistory = useMemo(
+    () =>
+      orderHistory.slice(
+        (orderHistoryPage - 1) * CUSTOMER_HISTORY_PAGE_SIZE,
+        orderHistoryPage * CUSTOMER_HISTORY_PAGE_SIZE
+      ),
+    [orderHistory, orderHistoryPage]
   );
   const trackingOrder = useMemo(
     () =>
@@ -1789,6 +1888,24 @@ export function CustomerDashboard({
       setSelectedCurrentOrderId(currentOrders[0].id);
     }
   }, [currentOrders, selectedCurrentOrderId]);
+
+  useEffect(() => {
+    setCurrentOrdersPage((page) => Math.min(page, currentOrdersPageCount));
+  }, [currentOrdersPageCount]);
+
+  useEffect(() => {
+    setOrderHistoryPage((page) => Math.min(page, orderHistoryPageCount));
+  }, [orderHistoryPageCount]);
+
+  useEffect(() => {
+    if (
+      paginatedCurrentOrders.length > 0 &&
+      selectedCurrentOrderId &&
+      !paginatedCurrentOrders.some((order) => order.id === selectedCurrentOrderId)
+    ) {
+      setSelectedCurrentOrderId(paginatedCurrentOrders[0].id);
+    }
+  }, [paginatedCurrentOrders, selectedCurrentOrderId]);
 
   const recommendationProfile = useMemo(() => {
     const recommendationMenuItems: RecommendationMenuItem[] = uniqueMenuItems.map(
@@ -2247,7 +2364,7 @@ export function CustomerDashboard({
 
     navigator.vibrate?.(18);
     setQuickAddFeedback({ itemId: item.id, name: item.name });
-    setIsCartTrayOpen(true);
+    openCartTray();
     setIsCartPulseActive(true);
   }
 
@@ -2602,11 +2719,40 @@ export function CustomerDashboard({
     setIsSidebarOpen(false);
   }
 
+  function openCartTray() {
+    if (cartTrayCloseTimeoutRef.current) {
+      window.clearTimeout(cartTrayCloseTimeoutRef.current);
+      cartTrayCloseTimeoutRef.current = null;
+    }
+
+    setIsCartTrayClosing(false);
+    setIsCartTrayOpen(true);
+  }
+
+  function closeCartTray() {
+    if (cartTrayCloseTimeoutRef.current) {
+      window.clearTimeout(cartTrayCloseTimeoutRef.current);
+    }
+
+    setIsCartTrayClosing(true);
+    cartTrayCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsCartTrayOpen(false);
+      setIsCartTrayClosing(false);
+      cartTrayCloseTimeoutRef.current = null;
+    }, KADA_EXIT_ANIMATION_MS);
+  }
+
   function openNotifications() {
     if (!requireCustomerAccount("Login to view notifications.")) {
       return;
     }
 
+    if (notificationCloseTimeoutRef.current) {
+      window.clearTimeout(notificationCloseTimeoutRef.current);
+      notificationCloseTimeoutRef.current = null;
+    }
+
+    setIsNotificationsClosing(false);
     setIsNotificationsOpen(true);
     setReadNotificationIds((current) => [
       ...new Set([...current, ...notifications.map((item) => item.id)]),
@@ -2614,14 +2760,23 @@ export function CustomerDashboard({
   }
 
   function closeNotifications() {
-    setIsNotificationsOpen(false);
+    if (notificationCloseTimeoutRef.current) {
+      window.clearTimeout(notificationCloseTimeoutRef.current);
+    }
+
+    setIsNotificationsClosing(true);
+    notificationCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsNotificationsOpen(false);
+      setIsNotificationsClosing(false);
+      notificationCloseTimeoutRef.current = null;
+    }, KADA_EXIT_ANIMATION_MS);
   }
 
   function handleNotificationAction(notification: CustomerNotification) {
     setReadNotificationIds((current) => [
       ...new Set([...current, notification.id]),
     ]);
-    setIsNotificationsOpen(false);
+    closeNotifications();
 
     if (notification.kind === "feedback") {
       if (!openFeedbackPromptForOrder(notification.orderId)) {
@@ -2665,33 +2820,16 @@ export function CustomerDashboard({
       markFeedbackOrderDismissed(orderId);
     }
 
-    hideFeedbackPrompt();
-  }
+    if (feedbackPromptCloseTimeoutRef.current) {
+      window.clearTimeout(feedbackPromptCloseTimeoutRef.current);
+    }
 
-  function handleFeedbackMaybeLater() {
-    const orderId = selectedFeedbackOrderId ?? selectedFeedbackItem?.order_id;
-
-    if (!orderId) {
+    setIsFeedbackPromptClosing(true);
+    feedbackPromptCloseTimeoutRef.current = window.setTimeout(() => {
       hideFeedbackPrompt();
-      return;
-    }
-
-    const showAfter = Date.now() + feedbackMaybeLaterDelayMs;
-    writeMaybeLaterOrders({
-      ...readMaybeLaterOrders(),
-      [orderId]: showAfter,
-    });
-
-    if (feedbackMaybeLaterTimeoutRef.current) {
-      window.clearTimeout(feedbackMaybeLaterTimeoutRef.current);
-    }
-
-    feedbackMaybeLaterTimeoutRef.current = window.setTimeout(() => {
-      openFeedbackPromptForOrder(orderId);
-      feedbackMaybeLaterTimeoutRef.current = null;
-    }, feedbackMaybeLaterDelayMs);
-
-    hideFeedbackPrompt();
+      setIsFeedbackPromptClosing(false);
+      feedbackPromptCloseTimeoutRef.current = null;
+    }, KADA_EXIT_ANIMATION_MS);
   }
 
   function openFeedbackForOrder(order: CustomerOrder) {
@@ -2708,6 +2846,12 @@ export function CustomerDashboard({
     }
 
     resetFeedbackForm();
+    if (feedbackPromptCloseTimeoutRef.current) {
+      window.clearTimeout(feedbackPromptCloseTimeoutRef.current);
+      feedbackPromptCloseTimeoutRef.current = null;
+    }
+
+    setIsFeedbackPromptClosing(false);
     setSelectedFeedbackOrderId(order.id);
     setSelectedFeedbackItemId(feedbackItem.order_item_id);
     setIsFeedbackPromptOpen(true);
@@ -2735,20 +2879,17 @@ export function CustomerDashboard({
   }
 
   return (
-    <main className="min-h-screen bg-[#F8EBCF] text-[#123E26]">
+    <main className="kada-motion-root min-h-screen bg-[#F8EBCF] text-[#123E26]">
       <div className="flex min-h-screen">
-        <aside className="hidden w-[72px] shrink-0 flex-col items-center rounded-r-[24px] bg-[#083C1F] px-2 py-4 text-white sm:w-[82px] md:flex">
+        <aside className="sticky top-0 hidden h-screen w-[72px] shrink-0 flex-col items-center rounded-r-[24px] bg-[#083C1F] px-2 py-4 text-white sm:w-[82px] md:flex">
           <div className="flex w-full flex-col items-center gap-4">
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0F4A27]"
+              className="kada-glow-ring flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0F4A27] transition duration-200 hover:-translate-y-0.5 hover:bg-[#145C32] active:translate-y-0"
+              aria-label="Open customer menu"
             >
-              <span className="space-y-1">
-                <span className="block h-0.5 w-4 rounded bg-current" />
-                <span className="block h-0.5 w-6 rounded bg-current" />
-                <span className="block h-0.5 w-3 rounded bg-current" />
-              </span>
+              <ChevronRight size={22} strokeWidth={1.9} />
             </button>
 
             {sections.map(({ id, icon: Icon, label }) => {
@@ -2760,9 +2901,9 @@ export function CustomerDashboard({
                   type="button"
                   title={label}
                   onClick={() => handleSectionClick(id)}
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition ${
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl transition duration-200 hover:-translate-y-0.5 active:translate-y-0 ${
                     isActive
-                      ? "bg-[#FFF0D8] text-[#0B3F22]"
+                      ? "bg-[#FFF0D8] text-[#0B3F22] shadow-[0_10px_20px_rgba(0,0,0,0.16)]"
                       : "text-[#F7EED8] hover:bg-[#0F4A27]"
                   }`}
                 >
@@ -2791,7 +2932,7 @@ export function CustomerDashboard({
                 type="button"
                 onClick={openNotifications}
                 aria-label="Open notifications"
-                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-[#FFF0DA]"
+                className="kada-glow-ring relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#DCCFB8] bg-[#FFF8EF] text-[#0D2E18] shadow-sm transition hover:bg-[#FFF0DA]"
               >
                 <Bell size={19} />
                 {unreadNotificationCount > 0 ? (
@@ -2811,7 +2952,7 @@ export function CustomerDashboard({
                   setIsSidebarOpen(false);
                   setIsProfileOpen(true);
                 }}
-                className="hidden max-w-[210px] items-center gap-3 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:bg-[#FFF0DA] sm:flex"
+                className="kada-hover-lift hidden max-w-[210px] items-center gap-3 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:bg-[#FFF0DA] sm:flex"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#123E26] font-sans text-sm font-black text-[#FFF0D8]">
                   {profileAvatarUrl ? (
@@ -2855,7 +2996,7 @@ export function CustomerDashboard({
                   setQuery("");
                 }}
                 aria-label="Close search"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA] transition hover:bg-[#0F441D]"
+              className="kada-glow-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA] transition hover:bg-[#0F441D]"
               >
                 <X size={18} />
               </button>
@@ -2920,7 +3061,7 @@ export function CustomerDashboard({
                       aria-current={
                         activeMenuFilter === item.value ? "true" : undefined
                       }
-                      className={`shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
+                      className={`kada-mobile-tap shrink-0 rounded-full border px-4 py-2.5 font-sans text-sm font-black transition ${
                         activeMenuFilter === item.value
                           ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_18px_rgba(13,46,24,0.18)]"
                           : "border-[#DCCFB8] bg-[#FFF8EF] text-[#684B35] hover:border-[#0D2E18] hover:bg-[#FFF0DA] hover:text-[#0D2E18]"
@@ -2948,7 +3089,7 @@ export function CustomerDashboard({
             className="flex-1 overflow-y-auto px-4 pb-28 pt-0 sm:px-5 sm:py-5 2xl:px-8"
           >
             {activeSection === "home" && (
-              <div className="mx-auto w-full max-w-[1180px] space-y-5">
+              <div className="kada-tab-enter mx-auto w-full max-w-[1180px] space-y-5">
                 <section className="pt-1">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                     <div>
@@ -2977,7 +3118,7 @@ export function CustomerDashboard({
                             setFilter("coffee");
                             setActiveSection("menu");
                           }}
-                          className="rounded-[26px] border border-[#DCCFB8] bg-white/82 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
+                          className="kada-hover-lift rounded-[26px] border border-[#DCCFB8] bg-white/82 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
                         >
                           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0D8]">
                             {label === "Delivery" ? (
@@ -3060,10 +3201,18 @@ export function CustomerDashboard({
                         }
 
                         if (feedbackMissionAvailable) {
+                          if (feedbackPromptCloseTimeoutRef.current) {
+                            window.clearTimeout(
+                              feedbackPromptCloseTimeoutRef.current
+                            );
+                            feedbackPromptCloseTimeoutRef.current = null;
+                          }
+
+                          setIsFeedbackPromptClosing(false);
                           setIsFeedbackPromptOpen(true);
                         }
                       }}
-                      className="mt-4 min-h-12 w-full rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
+                    className="kada-glow-ring mt-4 min-h-12 w-full rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
                     >
                       {feedbackMissionAvailable
                         ? "Rate Last Order"
@@ -3073,7 +3222,7 @@ export function CustomerDashboard({
                 </section>
 
                 {activeOrder ? (
-                  <section className="rounded-[26px] border border-[#DCCFB8] bg-white/88 p-4 shadow-[0_8px_20px_rgba(0,0,0,0.06)] sm:p-5">
+                  <section className="kada-hover-lift rounded-[26px] border border-[#DCCFB8] bg-white/88 p-4 shadow-[0_8px_20px_rgba(0,0,0,0.06)] sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h2 className="mt-1 font-sans text-2xl font-black text-[#123E26]">
@@ -3084,7 +3233,7 @@ export function CustomerDashboard({
                       <button
                         type="button"
                         onClick={() => openTrackingModal(activeOrder.id)}
-                        className="rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
+                        className="kada-glow-ring rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D]"
                       >
                         Track Order
                       </button>
@@ -3122,7 +3271,7 @@ export function CustomerDashboard({
                       return (
                         <article
                           key={item.id}
-                          className="relative flex w-[280px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#FFF8EF] text-[#123E26] shadow-[0_12px_24px_rgba(0,0,0,0.14)] sm:w-[310px]"
+                          className="kada-hover-lift relative flex w-[280px] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#FFF8EF] text-[#123E26] shadow-[0_12px_24px_rgba(0,0,0,0.14)] sm:w-[310px]"
                         >
                           <button
                             type="button"
@@ -3136,7 +3285,7 @@ export function CustomerDashboard({
                           <button
                             type="button"
                             onClick={() => openCustomizeModal(item)}
-                            className="flex aspect-square w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] p-1.5 text-4xl"
+                            className="group/image flex aspect-square w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] p-1.5 text-4xl"
                             aria-label={`Open ${item.name}`}
                           >
                             {menuImage ? (
@@ -3145,7 +3294,7 @@ export function CustomerDashboard({
                                 src={menuImage}
                                 alt={item.name}
                                 loading="lazy"
-                                className="aspect-square h-full w-full rounded-full object-cover"
+                                className="aspect-square h-full w-full rounded-full object-cover transition duration-300 group-hover/image:scale-105"
                               />
                             ) : (
                               getEmoji(item)
@@ -3182,7 +3331,7 @@ export function CustomerDashboard({
                               <button
                                 type="button"
                                 onClick={() => handleQuickAdd(item)}
-                                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-sm font-bold text-white transition hover:bg-[#0D2E18]"
+                                className="kada-glow-ring flex flex-1 items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-sm font-bold text-white transition hover:bg-[#0D2E18]"
                               >
                                 <ShoppingCart size={16} />
                                 Add
@@ -3198,10 +3347,11 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "menu" && (
-              <div className="mx-auto w-full max-w-[1440px] space-y-4">
+              <div className="kada-tab-enter mx-auto w-full max-w-[1440px] space-y-4">
                 <div
                   ref={fullMenuRef}
-                  className="space-y-10 scroll-mt-24 pb-28"
+                  key={activeMenuFilter}
+                  className="kada-tab-enter space-y-10 scroll-mt-24 pb-28"
                 >
                   {menuGroups.length === 0 ? (
                     <div className="rounded-[24px] border border-dashed border-[#D8C8A7] bg-white px-5 py-10 text-center shadow-sm">
@@ -3223,10 +3373,11 @@ export function CustomerDashboard({
                       ) : null}
                     </div>
                   ) : null}
-                    {menuGroups.map((group) => (
+                    {menuGroups.map((group, groupIndex) => (
                       <section
                         key={group.value}
-                        className="scroll-mt-4"
+                        className="kada-menu-group-enter scroll-mt-4"
+                        style={{ animationDelay: `${Math.min(groupIndex * 45, 140)}ms` }}
                       >
                         <h2 className="mb-4 border-l-4 border-[#0D2E18] pl-3 font-sans text-xl font-black text-[#0D2E18]">
                           {group.label}
@@ -3237,7 +3388,7 @@ export function CustomerDashboard({
                               No items in this category yet.
                             </div>
                           ) : null}
-                          {group.items.map((item) => {
+                          {group.items.map((item, itemIndex) => {
                             const menuImage = getMenuImage(item);
                             const isQuickAdded = quickAddFeedback?.itemId === item.id;
                             const itemNutrition = getMenuItemNutrition(item);
@@ -3246,7 +3397,10 @@ export function CustomerDashboard({
                             return (
                       <article
                         key={item.id}
-                        className="relative min-w-0 text-center"
+                        className="kada-menu-card-enter relative min-w-0 text-center"
+                        style={{
+                          animationDelay: `${Math.min(itemIndex * 28, 180)}ms`,
+                        }}
                       >
                         {isQuickAdded ? (
                           <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 animate-bounce items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0D2E18] px-3 py-2 font-sans text-xs font-black text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.20)]">
@@ -3269,7 +3423,7 @@ export function CustomerDashboard({
                             openCustomizeModal(item);
                           }}
                           disabled={!item.is_available}
-                          className="group w-full disabled:cursor-not-allowed"
+                          className="group kada-hover-lift w-full rounded-[28px] px-2 py-3 disabled:cursor-not-allowed"
                           aria-label={`${
                             !item.is_available
                               ? "Unavailable"
@@ -3284,7 +3438,7 @@ export function CustomerDashboard({
                               <img
                                 src={menuImage}
                                 alt={item.name}
-                              className="aspect-square h-full w-full rounded-full object-cover"
+                              className="aspect-square h-full w-full rounded-full object-cover transition duration-300 group-hover:scale-105"
                               />
                             ) : (
                               getEmoji(item)
@@ -3306,13 +3460,17 @@ export function CustomerDashboard({
                           <p className="mt-2 font-sans text-base font-black text-[#0D2E18]">
                             {formatPrice(item.base_price)}
                           </p>
-                          {itemFeedback ? (
-                            <p className="mx-auto mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-[#FFE9A8] px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
+                          <p className="mx-auto mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-[#FFE9A8] px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
+                            {itemFeedback ? (
+                              <>
                               <Star className="h-3 w-3 fill-current" />
                               {formatRating(itemFeedback.averageRating)} (
                               {itemFeedback.ratingCount})
-                            </p>
-                          ) : null}
+                              </>
+                            ) : (
+                              "New"
+                            )}
+                          </p>
                           {itemNutrition ? (
                             <p className="mx-auto mt-1 w-fit rounded-full bg-white/75 px-2.5 py-1 font-sans text-[10px] font-black text-[#684B35]">
                               {itemNutrition.calories} cal
@@ -3343,7 +3501,7 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "orders" && (
-              <div className="mx-auto w-full max-w-3xl space-y-5">
+              <div className="kada-tab-enter mx-auto w-full max-w-3xl space-y-5">
                 <div>
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-[#8A755D]">
                     Order Status
@@ -3354,7 +3512,7 @@ export function CustomerDashboard({
                 </div>
 
                 {currentOrders.length > 0 ? (
-                  <label className="block">
+                  <div className="block">
                     <span className="sr-only">Choose current order to track</span>
                     <span className="mb-2 block font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
                       Current Orders ({currentOrders.length})
@@ -3365,7 +3523,7 @@ export function CustomerDashboard({
                         onChange={(event) => handleCurrentOrderChange(event.target.value)}
                         className="min-h-12 w-full appearance-none rounded-full border border-[#DCCFB8] bg-white px-4 pr-12 font-sans text-sm font-semibold text-[#123E26] shadow-[0_6px_16px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#0D2E18] focus:ring-2 focus:ring-[#0D2E18]/15"
                       >
-                        {currentOrders.map((order) => (
+                        {paginatedCurrentOrders.map((order) => (
                           <option key={order.id} value={order.id}>
                             {formatOrderCode(order.id)} - {formatStatus(order.status)} - {formatOrderItemSummary(
                               order.order_items
@@ -3380,12 +3538,18 @@ export function CustomerDashboard({
                         className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#684B35]"
                       />
                     </div>
-                  </label>
+                    <PaginationControls
+                      currentPage={currentOrdersPage}
+                      label="Current orders pages"
+                      onPageChange={setCurrentOrdersPage}
+                      pageCount={currentOrdersPageCount}
+                    />
+                  </div>
                 ) : null}
 
                 {activeOrder ? (
                   <article
-                    className="rounded-[28px] border border-[#DCCFB8] bg-white p-4 shadow-[0_12px_28px_rgba(13,46,24,0.10)] transition hover:shadow-[0_14px_32px_rgba(13,46,24,0.14)] sm:p-5"
+                    className="kada-hover-lift rounded-[28px] border border-[#DCCFB8] bg-white p-4 shadow-[0_12px_28px_rgba(13,46,24,0.10)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(13,46,24,0.14)] sm:p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -3463,7 +3627,7 @@ export function CustomerDashboard({
                     <button
                       type="button"
                       onClick={() => openTrackingModal(activeOrder.id)}
-                      className="mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition hover:bg-[#0F441D] sm:w-auto"
+                      className="kada-glow-ring mt-4 w-full rounded-full bg-[#0D2E18] px-4 py-3 font-sans text-sm font-bold text-[#FFF0D8] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F441D] active:translate-y-0 sm:w-auto"
                     >
                       Track Order
                     </button>
@@ -3496,7 +3660,7 @@ export function CustomerDashboard({
                   ) : (
                     <>
                       <div className="space-y-3 md:hidden">
-                        {orderHistory.map((order) => {
+                        {paginatedOrderHistory.map((order) => {
                       const itemNames = order.order_items
                         .map((item) => item.menu_items?.name)
                         .filter(Boolean) as string[];
@@ -3507,7 +3671,7 @@ export function CustomerDashboard({
                       return (
                         <article
                           key={order.id}
-                          className="rounded-[22px] bg-white p-4 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                          className="kada-hover-lift rounded-[22px] bg-white p-4 shadow-[0_8px_20px_rgba(0,0,0,0.08)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(13,46,24,0.12)]"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -3545,7 +3709,7 @@ export function CustomerDashboard({
                               type="button"
                               onClick={() => openFeedbackForOrder(order)}
                               disabled={!canGiveFeedback}
-                              className="shrink-0 rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                              className="shrink-0 rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F441D] active:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D] disabled:hover:translate-y-0"
                             >
                               Feedback
                             </button>
@@ -3565,7 +3729,7 @@ export function CustomerDashboard({
                           <span>Action</span>
                         </div>
 
-                        {orderHistory.map((order) => {
+                        {paginatedOrderHistory.map((order) => {
                           const itemNames = order.order_items
                             .map((item) => item.menu_items?.name)
                             .filter(Boolean) as string[];
@@ -3576,7 +3740,7 @@ export function CustomerDashboard({
                           return (
                             <div
                               key={order.id}
-                              className="grid grid-cols-[1fr_1.25fr_0.8fr_1fr_0.8fr_0.8fr] items-center gap-4 border-b border-[#EEE2C8] px-4 py-3 last:border-b-0"
+                              className="grid grid-cols-[1fr_1.25fr_0.8fr_1fr_0.8fr_0.8fr] items-center gap-4 border-b border-[#EEE2C8] px-4 py-3 transition duration-200 last:border-b-0 hover:bg-[#FFF8EF]"
                             >
                               <div>
                                 <p className="font-sans text-sm font-black text-[#123E26]">
@@ -3610,7 +3774,7 @@ export function CustomerDashboard({
                                 type="button"
                                 onClick={() => openFeedbackForOrder(order)}
                                 disabled={!canGiveFeedback}
-                                className="w-fit rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D]"
+                                className="w-fit rounded-full bg-[#123E26] px-4 py-2 font-sans text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F441D] active:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#D8C8A7] disabled:text-[#8A755D] disabled:hover:translate-y-0"
                               >
                                 Feedback
                               </button>
@@ -3618,6 +3782,12 @@ export function CustomerDashboard({
                           );
                         })}
                       </div>
+                      <PaginationControls
+                        currentPage={orderHistoryPage}
+                        label="Order history pages"
+                        onPageChange={setOrderHistoryPage}
+                        pageCount={orderHistoryPageCount}
+                      />
                     </>
                   )}
                 </section>
@@ -3625,7 +3795,7 @@ export function CustomerDashboard({
             )}
 
             {activeSection === "feedback" && (
-              <div className="space-y-5">
+              <div className="kada-tab-enter space-y-5">
                 <div>
                   <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
                     Feedback
@@ -4198,7 +4368,7 @@ export function CustomerDashboard({
 
                   handleSectionClick(tab.id);
                 }}
-                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-[18px] font-sans text-[11px] font-bold transition ${
+                className={`kada-mobile-tap relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-[18px] font-sans text-[11px] font-bold transition ${
                   isActive
                     ? "bg-[#FFF0D8] text-[#0D2E18]"
                     : "text-[#FFF0D8]/76 hover:bg-[#0F441D]"
@@ -4226,14 +4396,24 @@ export function CustomerDashboard({
       </nav>
 
       {isNotificationsOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-start md:justify-end md:p-5">
+        <div
+          className={`fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-start md:justify-end md:p-5 ${
+            isNotificationsClosing ? "kada-scrim-out" : "kada-scrim-in"
+          }`}
+        >
           <button
             type="button"
             aria-label="Close notifications"
-            className="absolute inset-0 cursor-default"
+            className="kada-no-lift absolute inset-0 cursor-default"
             onClick={closeNotifications}
           />
-          <section className="relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:mt-14 md:rounded-[26px] md:shadow-[0_18px_44px_rgba(13,46,24,0.18)]">
+          <section
+            className={`relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:mt-14 md:rounded-[26px] md:shadow-[0_18px_44px_rgba(13,46,24,0.18)] ${
+              isNotificationsClosing
+                ? "kada-notification-exit"
+                : "kada-notification-enter"
+            }`}
+          >
             <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0D2E18] text-[#FFF0DA]">
@@ -4277,7 +4457,7 @@ export function CustomerDashboard({
                     return (
                       <article
                         key={notification.id}
-                        className={`rounded-[20px] border p-4 ${
+                        className={`kada-slide-up rounded-[20px] border p-4 ${
                           isUnread
                             ? "border-[#C96A12]/40 bg-[#FFF0DA]"
                             : "border-[#E8D9BE] bg-white"
@@ -4373,8 +4553,16 @@ export function CustomerDashboard({
       ) : null}
 
       {isFeedbackPromptOpen && selectedFeedbackItem ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-center md:p-6">
-          <section className="max-h-[88vh] w-full max-w-xl overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:rounded-[30px]">
+        <div
+          className={`fixed inset-0 z-[70] flex items-end justify-center bg-[#0D2E18]/35 px-3 pb-0 pt-8 backdrop-blur-[2px] md:items-center md:p-6 ${
+            isFeedbackPromptClosing ? "kada-scrim-out" : "kada-scrim-in"
+          }`}
+        >
+          <section
+            className={`max-h-[88vh] w-full max-w-xl overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] md:rounded-[30px] ${
+              isFeedbackPromptClosing ? "kada-soft-out" : "kada-soft-pop"
+            }`}
+          >
             <div className="flex items-start justify-between gap-4 border-b border-[#DCCFB8] px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#E9F1E6] text-3xl">
@@ -4541,20 +4729,12 @@ export function CustomerDashboard({
                 </p>
               ) : null}
 
-              <div className="grid gap-2 sm:grid-cols-[0.8fr_1.2fr]">
-                <button
-                  type="button"
-                  onClick={handleFeedbackMaybeLater}
-                  disabled={isSubmittingFeedback}
-                  className="rounded-[18px] border border-[#D8C8A7] bg-white px-5 py-4 font-sans text-base font-black text-[#684B35] transition hover:bg-[#FFF8EF] disabled:cursor-not-allowed disabled:opacity-55"
-                >
-                  Maybe Later
-                </button>
+              <div>
                 <button
                   type="button"
                   onClick={handleSubmitFeedback}
                   disabled={!canSubmitFeedback}
-                  className="flex items-center justify-center gap-2 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-white transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-55"
+                  className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-white transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   {isSubmittingFeedback ? (
                     <LoadingSpinner label="Submitting feedback" />
@@ -4569,7 +4749,7 @@ export function CustomerDashboard({
 
       {selectedMenuItem ? (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0D2E18]/45 px-3 pb-0 pt-10 backdrop-blur-sm sm:items-center sm:p-6">
-          <section className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-t-[30px] border border-[#E5D6BB] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[30px]">
+          <section className="kada-soft-pop max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-t-[30px] border border-[#E5D6BB] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[30px]">
             <div className="flex items-start justify-between gap-4 border-b border-[#E8D9BE] px-5 py-4 sm:px-6">
               <div>
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
@@ -4786,7 +4966,7 @@ export function CustomerDashboard({
                     </p>
                   ) : null}
 
-                  {selectedMenuFeedback ? (
+                  {selectedMenuItem ? (
                     <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -4798,18 +4978,24 @@ export function CustomerDashboard({
                           </p>
                         </div>
                         <div className="shrink-0 rounded-full bg-[#FFE9A8] px-3 py-1 font-sans text-xs font-black text-[#684B35]">
-                          <span className="inline-flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-current" />
-                            {formatRating(selectedMenuFeedback.averageRating)}
-                          </span>
+                          {selectedMenuFeedback ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Star className="h-3 w-3 fill-current" />
+                              {formatRating(selectedMenuFeedback.averageRating)}
+                            </span>
+                          ) : (
+                            "New"
+                          )}
                         </div>
                       </div>
 
                       <p className="mt-3 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#8A755D]">
-                        {formatRatingCount(selectedMenuFeedback.ratingCount)}
+                        {selectedMenuFeedback
+                          ? formatRatingCount(selectedMenuFeedback.ratingCount)
+                          : "No ratings yet"}
                       </p>
 
-                      {selectedMenuFeedback.comments.length > 0 ? (
+                      {selectedMenuFeedback?.comments.length ? (
                         <div className="mt-3 space-y-2">
                           {selectedMenuFeedback.comments.map((comment) => (
                             <article
@@ -4873,7 +5059,7 @@ export function CustomerDashboard({
                   <button
                     type="button"
                     onClick={handleAddCustomizedItem}
-                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 font-sans text-base font-black text-white shadow-lg shadow-[#123E26]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
+                    className="kada-glow-ring mt-5 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 font-sans text-base font-black text-white shadow-lg shadow-[#123E26]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
                   >
                     <ShoppingCart size={18} />
                     Add to Cart — {formatPrice(customizeTotal)}
@@ -4890,11 +5076,11 @@ export function CustomerDashboard({
           <button
             type="button"
             aria-label="Close tracking modal"
-            className="absolute inset-0 cursor-default"
+            className="kada-no-lift absolute inset-0 cursor-default"
             onClick={closeTrackingModal}
           />
 
-          <section className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[30px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
+          <section className="kada-soft-pop relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[30px] border border-[#DCCFB8] bg-[#FFF0DA] shadow-[0_-18px_40px_rgba(13,46,24,0.22)] md:max-w-3xl md:rounded-[30px] md:shadow-[0_24px_60px_rgba(13,46,24,0.22)]">
             <div
               className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-[#DCCFB8] md:hidden"
               onTouchStart={(event) => {
@@ -5158,7 +5344,7 @@ export function CustomerDashboard({
 
       {qrPhPayment ? (
         <div className="fixed inset-0 z-[72] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
+          <section className="kada-soft-pop w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -5179,7 +5365,7 @@ export function CustomerDashboard({
               </button>
             </div>
 
-            <div className="mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
+            <div className="kada-cart-pulse mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={qrPhPayment.qrCodeImageUrl}
@@ -5204,7 +5390,7 @@ export function CustomerDashboard({
             <button
               type="button"
               onClick={() => setQrPhPayment(null)}
-              className="mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
+              className="kada-glow-ring mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
             >
               Back to Order Tracker
             </button>
@@ -5237,7 +5423,7 @@ export function CustomerDashboard({
             aria-label="Close customer menu"
             className="flex h-11 w-11 items-center justify-center rounded-full border border-[#FFF0D8]/10 bg-[#0F441D]/80 text-[#FFF0D8] transition hover:bg-[#0F441D]"
           >
-            <X size={22} />
+            <ChevronLeft size={22} strokeWidth={1.9} />
           </button>
         </div>
 
@@ -5801,16 +5987,18 @@ export function CustomerDashboard({
       {isCartTrayOpen ? (
         <section
           className={`fixed bottom-24 left-4 right-4 z-50 rounded-[22px] border border-white/70 bg-white/95 p-2.5 text-[#0D2E18] shadow-[0_14px_30px_rgba(13,46,24,0.22)] backdrop-blur transition duration-300 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] ${
-            isCartPulseActive ? "scale-[1.03] ring-4 ring-[#F8EBCF]" : ""
+            isCartTrayClosing ? "kada-slide-down" : "kada-slide-up"
+          } ${
+            isCartPulseActive ? "kada-cart-pulse ring-4 ring-[#F8EBCF]" : ""
           }`}
         >
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => setIsCartTrayOpen(false)}
+              onClick={closeCartTray}
               aria-label="Collapse cart"
               className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.18)] ${
-                isCartPulseActive ? "animate-bounce" : ""
+                isCartPulseActive ? "kada-cart-pulse" : ""
               }`}
             >
               <ShoppingCart size={20} />
@@ -5858,11 +6046,11 @@ export function CustomerDashboard({
               return;
             }
 
-            setIsCartTrayOpen(true);
+            openCartTray();
           }}
           aria-label="Open cart"
-          className={`fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] transition duration-300 sm:bottom-6 sm:right-6 ${
-            isCartPulseActive ? "animate-bounce ring-4 ring-[#F8EBCF]" : ""
+          className={`kada-glow-ring fixed bottom-24 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#123E26] text-white shadow-[0_12px_24px_rgba(11,46,24,0.28)] transition duration-300 sm:bottom-6 sm:right-6 ${
+            isCartPulseActive ? "kada-cart-pulse ring-4 ring-[#F8EBCF]" : ""
           }`}
         >
           <ShoppingCart size={25} />
@@ -5876,7 +6064,7 @@ export function CustomerDashboard({
 
       {isLogoutConfirmOpen ? (
         <div className="fixed inset-0 z-[95] flex items-end justify-center bg-[#0D2E18]/45 px-3 backdrop-blur-sm sm:items-center sm:p-6">
-          <section className="w-full max-w-sm rounded-t-[24px] border border-[#DCCFB8] bg-white p-5 shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[24px]">
+          <section className="kada-soft-pop w-full max-w-sm rounded-t-[24px] border border-[#DCCFB8] bg-white p-5 shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[24px]">
             <h2 className="font-sans text-xl font-black text-[#0D2E18]">
               Log out?
             </h2>

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import imageCompression from "browser-image-compression";
 import Cropper, { type Area } from "react-easy-crop";
 import type * as React from "react";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,21 +26,6 @@ type MenuFormState = {
   isAvailable: boolean;
 };
 
-type MenuPerformance = {
-  item: string;
-  orders: number;
-  rating: number;
-  revenue: number;
-};
-
-type MenuSignal = {
-  label: string;
-  orders: number;
-  rating: number;
-  revenue: number;
-  tone: "strong" | "steady" | "watch" | "muted";
-};
-
 const emptyMenuForm: MenuFormState = {
   id: null,
   name: "",
@@ -51,7 +36,7 @@ const emptyMenuForm: MenuFormState = {
 };
 
 const adminMenuCategories: Array<{ value: MenuCategory; label: string }> = [
-  { value: "coffee", label: "Coffee" },
+  { value: "coffee", label: "Latte" },
   { value: "non-coffee", label: "Non-Coffee" },
   { value: "pastries", label: "Pastries" },
   { value: "latte-series", label: "Latte Series" },
@@ -75,7 +60,7 @@ function peso(value: number) {
 }
 
 function formatCategory(category: string) {
-  if (category === "coffee") return "Coffee";
+  if (category === "coffee") return "Latte";
   if (category === "non-coffee") return "Non-Coffee";
   if (category === "latte-series") return "Latte Series";
   if (category === "premium-blends") return "Premium Blends";
@@ -92,58 +77,6 @@ function EmptyState({ label }: { label: string }) {
     <div className="rounded-[18px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-4 py-8 text-center font-sans text-sm text-[#8C7A64]">
       {label}
     </div>
-  );
-}
-
-function getMenuSignal(
-  item: AdminMenuItem,
-  performance: MenuPerformance | undefined,
-  maxOrders: number
-): MenuSignal {
-  if (!item.isAvailable) {
-    return {
-      label: "Paused",
-      orders: performance?.orders ?? 0,
-      rating: performance?.rating ?? 0,
-      revenue: performance?.revenue ?? 0,
-      tone: "muted",
-    };
-  }
-
-  const orders = performance?.orders ?? 0;
-  const rating = performance?.rating ?? 0;
-  const revenue = performance?.revenue ?? 0;
-  const orderRatio = maxOrders > 0 ? orders / maxOrders : 0;
-
-  if (orders === 0) {
-    return { label: "Untested", orders, rating, revenue, tone: "watch" };
-  }
-
-  if (orderRatio >= 0.7 || rating >= 4.5) {
-    return { label: "High Signal", orders, rating, revenue, tone: "strong" };
-  }
-
-  if (orderRatio >= 0.3 || rating >= 4) {
-    return { label: "Steady", orders, rating, revenue, tone: "steady" };
-  }
-
-  return { label: "Review", orders, rating, revenue, tone: "watch" };
-}
-
-function SignalChip({ signal }: { signal: MenuSignal }) {
-  const classes = {
-    strong: "bg-[#E6F2E8] text-[#0F441D]",
-    steady: "bg-[#FFF0DA] text-[#684B35]",
-    watch: "bg-[#FFF1EC] text-[#9C543D]",
-    muted: "bg-[#EFE8DC] text-[#7D6B55]",
-  };
-
-  return (
-    <span
-      className={`inline-flex w-fit rounded-full px-3 py-1 font-sans text-xs font-bold ${classes[signal.tone]}`}
-    >
-      {signal.label}
-    </span>
   );
 }
 
@@ -194,11 +127,9 @@ async function getCroppedImageFile(imageUrl: string, cropArea: Area) {
 }
 
 export function MenuView({
-  itemPerformance,
   menuItems,
   setMenuItems,
 }: {
-  itemPerformance: MenuPerformance[];
   menuItems: AdminMenuItem[];
   setMenuItems: React.Dispatch<React.SetStateAction<AdminMenuItem[]>>;
 }) {
@@ -206,6 +137,8 @@ export function MenuView({
   const [form, setForm] = useState<MenuFormState>(emptyMenuForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<AdminMenuItem | null>(null);
   const [menuMessage, setMenuMessage] = useState("");
   const [menuError, setMenuError] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -216,31 +149,6 @@ export function MenuView({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("all");
-  const performanceByName = useMemo(
-    () =>
-      new Map(
-        itemPerformance.map((item) => [item.item.trim().toLowerCase(), item])
-      ),
-    [itemPerformance]
-  );
-  const maxPerformanceOrders = Math.max(
-    1,
-    ...itemPerformance.map((item) => item.orders)
-  );
-  const menuSignals = useMemo(
-    () =>
-      new Map(
-        menuItems.map((item) => [
-          item.id,
-          getMenuSignal(
-            item,
-            performanceByName.get(item.name.trim().toLowerCase()),
-            maxPerformanceOrders
-          ),
-        ])
-      ),
-    [maxPerformanceOrders, menuItems, performanceByName]
-  );
   const filteredMenuItems = useMemo(() => {
     const keyword = menuSearch.trim().toLowerCase();
 
@@ -443,6 +351,17 @@ export function MenuView({
     }));
   }
 
+  function openDeleteConfirm(item: AdminMenuItem) {
+    setMenuMessage("");
+    setMenuError("");
+    setItemToDelete(item);
+  }
+
+  function closeDeleteConfirm() {
+    if (isDeleting) return;
+    setItemToDelete(null);
+  }
+
   function syncMenuItem(savedItem: AdminMenuItem) {
     setMenuItems((current) => {
       const itemExists = current.some((item) => item.id === savedItem.id);
@@ -517,6 +436,63 @@ export function MenuView({
     }
   }
 
+  async function deleteMenuItem() {
+    if (!itemToDelete) return;
+
+    setIsDeleting(true);
+    setMenuMessage("");
+    setMenuError("");
+
+    try {
+      const response = await fetch(
+        `/api/admin/menu?id=${encodeURIComponent(itemToDelete.id)}`,
+        {
+          method: "DELETE",
+        }
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        const message =
+          result.error ||
+          "Menu item was not deleted. It may already be used in an order.";
+        setMenuError(message);
+        showToast({
+          title: "Menu item not deleted",
+          description: message,
+          variant: "error",
+        });
+        return;
+      }
+
+      setMenuItems((current) =>
+        current.filter((item) => item.id !== itemToDelete.id)
+      );
+      setMenuMessage(`${itemToDelete.name} deleted.`);
+      showToast({
+        title: "Menu item deleted",
+        description: `${itemToDelete.name} was removed from Menu Management.`,
+        variant: "success",
+      });
+
+      if (form.id === itemToDelete.id) {
+        closeForm();
+      }
+
+      setItemToDelete(null);
+    } catch {
+      const message = "Something went wrong while deleting the menu item.";
+      setMenuError(message);
+      showToast({
+        title: "Menu item not deleted",
+        description: message,
+        variant: "error",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
@@ -574,24 +550,20 @@ export function MenuView({
       </div>
 
       <div className="overflow-x-auto rounded-[18px] border border-[#DCCFB8] bg-white">
-        <div className="min-w-[940px]">
-        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
+        <div className="min-w-[900px]">
+        <div className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_1fr] gap-6 px-6 py-4 font-sans text-sm font-bold uppercase text-[#0D2E18]">
           <span>Item</span>
           <span>Category</span>
           <span>Price</span>
           <span>Status</span>
-          <span>Signal</span>
           <span>Action</span>
         </div>
 
         <div className="divide-y divide-[#EFE3CF]">
-          {filteredMenuItems.map((item) => {
-            const signal = menuSignals.get(item.id) ?? getMenuSignal(item, undefined, 1);
-
-            return (
+          {filteredMenuItems.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_0.9fr_0.7fr] items-center gap-6 px-6 py-4 font-sans text-sm"
+                className="grid grid-cols-[1.5fr_1fr_0.7fr_0.9fr_1fr] items-center gap-6 px-6 py-4 font-sans text-sm"
               >
               <div className="flex items-center gap-3">
                 <div className="flex aspect-square h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F4EA]">
@@ -620,13 +592,6 @@ export function MenuView({
               >
                 {item.isAvailable ? "Available" : "Not Available"}
               </span>
-              <div>
-                <SignalChip signal={signal} />
-                <p className="mt-1 font-sans text-xs text-[#8C7A64]">
-                  {signal.orders} orders
-                </p>
-              </div>
-
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -635,10 +600,17 @@ export function MenuView({
                 >
                   Edit
                 </button>
+                <button
+                  type="button"
+                  onClick={() => openDeleteConfirm(item)}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#C55432] bg-[#FFF1EC] px-4 py-2 font-semibold text-[#9C543D] transition hover:bg-[#FBE1D8]"
+                >
+                  <Trash2 size={15} strokeWidth={1.9} />
+                  Delete
+                </button>
               </div>
             </div>
-            );
-          })}
+          ))}
 
           {filteredMenuItems.length === 0 ? (
             <EmptyState label="No matching menu items" />
@@ -810,6 +782,23 @@ export function MenuView({
                 Cancel
               </button>
 
+              {form.id ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentItem = menuItems.find((item) => item.id === form.id);
+
+                    if (currentItem) {
+                      openDeleteConfirm(currentItem);
+                    }
+                  }}
+                  className="mr-auto inline-flex items-center justify-center gap-2 rounded-[14px] border border-[#C55432] bg-[#FFF1EC] px-6 py-3 font-sans text-sm font-bold text-[#9C543D] transition hover:bg-[#FBE1D8]"
+                >
+                  <Trash2 size={16} strokeWidth={1.9} />
+                  Delete
+                </button>
+              ) : null}
+
               <button
                 type="submit"
                 disabled={isSaving || isUploadingImage}
@@ -833,6 +822,56 @@ export function MenuView({
           </form>
         </div>
       ) : null}
+
+      <Dialog open={Boolean(itemToDelete)} onOpenChange={(open) => {
+        if (!open) {
+          closeDeleteConfirm();
+        }
+      }}>
+        <DialogContent className="font-sans">
+          <DialogHeader className="border-b border-[#EFE3CF] px-5 py-4">
+            <DialogDescription className="font-bold uppercase tracking-[0.16em] text-[#9C543D]">
+              Delete menu item
+            </DialogDescription>
+            <DialogTitle>Remove this item?</DialogTitle>
+          </DialogHeader>
+
+          <div className="px-5 py-5">
+            <p className="font-sans text-sm leading-6 text-[#684B35]">
+              {itemToDelete
+                ? `${itemToDelete.name} will be removed from Menu Management.`
+                : "This menu item will be removed."}
+            </p>
+            <p className="mt-3 rounded-[14px] border border-[#E8C5B8] bg-[#FFF1EC] px-4 py-3 font-sans text-sm font-semibold text-[#9C543D]">
+              This action cannot be undone.
+            </p>
+          </div>
+
+          <DialogFooter className="border-t border-[#EFE3CF] px-5 py-4">
+            <button
+              type="button"
+              onClick={closeDeleteConfirm}
+              disabled={isDeleting}
+              className="rounded-[14px] border border-[#D6C6AC] px-6 py-3 font-sans text-sm font-bold text-[#684B35] transition hover:bg-[#FFF8EF] disabled:opacity-60"
+            >
+              Keep Item
+            </button>
+            <button
+              type="button"
+              onClick={deleteMenuItem}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-[#9C543D] px-6 py-3 font-sans text-sm font-bold text-white transition hover:bg-[#7F402D] disabled:opacity-60"
+            >
+              {isDeleting ? (
+                <LoadingSpinner className="h-4 w-4" label="Deleting menu item" />
+              ) : (
+                <Trash2 size={16} strokeWidth={1.9} />
+              )}
+              {isDeleting ? "Deleting..." : "Delete Item"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(cropImageUrl)}

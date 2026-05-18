@@ -281,10 +281,554 @@ body {
   animation: kada-loading-drop 620ms ease-in-out 1.08s infinite alternate;
 }
 
+@keyframes kada-soft-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kada-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-cart-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 12px 24px rgba(13, 46, 24, 0.2);
+  }
+  42% {
+    transform: scale(1.045);
+    box-shadow: 0 18px 34px rgba(13, 46, 24, 0.28);
+  }
+}
+
+@keyframes kada-soft-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes kada-slide-down {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes kada-tab-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-scrim-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes kada-scrim-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes kada-notification-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kada-notification-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+}
+
+@keyframes kada-notification-enter-desktop {
+  0% {
+    opacity: 0;
+    transform: translateX(24px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes kada-notification-exit-desktop {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(22px) scale(0.985);
+  }
+}
+
+@keyframes kada-menu-group-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-menu-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kada-admin-sidebar-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes kada-admin-header-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-admin-card-top-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-admin-card-right-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes kada-admin-content-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-admin-skeleton-shimmer {
+  0% {
+    background-position: 140% 0;
+  }
+  100% {
+    background-position: -140% 0;
+  }
+}
+
+@keyframes kada-staff-sidebar-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes kada-staff-header-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-staff-toolbar-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-staff-column-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-staff-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kada-staff-drawer-enter-mobile {
+  0% {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kada-staff-drawer-enter-desktop {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.kada-admin-sidebar-enter {
+  animation: none;
+}
+
+.kada-admin-header-enter {
+  animation: kada-admin-header-enter 420ms cubic-bezier(0.22, 1, 0.36, 1)
+    260ms both;
+}
+
+.kada-admin-card-top-enter {
+  animation: kada-admin-card-top-enter 380ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-admin-card-right-enter {
+  animation: kada-admin-card-right-enter 420ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-admin-content-enter {
+  animation: kada-admin-content-enter 420ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-admin-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 248, 239, 0.58) 0%,
+    rgba(220, 207, 184, 0.36) 38%,
+    rgba(255, 248, 239, 0.68) 76%
+  );
+  background-size: 240% 100%;
+  animation: kada-admin-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.kada-admin-refreshing {
+  position: relative;
+}
+
+.kada-admin-refreshing::after {
+  animation: kada-admin-skeleton-shimmer 1.15s ease-in-out infinite;
+  background-image: linear-gradient(
+    110deg,
+    rgba(255, 248, 239, 0) 0%,
+    rgba(255, 240, 218, 0.52) 48%,
+    rgba(255, 248, 239, 0) 100%
+  );
+  background-size: 220% 100%;
+  border-radius: 24px;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 10;
+}
+
+.kada-staff-sidebar-enter {
+  animation: none;
+}
+
+.kada-staff-header-enter {
+  animation: kada-staff-header-enter 380ms cubic-bezier(0.22, 1, 0.36, 1)
+    240ms both;
+}
+
+.kada-staff-toolbar-enter {
+  animation: kada-staff-toolbar-enter 340ms cubic-bezier(0.22, 1, 0.36, 1)
+    340ms both;
+}
+
+.kada-staff-column-enter {
+  animation: kada-staff-column-enter 360ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-staff-card-enter {
+  animation: kada-staff-card-enter 300ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-staff-drawer-enter {
+  animation: kada-staff-drawer-enter-mobile 320ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-staff-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 248, 239, 0.64) 0%,
+    rgba(220, 207, 184, 0.34) 42%,
+    rgba(255, 248, 239, 0.74) 80%
+  );
+  background-size: 240% 100%;
+  animation: kada-admin-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.kada-motion-root :where(button:not(:disabled), a[href]) {
+  transition-duration: 180ms;
+  transition-property:
+    background-color, border-color, box-shadow, color, opacity, transform;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.kada-motion-root :where(button:not(:disabled), a[href]):active {
+  transform: translateY(0) scale(0.985);
+}
+
+.kada-motion-root :where(button:not(:disabled), a[href]) > svg,
+.kada-motion-root :where(button:not(:disabled), a[href]) [data-kada-motion-icon] {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kada-hover-lift {
+  transition-duration: 220ms;
+  transition-property:
+    background-color, border-color, box-shadow, color, opacity, transform;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kada-press {
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.kada-press:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.kada-soft-pop {
+  animation: kada-soft-pop 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-slide-up {
+  animation: kada-slide-up 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-glow-ring {
+  box-shadow:
+    0 12px 24px rgba(13, 46, 24, 0.18),
+    0 0 0 0 rgba(255, 240, 218, 0);
+}
+
+.kada-cart-pulse {
+  animation: kada-cart-pulse 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-soft-out {
+  animation: kada-soft-out 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-slide-down {
+  animation: kada-slide-down 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-tab-enter {
+  animation: kada-tab-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kada-scrim-in {
+  animation: kada-scrim-in 180ms ease-out both;
+}
+
+.kada-scrim-out {
+  animation: kada-scrim-out 220ms ease-in both;
+}
+
+.kada-notification-enter {
+  animation: kada-notification-enter 320ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-notification-exit {
+  animation: kada-notification-exit 220ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-menu-group-enter {
+  animation: kada-menu-group-enter 300ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-menu-card-enter {
+  animation: kada-menu-card-enter 300ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.kada-mobile-tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .kada-motion-root :where(button:not(:disabled), a[href]):hover,
+  .kada-hover-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  .kada-motion-root :where(button:not(:disabled), a[href]):hover > svg,
+  .kada-motion-root
+    :where(button:not(:disabled), a[href]):hover
+    [data-kada-motion-icon] {
+    transform: translateY(-1px) scale(1.05);
+  }
+
+  .kada-motion-root .kada-no-lift:hover,
+  .kada-motion-root .kada-no-lift:active {
+    transform: none;
+  }
+
+  .kada-hover-lift:hover {
+    box-shadow: 0 16px 34px rgba(13, 46, 24, 0.14);
+  }
+
+  .kada-glow-ring:hover {
+    box-shadow:
+      0 16px 34px rgba(13, 46, 24, 0.24),
+      0 0 0 4px rgba(255, 240, 218, 0.46);
+  }
+}
+
 @media (min-width: 640px) {
   .kada-loading-drop {
     height: 0.82rem;
     width: 0.82rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .kada-notification-enter {
+    animation-name: kada-notification-enter-desktop;
+  }
+
+  .kada-notification-exit {
+    animation-name: kada-notification-exit-desktop;
+  }
+}
+
+@media (min-width: 1024px) {
+  .kada-admin-sidebar-enter {
+    animation: kada-admin-sidebar-enter 520ms cubic-bezier(0.22, 1, 0.36, 1)
+      80ms both;
+  }
+
+  .kada-staff-sidebar-enter {
+    animation: kada-staff-sidebar-enter 500ms cubic-bezier(0.22, 1, 0.36, 1)
+      80ms both;
+  }
+}
+
+@media (min-width: 640px) {
+  .kada-staff-drawer-enter {
+    animation-name: kada-staff-drawer-enter-desktop;
   }
 }
 
@@ -301,8 +845,47 @@ body {
   .kada-loading-wheel,
   .kada-brand-dissolve,
   .kada-brand-emerge,
-  .kada-loading-exit {
+  .kada-loading-exit,
+  .kada-soft-pop,
+  .kada-slide-up,
+  .kada-cart-pulse,
+  .kada-soft-out,
+  .kada-slide-down,
+  .kada-tab-enter,
+  .kada-scrim-in,
+  .kada-scrim-out,
+  .kada-notification-enter,
+  .kada-notification-exit,
+  .kada-notification-enter-desktop,
+  .kada-notification-exit-desktop,
+  .kada-menu-group-enter,
+  .kada-menu-card-enter,
+  .kada-admin-sidebar-enter,
+  .kada-admin-header-enter,
+  .kada-admin-card-top-enter,
+  .kada-admin-card-right-enter,
+  .kada-admin-content-enter,
+  .kada-admin-skeleton,
+  .kada-admin-refreshing::after,
+  .kada-staff-sidebar-enter,
+  .kada-staff-header-enter,
+  .kada-staff-toolbar-enter,
+  .kada-staff-column-enter,
+  .kada-staff-card-enter,
+  .kada-staff-drawer-enter,
+  .kada-staff-skeleton {
     animation: none;
+  }
+
+  .kada-motion-root :where(button:not(:disabled), a[href]),
+  .kada-motion-root :where(button:not(:disabled), a[href]) > svg,
+  .kada-motion-root
+    :where(button:not(:disabled), a[href])
+    [data-kada-motion-icon],
+  .kada-hover-lift,
+  .kada-press {
+    transition: none;
+    transform: none;
   }
 
   .kada-progress-path {

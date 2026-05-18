@@ -17,7 +17,7 @@ import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type DateRange = "today" | "yesterday" | "custom" | "all";
 
-const pageSize = 40;
+const pageSize = 20;
 
 function manilaDate(offsetDays = 0) {
   const base = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
@@ -140,6 +140,60 @@ function formatDateTime(value: string) {
   });
 }
 
+function HistoryPagination({
+  page,
+  pageCount,
+  isLoading,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) {
+    return null;
+  }
+
+  const pages = Array.from({ length: pageCount }, (_, index) => index);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(0, page - 1))}
+        disabled={isLoading || page === 0}
+        className="h-10 rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-bold text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Prev
+      </button>
+      {pages.map((pageIndex) => (
+        <button
+          key={pageIndex}
+          type="button"
+          onClick={() => onPageChange(pageIndex)}
+          disabled={isLoading || pageIndex === page}
+          className={`h-10 min-w-10 rounded-full px-4 font-sans text-sm font-black transition hover:-translate-y-0.5 ${
+            pageIndex === page
+              ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_10px_18px_rgba(13,46,24,0.18)]"
+              : "border border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
+          } disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70`}
+        >
+          {pageIndex + 1}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
+        disabled={isLoading || page >= pageCount - 1}
+        className="h-10 rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-bold text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 function getPaymentMethodLabel(order: StaffOrder) {
   if (order.payment_method === "online") return "Online";
   if (order.payment_method === "gcash") return "GCash";
@@ -181,9 +235,7 @@ export function StaffOrderHistory() {
   const [customTo, setCustomTo] = useState(manilaDate());
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
@@ -192,6 +244,7 @@ export function StaffOrderHistory() {
     () => orders.reduce((sum, order) => sum + order.total_amount, 0),
     [orders]
   );
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const completedCount = useMemo(
     () => orders.filter((order) => order.status === "completed" || order.status === "delivered").length,
     [orders]
@@ -229,17 +282,13 @@ export function StaffOrderHistory() {
   );
 
   const loadHistory = useCallback(
-    async (nextPage = 0, mode: "replace" | "append" = "replace") => {
+    async (nextPage = 0) => {
       if (dateRange === "custom" && (!customFrom || !customTo)) {
         return;
       }
 
       setError("");
-      if (mode === "append") {
-        setIsLoadingMore(true);
-      } else {
-        setIsLoading(true);
-      }
+      setIsLoading(true);
 
       try {
         const response = await fetch(
@@ -257,12 +306,9 @@ export function StaffOrderHistory() {
           return;
         }
 
-        setOrders((current) =>
-          mode === "append" ? [...current, ...(result.orders ?? [])] : result.orders ?? []
-        );
+        setOrders(result.orders ?? []);
         setPage(result.page ?? nextPage);
         setTotalCount(result.count ?? 0);
-        setHasMore(Boolean(result.hasMore));
       } catch {
         setError("Something went wrong while loading order history.");
         showToast({
@@ -272,15 +318,14 @@ export function StaffOrderHistory() {
         });
       } finally {
         setIsLoading(false);
-        setIsLoadingMore(false);
       }
     },
     [buildParams, customFrom, customTo, dateRange, showToast]
   );
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      loadHistory(0, "replace");
+      const timeoutId = window.setTimeout(() => {
+      loadHistory(0);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
@@ -399,7 +444,7 @@ export function StaffOrderHistory() {
 
               <button
                 type="button"
-                onClick={() => loadHistory(0, "replace")}
+                onClick={() => loadHistory(0)}
                 disabled={isLoading}
                 className="inline-flex h-11 items-center justify-center rounded-full border border-[#D6C6AC] bg-white px-4 font-sans text-sm font-bold text-[#684B35] transition hover:border-[#0D2E18] disabled:opacity-60"
               >
@@ -509,7 +554,7 @@ export function StaffOrderHistory() {
                   key={order.id}
                   type="button"
                   onClick={() => setSelectedOrder(order)}
-                  className={`grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition last:border-b-0 hover:bg-[#FFF8EF] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] lg:items-center ${
+                  className={`grid w-full gap-3 border-b border-[#EFE3CF] px-4 py-3 text-left transition last:border-b-0 hover:-translate-y-0.5 hover:bg-[#FFF8EF] hover:shadow-[0_8px_18px_rgba(104,75,53,0.08)] lg:grid-cols-[1.05fr_1.3fr_0.9fr_0.85fr_0.85fr] lg:items-center ${
                     isSelected ? "bg-[#FBFFF7] shadow-[inset_4px_0_0_#0D2E18]" : ""
                   }`}
                 >
@@ -566,19 +611,12 @@ export function StaffOrderHistory() {
             : null}
         </section>
 
-        {hasMore ? (
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              onClick={() => loadHistory(page + 1, "append")}
-              disabled={isLoadingMore}
-              className="inline-flex h-11 items-center gap-2 rounded-full border border-[#D6C6AC] bg-white px-5 font-sans text-sm font-bold text-[#684B35] transition hover:border-[#0D2E18] disabled:opacity-60"
-            >
-              {isLoadingMore ? <Loader2 size={16} className="animate-spin" /> : null}
-              {isLoadingMore ? "Loading..." : "Load More"}
-            </button>
-          </div>
-        ) : null}
+        <HistoryPagination
+          page={page}
+          pageCount={pageCount}
+          isLoading={isLoading}
+          onPageChange={loadHistory}
+        />
         </div>
       </section>
 

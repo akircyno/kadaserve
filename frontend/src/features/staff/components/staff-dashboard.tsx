@@ -54,6 +54,59 @@ const finalStatuses: OrderStatus[] = [
   "cancelled",
   "expired",
 ];
+const sessionSummaryPageSize = 8;
+
+function StaffInlinePagination({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Prev
+      </button>
+      {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+        (pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => onPageChange(pageNumber)}
+            disabled={pageNumber === page}
+            className={`h-9 min-w-9 rounded-full px-3 font-sans text-xs font-black transition hover:-translate-y-0.5 ${
+              pageNumber === page
+                ? "bg-[#0D2E18] text-[#FFF0DA] shadow-[0_8px_16px_rgba(13,46,24,0.16)]"
+                : "border border-[#D6C6AC] bg-white text-[#684B35] hover:border-[#0D2E18]"
+            } disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70`}
+          >
+            {pageNumber}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+        disabled={page === pageCount}
+        className="h-9 rounded-full border border-[#D6C6AC] bg-white px-3 font-sans text-xs font-black text-[#684B35] transition hover:-translate-y-0.5 hover:border-[#0D2E18] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
 
 
 const boardColumns: Array<{
@@ -523,6 +576,73 @@ function getExpiredOrderLabel(status: OrderStatus) {
   return status === "expired" ? "Auto-expired after 45m" : null;
 }
 
+function StaffQueueSkeleton() {
+  return (
+    <div className="mt-4 space-y-3" aria-busy="true" aria-label="Loading order queue">
+      <div className="kada-staff-toolbar-enter rounded-[22px] border border-[#DCCFB8] bg-white/90 p-3 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div
+                key={`queue-summary-skeleton-${index}`}
+                className="kada-staff-skeleton h-10 w-28 rounded-full border border-[#EFE3CF]"
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={`queue-filter-skeleton-${index}`}
+                className="kada-staff-skeleton h-10 w-24 rounded-full border border-[#EFE3CF]"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 2xl:items-start">
+        {Array.from({ length: 5 }).map((_, columnIndex) => (
+          <section
+            key={`queue-column-skeleton-${columnIndex}`}
+            className="kada-staff-column-enter rounded-[18px] border border-[#DCCFB8] bg-white/70 p-2.5 shadow-[0_8px_18px_rgba(104,75,53,0.05)]"
+            style={{ animationDelay: `${430 + columnIndex * 55}ms` }}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="space-y-2">
+                <div className="kada-staff-skeleton h-3 w-24 rounded-full" />
+                <div className="kada-staff-skeleton h-2.5 w-32 rounded-full" />
+              </div>
+              <div className="kada-staff-skeleton h-7 w-9 rounded-full" />
+            </div>
+
+            <div className="space-y-2.5">
+              {Array.from({ length: 2 }).map((_, cardIndex) => (
+                <div
+                  key={`queue-card-skeleton-${columnIndex}-${cardIndex}`}
+                  className="rounded-[16px] border border-[#EFE3CF] bg-[#FFF8EF] p-3"
+                >
+                  <div className="kada-staff-skeleton h-1.5 rounded-full" />
+                  <div className="mt-3 flex items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <div className="kada-staff-skeleton h-5 w-24 rounded-full" />
+                      <div className="kada-staff-skeleton h-3 w-28 rounded-full" />
+                    </div>
+                    <div className="kada-staff-skeleton h-6 w-20 rounded-full" />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <div className="kada-staff-skeleton h-7 w-20 rounded-full" />
+                    <div className="kada-staff-skeleton h-7 w-16 rounded-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function StaffDashboard() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -554,6 +674,7 @@ export function StaffDashboard() {
   const [staffToast, setStaffToast] = useState("");
   const [error, setError] = useState("");
   const [expiringOrderIds, setExpiringOrderIds] = useState<string[]>([]);
+  const [sessionSummaryPage, setSessionSummaryPage] = useState(1);
 
   const activeOrders = useMemo(() => {
     return orders.filter((order) => !finalStatuses.includes(order.status));
@@ -566,9 +687,16 @@ export function StaffDashboard() {
         (first, second) =>
           new Date(second.ordered_at).getTime() -
           new Date(first.ordered_at).getTime()
-      )
-      .slice(0, 8);
+      );
   }, [orders]);
+  const sessionSummaryPageCount = Math.max(
+    1,
+    Math.ceil(historyOrders.length / sessionSummaryPageSize)
+  );
+  const paginatedHistoryOrders = useMemo(() => {
+    const start = (sessionSummaryPage - 1) * sessionSummaryPageSize;
+    return historyOrders.slice(start, start + sessionSummaryPageSize);
+  }, [historyOrders, sessionSummaryPage]);
 
 
   useEffect(() => {
@@ -578,6 +706,12 @@ export function StaffDashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [search]);
+
+  useEffect(() => {
+    setSessionSummaryPage((current) =>
+      Math.min(Math.max(1, current), sessionSummaryPageCount)
+    );
+  }, [sessionSummaryPageCount]);
 
   const filteredOrders = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
@@ -881,7 +1015,7 @@ export function StaffDashboard() {
     if (!headerContainerRef.current) return null;
 
     const controls = (
-      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto">
+      <div className="kada-staff-toolbar-enter flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto">
         <button
           type="button"
           onClick={() => loadOrders({ showLoading: true })}
@@ -916,7 +1050,7 @@ export function StaffDashboard() {
           </label>
 
           {isSearchFocused && searchSuggestions.length > 0 ? (
-            <div className="absolute left-0 right-0 top-12 z-40 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-white shadow-[0_14px_28px_rgba(13,46,24,0.14)]">
+            <div className="kada-staff-card-enter absolute left-0 right-0 top-12 z-40 overflow-hidden rounded-[16px] border border-[#DCCFB8] bg-white shadow-[0_14px_28px_rgba(13,46,24,0.14)]">
               <p className="border-b border-[#EFE3CF] px-3 py-2 font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#684B35]">
                 Suggested searches
               </p>
@@ -1396,12 +1530,14 @@ export function StaffDashboard() {
     }
   }
 
+  const shouldShowQueueSkeleton = !isBootstrapped && (isLoading || !error);
+
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
       <TopbarControlsPortal />
 
       <section className="px-4 py-3 lg:px-5">
-        <div className="rounded-[22px] border border-[#DCCFB8] bg-white/90 p-3 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
+        <div className="kada-staff-toolbar-enter rounded-[22px] border border-[#DCCFB8] bg-white/90 p-3 shadow-[0_8px_20px_rgba(104,75,53,0.05)]">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] px-4">
@@ -1476,18 +1612,9 @@ export function StaffDashboard() {
           </div>
         ) : null}
 
-        {!isBootstrapped ? (
-          <div className="mt-4 rounded-[18px] border border-[#DCCFB8] bg-white p-4 shadow-[0_6px_16px_rgba(104,75,53,0.05)]">
-            <p className="font-sans text-lg font-semibold text-[#0D2E18]">
-              Load staff orders
-            </p>
-            <p className="mt-1 font-sans text-sm text-[#6E5D49]">
-              Click Refresh Orders to fetch live active orders from Supabase.
-            </p>
-          </div>
-        ) : null}
+        {shouldShowQueueSkeleton ? <StaffQueueSkeleton /> : null}
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 2xl:items-start">
+        <div className={`${shouldShowQueueSkeleton ? "hidden" : "grid"} mt-3 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 2xl:items-start`}>
           {boardColumns.map((column, index) => {
             const columnOrders = groupedOrders[column.key] ?? [];
             const isLastColumn = index === boardColumns.length - 1;
@@ -1495,7 +1622,8 @@ export function StaffDashboard() {
             return (
               <section
                 key={column.key}
-                className={`relative rounded-[18px] border p-2.5 shadow-[0_8px_18px_rgba(104,75,53,0.05)] ${column.header}`}
+                className={`kada-staff-column-enter relative rounded-[18px] border p-2.5 shadow-[0_8px_18px_rgba(104,75,53,0.05)] ${column.header}`}
+                style={{ animationDelay: `${430 + index * 55}ms` }}
               >
                 <div className="mb-2.5 flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -1534,12 +1662,12 @@ export function StaffDashboard() {
 
                 <div className="space-y-2.5">
                   {columnOrders.length === 0 ? (
-                    <div className="rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-3 py-5 text-center font-sans text-sm text-[#8C7A64]">
+                    <div className="kada-staff-card-enter rounded-[16px] border border-dashed border-[#D8C8AA] bg-[#FFF8EF] px-3 py-5 text-center font-sans text-sm text-[#8C7A64]">
                       No orders here
                     </div>
                   ) : null}
 
-                  {columnOrders.map((order) => {
+                  {columnOrders.map((order, orderIndex) => {
                     const items = formatOrderSummary(order);
                     const nextAction = getNextActionLabel(
                       order.order_type,
@@ -1564,9 +1692,10 @@ export function StaffDashboard() {
                       <article
                         key={order.id}
                         onClick={() => openOrder(order)}
-                        className={`group/order cursor-pointer overflow-hidden rounded-[16px] border transition hover:-translate-y-0.5 hover:border-[#CBB68F] hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)] ${
+                        className={`kada-staff-card-enter group/order cursor-pointer overflow-hidden rounded-[16px] border transition hover:-translate-y-0.5 hover:border-[#CBB68F] hover:shadow-[0_14px_28px_rgba(104,75,53,0.12)] ${
                           isSelectedOrder ? "ring-2 ring-[#0D2E18]/35" : ""
                         } ${heatmapStyle.card}`}
+                        style={{ animationDelay: `${520 + index * 55 + orderIndex * 28}ms` }}
                       >
                         <div
                           className={`h-1.5 ${
@@ -1803,7 +1932,7 @@ export function StaffDashboard() {
               </div>
             ) : null}
 
-            {historyOrders.map((order) => {
+            {paginatedHistoryOrders.map((order) => {
               const items = formatOrderSummary(order);
               const expiredOrderLabel = getExpiredOrderLabel(order.status);
 
@@ -1811,7 +1940,7 @@ export function StaffDashboard() {
                 <article
                   key={order.id}
                   onClick={() => openOrder(order)}
-                  className="cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:shadow-[0_10px_20px_rgba(104,75,53,0.09)]"
+                  className="cursor-pointer rounded-[18px] border border-[#DCCFB8] bg-white p-3 shadow-[0_6px_16px_rgba(104,75,53,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(104,75,53,0.11)] active:translate-y-0"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -1910,6 +2039,11 @@ export function StaffDashboard() {
               );
             })}
           </div>
+          <StaffInlinePagination
+            page={sessionSummaryPage}
+            pageCount={sessionSummaryPageCount}
+            onPageChange={setSessionSummaryPage}
+          />
         </div>
       </section>
 
@@ -1920,7 +2054,7 @@ export function StaffDashboard() {
             onClick={closeOrder}
           />
 
-          <aside className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[94vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:inset-y-0 sm:left-auto sm:right-0 sm:mx-0 sm:h-screen sm:max-h-none sm:w-[30rem] sm:rounded-none sm:rounded-l-[22px] sm:border-y-0 sm:border-r-0">
+          <aside className="kada-staff-drawer-enter fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[94vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] border border-[#DCCFB8] bg-[#FFF8EF] shadow-[-18px_0_40px_rgba(13,46,24,0.18)] sm:inset-y-0 sm:left-auto sm:right-0 sm:mx-0 sm:h-screen sm:max-h-none sm:w-[30rem] sm:rounded-none sm:rounded-l-[22px] sm:border-y-0 sm:border-r-0">
             <div className={`h-1.5 ${selectedOrderHeatmapStyle.rail || getQueueAccent(selectedOrder.status)}`} />
             <div className="border-b border-[#DCCFB8] bg-white px-4 py-3">
               <div className="flex items-start justify-between gap-4">

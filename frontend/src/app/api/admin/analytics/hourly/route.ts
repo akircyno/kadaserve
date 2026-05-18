@@ -124,7 +124,7 @@ function buildHourlyAnalytics(
   const updatedAt = new Date().toISOString();
 
   orders
-    .filter((order) => order.status !== "cancelled")
+    .filter((order) => !["cancelled", "expired"].includes(order.status))
     .forEach((order) => {
       const orderDate = formatDateKey(order.ordered_at);
       const dayOfWeek = formatDayOfWeek(order.ordered_at);
@@ -321,6 +321,7 @@ export async function POST() {
       .from("orders")
       .select("id, ordered_at, total_amount, status")
       .neq("status", "cancelled")
+      .neq("status", "expired")
       .returns<AnalyticsOrderRow[]>();
 
     if (ordersError) {

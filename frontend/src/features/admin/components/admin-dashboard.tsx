@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
-  Clock,
-  X,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Coffee,
   Menu,
@@ -23,7 +23,6 @@ import { DashboardView } from "@/features/admin/components/admin-overview-view";
 import { OrdersView } from "@/features/admin/components/admin-orders-view";
 import {
   PeakHoursView,
-  TimeSeriesView,
   type PeakHourWindow,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
@@ -32,6 +31,7 @@ import {
   getAdminOrderTotals,
   getAdminOrdersMetricLabel,
   getAdminReportOrders,
+  isValidAdminOrder,
 } from "@/lib/admin-order-totals";
 import {
   getAnalyticsOrderCount,
@@ -68,17 +68,6 @@ function formatOrderItems(order: StaffOrder) {
   return order.order_items
     .map((item) => `${item.menu_items?.name ?? "Menu item"} x ${item.quantity}`)
     .join(", ");
-}
-
-function normalizeWeekday(value: string) {
-  const day = new Date(value)
-    .toLocaleDateString("en-US", { weekday: "short" })
-    .toUpperCase();
-
-  if (day === "TUE") return "TUES";
-  if (day === "THU") return "THURS";
-
-  return day;
 }
 
 function formatHourNumber(hour: number) {
@@ -168,7 +157,7 @@ type AdminSearchSuggestion = {
   targetDemandView?: DemandView;
 };
 
-type DemandView = "orders" | "time-series" | "peak-hours";
+type DemandView = "orders" | "peak-hours";
 type CustomerIntelligenceView = "item-ranking" | "feedback";
 
 const demandViews: Array<{
@@ -178,17 +167,12 @@ const demandViews: Array<{
 }> = [
   {
     key: "orders",
-    label: "Orders",
+    label: "Monthly Orders",
     description: "All order records",
   },
   {
-    key: "time-series",
-    label: "Time Series",
-    description: "Hourly demand volume",
-  },
-  {
     key: "peak-hours",
-    label: "Peak Hours",
+    label: "Monthly Traffic",
     description: "Busiest service windows",
   },
 ];
@@ -536,7 +520,7 @@ export function AdminDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshingAnalytics, setIsRefreshingAnalytics] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -545,15 +529,15 @@ export function AdminDashboard() {
   const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
   const [storeStatusError, setStoreStatusError] = useState("");
 
-  const nonCancelledOrders = useMemo(
-    () => orders.filter((order) => order.status !== "cancelled"),
+  const validOrders = useMemo(
+    () => orders.filter(isValidAdminOrder),
     [orders]
   );
 
   const dashboardTimeFilter = "month" as const;
   const dashboardOrders = useMemo(
-    () => getAdminReportOrders(nonCancelledOrders, { timeFilter: dashboardTimeFilter }),
-    [nonCancelledOrders]
+    () => getAdminReportOrders(validOrders, { timeFilter: dashboardTimeFilter }),
+    [validOrders]
   );
   const dashboardOrderTotals = useMemo(
     () => getAdminOrderTotals(dashboardOrders),
@@ -569,6 +553,29 @@ export function AdminDashboard() {
       })),
     [dashboardOrders]
   );
+  const dashboardOrderTypeDistribution = useMemo(() => {
+    const counts = {
+      Delivery: 0,
+      Pickup: 0,
+      "Walk-in": 0,
+    };
+
+    for (const order of dashboardOrders) {
+      if (order.order_type === "delivery") {
+        counts.Delivery += 1;
+      } else if (order.walkin_name?.trim()) {
+        counts["Walk-in"] += 1;
+      } else {
+        counts.Pickup += 1;
+      }
+    }
+
+    return [
+      { label: "Delivery", count: counts.Delivery },
+      { label: "Pickup", count: counts.Pickup },
+      { label: "Walk-in", count: counts["Walk-in"] },
+    ];
+  }, [dashboardOrders]);
   const syncMeta = isLoading
     ? "Syncing..."
     : `Auto-sync 15s${
@@ -662,7 +669,7 @@ export function AdminDashboard() {
       { item: string; orders: number; revenue: number; rating: number }
     >();
 
-    for (const order of nonCancelledOrders) {
+    for (const order of validOrders) {
       for (const item of order.order_items) {
         const itemName = item.menu_items?.name ?? "Menu item";
         const current =
@@ -686,7 +693,7 @@ export function AdminDashboard() {
     return Array.from(ranking.values()).sort(
       (first, second) => second.orders - first.orders
     );
-  }, [nonCancelledOrders]);
+  }, [validOrders]);
   const analyticsItemRanking = useMemo(
     () =>
       sortAnalyticsItemsByGlobalRanking(analyticsItems)
@@ -749,25 +756,6 @@ export function AdminDashboard() {
         .includes(keyword)
     );
   }, [activeTab, customerIntelligenceView, debouncedSearch, feedbackRows]);
-  const weekdayCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const day of weekDays) counts.set(day, 0);
-
-    for (const order of nonCancelledOrders) {
-      const normalizedDay = normalizeWeekday(order.ordered_at);
-
-      if (counts.has(normalizedDay)) {
-        counts.set(normalizedDay, (counts.get(normalizedDay) ?? 0) + 1);
-      }
-    }
-
-    return weekDays.map((day) => ({
-      day,
-      orders: counts.get(day) ?? 0,
-    }));
-  }, [nonCancelledOrders]);
-
   const analyticsHourlyCounts = useMemo(() => {
     if (analyticsHourly.length === 0) {
       return null;
@@ -806,14 +794,14 @@ export function AdminDashboard() {
         orders: Number(row.order_count ?? 0),
       }));
   }, [analyticsWeekly]);
-  const weeklyTrendLabel = weeklyTrendCounts.at(-1)?.label ?? "Demand Growth";
+  const weeklyTrendLabel = weeklyTrendCounts.at(-1)?.label ?? "Weekly Trend";
   const hourlyCounts = useMemo(() => {
     if (analyticsHourlyCounts) {
       return analyticsHourlyCounts;
     }
 
     return hourNumbers.map((hour) => {
-      const ordersInHour = nonCancelledOrders.filter(
+      const ordersInHour = validOrders.filter(
         (order) => getManilaHour(order.ordered_at) === hour
       ).length;
 
@@ -822,21 +810,7 @@ export function AdminDashboard() {
         orders: ordersInHour,
       };
     });
-  }, [analyticsHourlyCounts, nonCancelledOrders]);
-  const scopedHourlyCounts = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-
-    if (activeTab !== "demand" || demandView !== "time-series" || !keyword) {
-      return hourlyCounts;
-    }
-
-    return hourlyCounts.filter((item) =>
-      [item.label, `${item.orders} orders`]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword)
-    );
-  }, [activeTab, debouncedSearch, demandView, hourlyCounts]);
+  }, [analyticsHourlyCounts, validOrders]);
   const scopedPeakHourWindows = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
@@ -858,11 +832,6 @@ export function AdminDashboard() {
   }, [activeTab, debouncedSearch, demandView, peakHourWindows]);
 
   const maxHourlyOrders = Math.max(1, ...hourlyCounts.map((item) => item.orders));
-  const maxScopedHourlyOrders = Math.max(
-    1,
-    ...scopedHourlyCounts.map((item) => item.orders)
-  );
-  const maxWeekdayOrders = Math.max(1, ...weekdayCounts.map((item) => item.orders));
   const maxItemOrders = Math.max(1, ...displayItemRanking.map((item) => item.orders));
   const maxScopedItemOrders = Math.max(
     1,
@@ -877,6 +846,8 @@ export function AdminDashboard() {
     totalRevenue: dashboardOrderTotals.totalRevenue,
     averageOrderValue: dashboardOrderTotals.averageOrderValue,
     averageRating,
+    orderTypeDistribution: dashboardOrderTypeDistribution,
+    monthlyRevenue: dashboardOrderTotals.totalRevenue,
     weekdayCounts: dashboardWeekdayCounts,
   };
   const dashboardTotalOrdersLabel = getAdminOrdersMetricLabel(dashboardTimeFilter);
@@ -897,18 +868,18 @@ export function AdminDashboard() {
     if (activeTab === "dashboard") {
       [
         [dashboardTotalOrdersLabel, "admin-total-orders"],
-        ["Gross Sales", "admin-gross-sales"],
+        ["Monthly Revenue", "admin-gross-sales"],
         ["Avg Order Value", "admin-avg-order-value"],
         ["Average Rating", "admin-average-rating"],
         ["Orders - Week", "admin-orders-week"],
-        ["Peak Hours", "admin-peak-hours"],
-        ["Demand Growth", "admin-weekly-trend"],
+        ["Monthly Order Types", "admin-order-type-distribution"],
+        ["Weekly Trend", "admin-weekly-trend"],
         ["Top Items", "admin-top-items"],
         ["Satisfaction", "admin-satisfaction"],
-        ["Hourly Order Volume", "admin-hourly-order-volume"],
+        ["Orders by Hour", "admin-hourly-demand-curve"],
         ["Admin Snapshot", "admin-decision-support"],
-        ["Demand Signal", "admin-decision-support"],
-        ["Preference Signal", "admin-decision-support"],
+        ["Demand Help", "admin-decision-support"],
+        ["Customer Help", "admin-decision-support"],
       ].forEach(([label, targetId]) =>
         addSuggestion({
           category: "Dashboard",
@@ -986,7 +957,7 @@ export function AdminDashboard() {
           });
         }
       } else {
-        ["Peak Hours", "Hourly Order Volume", "5PM", "8PM", "10PM", "12AM"].forEach(
+        ["Peak Hours", "5PM", "8PM", "10PM", "12AM"].forEach(
           (item) => addSuggestion({ category: "Time Metrics", label: item, query: item })
         );
       }
@@ -1189,7 +1160,7 @@ export function AdminDashboard() {
         fetch("/api/admin/analytics/hourly", { method: "GET" }),
         fetch("/api/admin/analytics/weekly", { method: "GET" }),
         fetch("/api/admin/analytics/items", { method: "GET" }),
-        fetch("/api/admin/analytics/peak-hours", { method: "GET" }),
+        fetch("/api/admin/analytics/peak-hours?range=month", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
@@ -1348,9 +1319,12 @@ export function AdminDashboard() {
         return;
       }
 
-      const peakHoursResponse = await fetch("/api/admin/analytics/peak-hours", {
-        method: "POST",
-      });
+      const peakHoursResponse = await fetch(
+        "/api/admin/analytics/peak-hours?range=month",
+        {
+          method: "POST",
+        }
+      );
       const peakHoursResult = (await peakHoursResponse.json()) as { error?: string };
 
       if (!peakHoursResponse.ok) {
@@ -1371,7 +1345,7 @@ export function AdminDashboard() {
       });
       showToast({
         title: "Analytics refreshed",
-        description: "Dashboard and demand signals are now up to date.",
+        description: "Dashboard and demand data are now up to date.",
         variant: "success",
       });
     } catch {
@@ -1433,26 +1407,23 @@ export function AdminDashboard() {
 
       <div
         className={`min-h-screen transition-all duration-300 lg:grid ${isSidebarOpen
-          ? "lg:grid-cols-[238px_minmax(0,1fr)]"
-          : "lg:grid-cols-[88px_minmax(0,1fr)]"
+          ? "lg:grid-cols-[280px_minmax(0,1fr)]"
+          : "lg:grid-cols-[82px_minmax(0,1fr)]"
           }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[238px] flex-col overflow-hidden rounded-r-[24px] bg-[#083C1F] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          className={`kada-admin-sidebar-enter fixed inset-y-0 left-0 z-50 flex h-screen w-[280px] flex-col overflow-hidden rounded-r-[24px] bg-[#083C1F] text-[#FFF0DA] shadow-[12px_0_34px_rgba(13,46,24,0.16)] transition-transform duration-300 lg:sticky lg:top-0 lg:w-auto lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
             }`}
         >
           <div
-            className={`flex items-center gap-3 pt-7 ${isSidebarOpen ? "justify-between px-5" : "justify-center px-3"
+            className={`flex items-center gap-3 pb-5 pt-10 ${isSidebarOpen ? "justify-between px-7" : "justify-center px-2"
               }`}
           >
             <div className={`flex items-center gap-2.5 ${isSidebarOpen ? "" : "hidden"}`}>
               {isSidebarOpen && (
                 <div>
-                  <p className="font-sans text-[1.4rem] font-black leading-none text-[#FFF8EF]">
+                  <p className="font-sans text-[2rem] font-black leading-none text-[#FFF0D8]">
                     KadaServe
-                  </p>
-                  <p className="mt-0.5 font-sans text-[0.6rem] font-bold uppercase tracking-[0.18em] text-[#E8D9BE]/78">
-                    Admin Panel
                   </p>
                 </div>
               )}
@@ -1462,14 +1433,18 @@ export function AdminDashboard() {
               type="button"
               onClick={() => setIsSidebarOpen((current) => !current)}
               aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FFF0DA]/12 bg-[#FFF0DA]/8 text-[#FFF0DA] transition hover:bg-[#FFF0DA]/16"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#FFF0D8]/10 bg-[#0F441D]/80 text-[#FFF0D8] transition hover:bg-[#0F441D]"
             >
-              {isSidebarOpen ? <X size={18} strokeWidth={1.8} /> : <Menu size={18} strokeWidth={1.8} />}
+              {isSidebarOpen ? (
+                <ChevronLeft size={20} strokeWidth={1.9} />
+              ) : (
+                <ChevronRight size={20} strokeWidth={1.9} />
+              )}
             </button>
           </div>
 
           <nav
-            className={`mt-8 space-y-1.5 ${isSidebarOpen ? "px-3" : "px-2"
+            className={`mt-3 flex-1 space-y-2 ${isSidebarOpen ? "px-4" : "px-2"
               }`}
           >
             {adminTabs.map((tab) => {
@@ -1482,12 +1457,14 @@ export function AdminDashboard() {
                   type="button"
                   onClick={() => handleTabSelect(tab.key)}
                   title={tab.label}
-                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left font-sans text-xs font-semibold leading-tight transition ${isActive
-                    ? "rounded-[14px] bg-[#FFF0DA] text-[#0D2E18] shadow-[0_8px_24px_rgba(0,0,0,0.15)]"
-                    : "rounded-[14px] text-[#FFF0DA]/82 hover:bg-[#FFF0DA]/10 hover:text-[#FFF8EF]"
+                  className={`flex w-full items-center rounded-[14px] px-4 py-3.5 text-left font-sans text-base font-semibold leading-tight transition hover:-translate-y-0.5 active:translate-y-0 ${
+                    isSidebarOpen ? "gap-3" : "justify-center"
+                  } ${isActive
+                      ? "bg-[#FFF0DA] text-[#123E26] shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                      : "text-white/80 hover:bg-[#0F441D]/45 hover:text-white"
                     }`}
                 >
-                  <Icon size={18} className="shrink-0" />
+                  <Icon size={21} className="shrink-0" />
                   {isSidebarOpen ? (
                     tab.label
                   ) : (
@@ -1498,23 +1475,23 @@ export function AdminDashboard() {
             })}
           </nav>
 
-          <div className={`mt-auto pb-5 ${isSidebarOpen ? "px-3" : "px-2"}`}>
+          <div className={`mt-auto pb-5 ${isSidebarOpen ? "px-4" : "px-2"}`}>
             <button
               type="button"
               onClick={() => setIsLogoutConfirmOpen(true)}
               disabled={isLoggingOut}
               title="Logout"
-              className={`flex w-full items-center gap-2.5 rounded-[14px] border border-[#FFF0DA]/10 bg-[#FFF0DA]/6 px-3 py-2.5 font-sans text-xs font-semibold text-[#FFF0DA]/88 transition hover:bg-[#9C543D]/18 hover:text-[#FFF8EF] disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
+              className={`flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 font-sans text-base font-semibold text-white/80 transition hover:-translate-y-0.5 hover:bg-[#9C543D]/18 hover:text-[#FFF8EF] active:translate-y-0 disabled:opacity-60 ${isSidebarOpen ? "" : "justify-center"
                 }`}
             >
-              <LogOut size={18} strokeWidth={1.8} className="shrink-0" />
+              <LogOut size={21} strokeWidth={1.8} className="shrink-0" />
               {isSidebarOpen ? (isLoggingOut ? "Logging out..." : "Logout") : null}
             </button>
           </div>
         </aside>
 
         <section className="min-w-0 bg-[#FFF0DA]">
-          <header className="sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_4px_16px_rgba(104,75,53,0.04)] backdrop-blur">
+          <header className="kada-admin-header-enter sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_4px_16px_rgba(104,75,53,0.04)] backdrop-blur">
             <div className="grid gap-3 px-4 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
               {/* LEFT: Header Title & Description */}
               <div className="flex items-center gap-4">
@@ -1652,24 +1629,24 @@ export function AdminDashboard() {
                 itemRanking={displayItemRanking}
                 maxHourlyOrders={maxHourlyOrders}
                 maxItemOrders={maxItemOrders}
-                maxWeekdayOrders={maxWeekdayOrders}
-                nonCancelledOrders={nonCancelledOrders}
                 weeklyTrendCounts={weeklyTrendCounts}
                 weeklyTrendLabel={weeklyTrendLabel}
-                grossIncomeSales={dashboardMetrics.totalRevenue}
+                orderTypeDistribution={dashboardMetrics.orderTypeDistribution}
+                monthlyRevenue={dashboardMetrics.monthlyRevenue}
                 averageRating={dashboardMetrics.averageRating}
                 totalOrders={dashboardMetrics.totalOrders}
                 totalOrdersLabel={dashboardTotalOrdersLabel}
                 search={debouncedSearch}
                 weekdayCounts={dashboardMetrics.weekdayCounts}
+                isLoading={isLoading}
+                isRefreshing={isRefreshingAnalytics}
               />
             ) : null}
 
             {activeTab === "demand" ? (
               <div className="space-y-4">
-                <section className="rounded-[24px] border border-[#DCCFB8] bg-[#FFFCF7] px-5 py-4 shadow-[0_14px_34px_rgba(75,50,24,0.08)] sm:px-6">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                      <div className="grid gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                      <div className="grid gap-1 rounded-full border border-[#DCCFB8] bg-[#FFF8EF] p-1 sm:grid-cols-2">
                         {demandViews.map((view) => {
                           const isActive = demandView === view.key;
                           return (
@@ -1688,26 +1665,12 @@ export function AdminDashboard() {
                           );
                         })}
                       </div>
-
-                      <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[#DCCFB8] bg-white px-4 py-2.5 font-sans text-xs font-bold text-[#684B35]">
-                        <Clock size={13} strokeWidth={1.8} />
-                        5PM-12AM
-                      </span>
-                  </div>
-                </section>
+                </div>
 
                 {demandView === "orders" ? (
                   <OrdersView
                     filteredOrders={filteredOrders}
                     onOpenOrder={setSelectedOrder}
-                  />
-                ) : null}
-
-                {demandView === "time-series" ? (
-                  <TimeSeriesView
-                    dateLabel={analyticsHourlyDateLabel}
-                    hourlyCounts={scopedHourlyCounts}
-                    maxHourlyOrders={maxScopedHourlyOrders}
                   />
                 ) : null}
 
@@ -1758,7 +1721,6 @@ export function AdminDashboard() {
 
             {activeTab === "menu" ? (
               <MenuView
-                itemPerformance={displayItemRanking}
                 menuItems={scopedMenuItems}
                 setMenuItems={setMenuItems}
               />
