@@ -26,7 +26,7 @@ import {
   type PeakHourWindow,
 } from "@/features/admin/components/admin-time-analytics-views";
 import { adminTabs, type AdminTab } from "@/features/admin/data/admin-tabs";
-import type { StoreStatusPayload } from "@/lib/store-status";
+import type { StoreOverrideStatus, StoreStatusPayload } from "@/lib/store-status";
 import {
   getAdminOrderTotals,
   getAdminOrdersMetricLabel,
@@ -43,6 +43,14 @@ import type { StaffOrder } from "@/types/orders";
 
 const weekDays = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"];
 const hourNumbers = [17, 18, 19, 20, 21, 22, 23, 0];
+const adminStoreOverrideOptions: Array<{
+  label: string;
+  value: Extract<StoreOverrideStatus, "auto" | "open" | "closed">;
+}> = [
+  { label: "Auto", value: "auto" },
+  { label: "Open", value: "open" },
+  { label: "Closed", value: "closed" },
+];
 
 function getTimeOfDay() {
   const hour = new Date().getHours();
@@ -167,7 +175,7 @@ const demandViews: Array<{
 }> = [
   {
     key: "orders",
-    label: "Monthly Orders",
+    label: "Orders",
     description: "All order records",
   },
   {
@@ -528,6 +536,7 @@ export function AdminDashboard() {
   const [error, setError] = useState("");
   const [storeStatus, setStoreStatus] = useState<StoreStatusPayload | null>(null);
   const [storeStatusError, setStoreStatusError] = useState("");
+  const [isStoreStatusUpdating, setIsStoreStatusUpdating] = useState(false);
 
   const validOrders = useMemo(
     () => orders.filter(isValidAdminOrder),
@@ -1083,6 +1092,59 @@ export function AdminDashboard() {
     }
   }, [applyStoreStatus, showToast]);
 
+  async function handleStoreOverrideChange(
+    overrideStatus: Extract<StoreOverrideStatus, "auto" | "open" | "closed">
+  ) {
+    setIsStoreStatusUpdating(true);
+    setStoreStatusError("");
+
+    try {
+      const response = await fetch("/api/store-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ overrideStatus }),
+      });
+      const result = (await response.json()) as StoreStatusPayload & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        const message = result.error || "Failed to update store status.";
+        setStoreStatusError(message);
+        showToast({
+          title: "Store status not updated",
+          description: message,
+          variant: "error",
+        });
+        return;
+      }
+
+      applyStoreStatus(result);
+      showToast({
+        title: "Store status updated",
+        description:
+          overrideStatus === "closed"
+            ? "Customers cannot checkout while orders are closed."
+            : overrideStatus === "open"
+            ? "Customers can checkout while orders are open."
+            : "Store hours now control checkout automatically.",
+        variant: "success",
+      });
+    } catch {
+      const message = "Something went wrong while updating store status.";
+      setStoreStatusError(message);
+      showToast({
+        title: "Store status not updated",
+        description: message,
+        variant: "error",
+      });
+    } finally {
+      setIsStoreStatusUpdating(false);
+    }
+  }
+
   useEffect(() => {
     loadAdminData({ showLoading: true });
     loadStoreStatus();
@@ -1394,6 +1456,13 @@ export function AdminDashboard() {
     }
   }
 
+  const adminStoreOverrideValue =
+    storeStatus?.overrideStatus === "open" ||
+    storeStatus?.overrideStatus === "closed" ||
+    storeStatus?.overrideStatus === "auto"
+      ? storeStatus.overrideStatus
+      : "auto";
+
   return (
     <main className="min-h-screen bg-[#FFF0DA] text-[#0D2E18]">
       {isSidebarOpen ? (
@@ -1599,6 +1668,51 @@ export function AdminDashboard() {
                     {storeStatus?.label ?? "Loading"}
                   </span>
 
+                  <div className="hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] lg:flex">
+                    {adminStoreOverrideOptions.map((option) => {
+                      const isActive = adminStoreOverrideValue === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => void handleStoreOverrideChange(option.value)}
+                          disabled={isStoreStatusUpdating}
+                          aria-pressed={isActive}
+                          className={`rounded-full px-2.5 py-1 font-sans text-[0.68rem] font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                            isActive
+                              ? option.value === "closed"
+                                ? "bg-[#9C543D] text-white shadow-[0_4px_10px_rgba(156,84,61,0.2)]"
+                                : "bg-[#0D2E18] text-white shadow-[0_4px_10px_rgba(13,46,24,0.18)]"
+                              : "text-[#684B35] hover:bg-[#FFF0DA]"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <select
+                    value={adminStoreOverrideValue}
+                    onChange={(event) =>
+                      void handleStoreOverrideChange(
+                        event.target.value as Extract<
+                          StoreOverrideStatus,
+                          "auto" | "open" | "closed"
+                        >
+                      )
+                    }
+                    disabled={isStoreStatusUpdating}
+                    aria-label="Store order status"
+                    className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-2.5 font-sans text-[0.68rem] font-black text-[#684B35] outline-none transition disabled:opacity-60 lg:hidden"
+                  >
+                    {adminStoreOverrideOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <p className="font-sans text-[11px] text-[#8C7A64]">

@@ -209,18 +209,11 @@ const menuFilters: Array<{
 ];
 
 const sugarLevels = [
-  { label: "0%", value: 0 },
-  { label: "25%", value: 25 },
-  { label: "50%", value: 50 },
-  { label: "75%", value: 75 },
   { label: "100%", value: 100 },
-];
-
-const iceLevels = [
-  { label: "No Ice", value: "no_ice" },
-  { label: "Less", value: "less" },
-  { label: "Regular", value: "regular" },
-  { label: "Extra", value: "extra" },
+  { label: "75%", value: 75 },
+  { label: "50%", value: 50 },
+  { label: "25%", value: 25 },
+  { label: "0% (No Sugar)", value: 0 },
 ];
 
 const sizes = [
@@ -583,7 +576,10 @@ function getOrderReceipt(order: CustomerOrder) {
   };
 }
 
-function getReopenableQrPhPayment(order: CustomerOrder | null) {
+function getReopenableQrPhPayment(
+  order: CustomerOrder | null,
+  nowMs: number | null
+) {
   if (
     !order ||
     order.status !== "pending_payment" ||
@@ -598,7 +594,7 @@ function getReopenableQrPhPayment(order: CustomerOrder | null) {
     ? new Date(order.paymongo_qr_expires_at).getTime()
     : 0;
 
-  if (expiresAt && expiresAt <= Date.now()) {
+  if (expiresAt && nowMs !== null && expiresAt <= nowMs) {
     return null;
   }
 
@@ -608,9 +604,10 @@ function getReopenableQrPhPayment(order: CustomerOrder | null) {
     qrCodeLabel: order.paymongo_qr_code_label || "KadaServe QR Ph",
     totalAmount: order.total_amount,
     expiresAt: order.paymongo_qr_expires_at ?? null,
-    expiresInMinutes: expiresAt
-      ? Math.max(1, Math.ceil((expiresAt - Date.now()) / 60000))
-      : 30,
+    expiresInMinutes:
+      expiresAt && nowMs !== null
+        ? Math.max(1, Math.ceil((expiresAt - nowMs) / 60000))
+        : 30,
   };
 }
 
@@ -624,7 +621,7 @@ function getQrPhMinutesLeft(payment: ReopenableQrPhPayment, nowMs: number) {
   return Math.max(0, Math.ceil((expiresAt - nowMs) / 60000));
 }
 
-function hasExpiredQrPhPayment(order: CustomerOrder | null) {
+function hasExpiredQrPhPayment(order: CustomerOrder | null, nowMs: number | null) {
   if (
     !order ||
     order.status !== "pending_payment" ||
@@ -635,7 +632,7 @@ function hasExpiredQrPhPayment(order: CustomerOrder | null) {
     return false;
   }
 
-  return new Date(order.paymongo_qr_expires_at).getTime() <= Date.now();
+  return nowMs !== null && new Date(order.paymongo_qr_expires_at).getTime() <= nowMs;
 }
 
 function isAwaitingOnlinePayment(order: CustomerOrder | null) {
@@ -1088,7 +1085,6 @@ export function CustomerDashboard({
     useState<CustomerMenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [sugarLevel, setSugarLevel] = useState(50);
-  const [iceLevel, setIceLevel] = useState("regular");
   const [size, setSize] = useState("medium");
   const [temperature, setTemperature] = useState("iced");
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
@@ -1152,13 +1148,16 @@ export function CustomerDashboard({
   const [profileSettingsMessage, setProfileSettingsMessage] = useState("");
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isNotificationsClosing, setIsNotificationsClosing] = useState(false);
-  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    return readStoredOrderIds(notificationsReadStorageKey);
-  });
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const [dismissedFeedbackOrderIds, setDismissedFeedbackOrderIds] = useState<
+    string[]
+  >([]);
+  const [maybeLaterFeedbackOrders, setMaybeLaterFeedbackOrders] = useState<
+    Record<string, number>
+  >({});
+  const [hasLoadedBrowserPrefs, setHasLoadedBrowserPrefs] = useState(false);
+  const [clientNow, setClientNow] = useState<number | null>(null);
+  const [greeting, setGreeting] = useState("Good day");
   const profileInitials = getInitials(displayProfileName);
   const contentScrollerRef = useRef<HTMLDivElement>(null);
   const fullMenuRef = useRef<HTMLDivElement>(null);
@@ -1198,19 +1197,18 @@ export function CustomerDashboard({
   }, [feedbackItems]);
 
   const isFeedbackPromptAllowed = useCallback((orderId: string) => {
-    const dismissedOrderIds = readStoredOrderIds(
-      feedbackDismissedOrdersStorageKey
-    );
-
-    if (dismissedOrderIds.includes(orderId)) {
+    if (!hasLoadedBrowserPrefs) {
       return false;
     }
 
-    const maybeLaterOrders = readMaybeLaterOrders();
-    const maybeLaterUntil = Number(maybeLaterOrders[orderId] ?? 0);
+    if (dismissedFeedbackOrderIds.includes(orderId)) {
+      return false;
+    }
+
+    const maybeLaterUntil = Number(maybeLaterFeedbackOrders[orderId] ?? 0);
 
     return !Number.isFinite(maybeLaterUntil) || maybeLaterUntil <= Date.now();
-  }, []);
+  }, [dismissedFeedbackOrderIds, hasLoadedBrowserPrefs, maybeLaterFeedbackOrders]);
 
   const hideFeedbackPrompt = useCallback(() => {
     setIsFeedbackPromptOpen(false);
@@ -1240,10 +1238,11 @@ export function CustomerDashboard({
   }, [getFeedbackItemForOrder, isFeedbackPromptAllowed, resetFeedbackForm]);
 
   function markFeedbackOrderDismissed(orderId: string) {
-    writeStoredOrderIds(feedbackDismissedOrdersStorageKey, [
-      ...readStoredOrderIds(feedbackDismissedOrdersStorageKey),
-      orderId,
-    ]);
+    setDismissedFeedbackOrderIds((current) => {
+      const next = [...new Set([...current, orderId])];
+      writeStoredOrderIds(feedbackDismissedOrdersStorageKey, next);
+      return next;
+    });
   }
 
   const syncCustomerOrders = useCallback(async () => {
@@ -1295,6 +1294,21 @@ export function CustomerDashboard({
       illustration: "feedback",
     },
   ];
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+
+    setClientNow(Date.now());
+    setGreeting(
+      hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+    );
+    setReadNotificationIds(readStoredOrderIds(notificationsReadStorageKey));
+    setDismissedFeedbackOrderIds(
+      readStoredOrderIds(feedbackDismissedOrdersStorageKey)
+    );
+    setMaybeLaterFeedbackOrders(readMaybeLaterOrders());
+    setHasLoadedBrowserPrefs(true);
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1646,8 +1660,8 @@ export function CustomerDashboard({
         : null,
     [customerOrders, trackingOrderId]
   );
-  const trackingQrPhPayment = getReopenableQrPhPayment(trackingOrder);
-  const isTrackingQrPhExpired = hasExpiredQrPhPayment(trackingOrder);
+  const trackingQrPhPayment = getReopenableQrPhPayment(trackingOrder, clientNow);
+  const isTrackingQrPhExpired = hasExpiredQrPhPayment(trackingOrder, clientNow);
   const isTrackingOnlinePaymentPending = isAwaitingOnlinePayment(trackingOrder);
   const canCancelTrackingOrder = canCustomerCancelOrder(trackingOrder);
   const cancelUnavailableMessage = trackingOrder
@@ -1845,8 +1859,12 @@ export function CustomerDashboard({
   ).length;
 
   useEffect(() => {
+    if (!hasLoadedBrowserPrefs) {
+      return;
+    }
+
     writeStoredOrderIds(notificationsReadStorageKey, readNotificationIds);
-  }, [readNotificationIds]);
+  }, [hasLoadedBrowserPrefs, readNotificationIds]);
 
   useEffect(() => {
     document.body.style.overflow =
@@ -2039,13 +2057,6 @@ export function CustomerDashboard({
   const firstName = isGuest
     ? "there"
     : displayProfileName.split(/\s+/)[0] || "there";
-  const currentHour = new Date().getHours();
-  const greeting =
-    currentHour < 12
-      ? "Good morning"
-      : currentHour < 18
-      ? "Good afternoon"
-      : "Good evening";
   const feedbackMissionAvailable = feedbackItems.length > 0;
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -2171,6 +2182,8 @@ export function CustomerDashboard({
   const selectedAddonRows = addons.filter((item) =>
     selectedAddons.includes(item.value)
   );
+  const canCustomizeSelectedSugar =
+    selectedMenuItem !== null && selectedMenuItem.category !== "pastries";
   const cartTotal = cartItems.reduce(
     (sum, item) => sum + (item.base_price + item.addon_price) * item.quantity,
     0
@@ -2186,8 +2199,7 @@ export function CustomerDashboard({
     : 0;
   const selectedNutrition = selectedMenuItem
     ? getMenuItemNutrition(selectedMenuItem, {
-        sugarLevel:
-          selectedMenuItem.has_sugar_level === false ? 100 : sugarLevel,
+        sugarLevel: canCustomizeSelectedSugar ? sugarLevel : 100,
         size,
         addons: selectedAddons,
       })
@@ -2237,7 +2249,6 @@ export function CustomerDashboard({
   function resetCustomization(item: CustomerMenuItem) {
     setQuantity(1);
     setSugarLevel(50);
-    setIceLevel(item.has_ice_level === false ? "no_ice" : "regular");
     setSize(item.has_size_option === false ? "medium" : "medium");
     setTemperature(item.has_temp_option === false ? "iced" : "iced");
     setSelectedAddons([]);
@@ -2314,8 +2325,8 @@ export function CustomerDashboard({
       category: selectedMenuItem.category,
       base_price: selectedMenuItem.base_price,
       quantity,
-      sugar_level: selectedMenuItem.has_sugar_level === false ? 100 : sugarLevel,
-      ice_level: selectedMenuItem.has_ice_level === false ? null : iceLevel,
+      sugar_level: canCustomizeSelectedSugar ? sugarLevel : 100,
+      ice_level: null,
       size,
       temperature,
       addons: selectedAddons,
@@ -2352,8 +2363,8 @@ export function CustomerDashboard({
       category: item.category,
       base_price: item.base_price,
       quantity: 1,
-      sugar_level: item.has_sugar_level === false ? 100 : 50,
-      ice_level: item.has_ice_level === false ? null : "regular",
+      sugar_level: item.category === "pastries" ? 100 : 50,
+      ice_level: null,
       size: item.has_size_option === false ? "medium" : "medium",
       temperature: item.has_temp_option === false ? "iced" : "iced",
       addons: [],
@@ -2393,7 +2404,7 @@ export function CustomerDashboard({
         base_price: item.unit_price,
         quantity: item.quantity,
         sugar_level: 50,
-        ice_level: "regular",
+        ice_level: null,
         size: "medium",
         temperature: "iced",
         addons: [],
@@ -4748,14 +4759,15 @@ export function CustomerDashboard({
       ) : null}
 
       {selectedMenuItem ? (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0D2E18]/45 px-3 pb-0 pt-10 backdrop-blur-sm sm:items-center sm:p-6">
-          <section className="kada-soft-pop max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-t-[30px] border border-[#E5D6BB] bg-[#FFF8EF] shadow-[0_-18px_40px_rgba(13,46,24,0.18)] sm:rounded-[30px]">
-            <div className="flex items-start justify-between gap-4 border-b border-[#E8D9BE] px-5 py-4 sm:px-6">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0D2E18]/35 px-0 pb-0 pt-10 backdrop-blur-sm sm:items-center sm:px-5 sm:py-6">
+          <section className="kada-soft-pop max-h-[94vh] w-full max-w-3xl overflow-hidden rounded-t-[34px] border border-[#E5D6BB]/80 bg-[#FFF8EF] shadow-[0_-18px_42px_rgba(13,46,24,0.16)] sm:rounded-[34px] sm:shadow-[0_24px_64px_rgba(13,46,24,0.18)]">
+            <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-[#DDCBAA] sm:hidden" />
+            <div className="flex items-start justify-between gap-4 border-b border-[#E8D9BE]/80 px-5 py-4 sm:px-7">
               <div>
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#8A755D]">
+                <p className="font-sans text-[0.72rem] font-black uppercase tracking-[0.18em] text-[#8A755D]">
                   Customize Item
                 </p>
-                <h2 className="mt-1 font-sans text-3xl font-semibold leading-tight text-[#123E26] sm:text-4xl">
+                <h2 className="mt-1 font-sans text-2xl font-black leading-tight tracking-normal text-[#123E26] sm:text-4xl">
                   {selectedMenuItem.name}
                 </h2>
               </div>
@@ -4764,17 +4776,17 @@ export function CustomerDashboard({
                 type="button"
                 onClick={closeCustomizeModal}
                 aria-label="Close customization"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F3E6D1] text-[#123E26] transition hover:bg-[#E8D9BE]"
+                className="kada-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F3E6D1] text-[#123E26] shadow-[inset_0_0_0_1px_rgba(216,200,167,0.45)] transition hover:bg-[#E8D9BE]"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="max-h-[calc(92vh-5.5rem)] overflow-y-auto px-5 py-5 sm:px-6">
-              <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-                <div>
-                  <div className="flex flex-col gap-4 sm:flex-row">
-                    <div className="flex aspect-square h-44 w-44 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-6xl sm:h-52 sm:w-52">
+            <div className="max-h-[calc(94vh-6rem)] overflow-y-auto px-5 py-5 sm:px-7">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4 rounded-[30px] bg-[#FFF0DA]/60 p-3">
+                    <div className="flex aspect-square h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7F1E6] text-4xl sm:h-28 sm:w-28 sm:text-5xl">
                       {getMenuImage(selectedMenuItem) ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -4788,7 +4800,7 @@ export function CustomerDashboard({
                     </div>
 
                     <div className="flex-1">
-                      <span className="inline-flex rounded-full bg-white/80 px-3 py-1 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#2D7A40] shadow-sm">
+                      <span className="inline-flex rounded-full bg-white/80 px-3 py-1 font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#2D7A40]">
                         Available
                       </span>
                       <p className="mt-3 font-sans text-sm leading-6 text-[#6F634E]">
@@ -4801,13 +4813,40 @@ export function CustomerDashboard({
                     </div>
                   </div>
 
-                  <div className="mt-6 space-y-5">
+                  <div className="rounded-[30px] border border-[#E8D9BE]/80 bg-white/55 px-5 py-5 shadow-[0_10px_30px_rgba(104,75,53,0.06)]">
+                    <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
+                      Quantity
+                    </p>
+                    <div className="mt-3 inline-flex items-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] p-1 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQuantity((current) => Math.max(1, current - 1))
+                        }
+                        className="kada-press flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#123E26] shadow-[0_3px_10px_rgba(104,75,53,0.08)]"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span className="min-w-14 text-center font-sans text-lg font-black">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity((current) => current + 1)}
+                        className="kada-press flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#123E26] shadow-[0_3px_10px_rgba(104,75,53,0.08)]"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5 rounded-[30px] border border-[#E8D9BE]/80 bg-white/55 px-5 py-5 shadow-[0_10px_30px_rgba(104,75,53,0.06)]">
                     {selectedMenuItem.has_temp_option !== false ? (
                       <div>
                         <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#123E26]">
                           Temperature
                         </h3>
-                        <div className="mt-3 grid rounded-full border border-[#D8C8A7] bg-white p-1 sm:max-w-xs sm:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-2 rounded-full border border-[#D8C8A7] bg-white p-1 sm:max-w-xs">
                           {temperatures.map((item) => (
                             <button
                               key={item.value}
@@ -4826,7 +4865,7 @@ export function CustomerDashboard({
                       </div>
                     ) : null}
 
-                    {selectedMenuItem.has_sugar_level !== false ? (
+                    {canCustomizeSelectedSugar ? (
                       <div>
                         <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#123E26]">
                           Sugar Level
@@ -4850,53 +4889,29 @@ export function CustomerDashboard({
                       </div>
                     ) : null}
 
-                    {selectedMenuItem.has_ice_level !== false ? (
-                      <div>
-                        <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#123E26]">
-                          Ice Level
-                        </h3>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {iceLevels.map((item) => (
-                            <button
-                              key={item.value}
-                              type="button"
-                              onClick={() => setIceLevel(item.value)}
-                              className={`rounded-full border px-4 py-2 font-sans text-sm font-bold transition ${
-                                iceLevel === item.value
-                                  ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                  : "border-[#D8C8A7] bg-white text-[#684B35]"
-                              }`}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
                     {selectedMenuItem.has_size_option !== false ? (
                       <div>
                         <h3 className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#123E26]">
                           Size
                         </h3>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           {sizes.map((item) => (
                             <button
                               key={item.value}
                               type="button"
                               onClick={() => setSize(item.value)}
-                              className={`rounded-[18px] border p-4 text-left font-sans transition ${
+                              className={`rounded-full border px-4 py-2.5 text-left font-sans transition ${
                                 size === item.value
                                   ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
                                   : "border-[#D8C8A7] bg-white text-[#684B35]"
                               }`}
                             >
-                              <p className="font-black">{item.label}</p>
-                              <p className="mt-1 text-xs">
+                              <span className="font-black">{item.label}</span>
+                              <span className="ml-2 text-xs font-bold opacity-75">
                                 {item.price > 0
                                   ? `+${formatPrice(item.price)}`
-                                  : "No extra charge"}
-                              </p>
+                                  : "Free"}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -4905,39 +4920,12 @@ export function CustomerDashboard({
                   </div>
                 </div>
 
-                <aside className="rounded-[24px] border border-[#E1D0B2] bg-white/72 p-5">
-                  <div className="mt-5">
-                    <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
-                      Quantity
-                    </p>
-                    <div className="mt-2 inline-flex items-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] p-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuantity((current) => Math.max(1, current - 1))
-                        }
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#123E26]"
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span className="min-w-12 text-center font-sans text-lg font-black">
-                        {quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setQuantity((current) => current + 1)}
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#123E26]"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-5">
+                <aside className="rounded-[30px] border border-[#E8D9BE]/80 bg-gradient-to-b from-white/70 to-[#FFF0DA]/45 p-5 shadow-[0_10px_32px_rgba(104,75,53,0.07)]">
+                  <div>
                     <p className="font-sans text-sm font-bold uppercase tracking-[0.12em] text-[#8A755D]">
                       Add-ons
                     </p>
-                    <div className="mt-3 grid gap-2">
+                    <div className="mt-3 grid gap-2.5">
                       {addons.map((item) => {
                         const selected = selectedAddons.includes(item.value);
 
@@ -4946,10 +4934,10 @@ export function CustomerDashboard({
                             key={item.value}
                             type="button"
                             onClick={() => toggleAddon(item.value)}
-                            className={`flex items-center justify-between rounded-[16px] border px-4 py-3 font-sans text-sm font-bold transition ${
+                            className={`kada-press flex min-h-12 items-center justify-between rounded-[18px] border px-4 py-3 font-sans text-sm font-black transition ${
                               selected
-                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8]"
-                                : "border-[#D8C8A7] bg-white text-[#684B35]"
+                                ? "border-[#123E26] bg-[#123E26] text-[#FFF0D8] shadow-[0_8px_18px_rgba(18,62,38,0.14)]"
+                                : "border-[#D8C8A7] bg-[#FFFCF7] text-[#684B35] hover:border-[#BFA982]"
                             }`}
                           >
                             <span>{item.label}</span>
@@ -4967,7 +4955,7 @@ export function CustomerDashboard({
                   ) : null}
 
                   {selectedMenuItem ? (
-                    <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                    <div className="mt-5 rounded-[26px] border border-[#D8C8A7]/80 bg-[#FFF8EF]/80 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
@@ -5000,7 +4988,7 @@ export function CustomerDashboard({
                           {selectedMenuFeedback.comments.map((comment) => (
                             <article
                               key={`${comment.createdAt}-${comment.comment}`}
-                              className="rounded-[14px] bg-white px-3 py-2 font-sans"
+                              className="rounded-[18px] bg-white/80 px-3 py-2 font-sans"
                             >
                               <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.12em] text-[#8A755D]">
                                 <span>Anonymous</span>
@@ -5023,7 +5011,7 @@ export function CustomerDashboard({
                   ) : null}
 
                   {selectedNutrition ? (
-                    <div className="mt-5 rounded-[20px] border border-[#D8C8A7] bg-[#FFF8EF] p-4">
+                    <div className="mt-5 rounded-[26px] border border-[#D8C8A7]/80 bg-[#FFF8EF]/80 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-sans text-xs font-black uppercase tracking-[0.14em] text-[#8A755D]">
@@ -5038,7 +5026,7 @@ export function CustomerDashboard({
                         {nutritionMetricLabels.map((metric) => (
                           <div
                             key={metric.key}
-                            className="rounded-[14px] bg-white px-3 py-2 font-sans"
+                            className="rounded-[18px] bg-white/80 px-3 py-2 font-sans"
                           >
                             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A755D]">
                               {metric.label}
@@ -5059,7 +5047,7 @@ export function CustomerDashboard({
                   <button
                     type="button"
                     onClick={handleAddCustomizedItem}
-                    className="kada-glow-ring mt-5 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 font-sans text-base font-black text-white shadow-lg shadow-[#123E26]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
+                    className="kada-glow-ring mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#123E26] px-5 py-4 font-sans text-base font-black text-white shadow-lg shadow-[#123E26]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
                   >
                     <ShoppingCart size={18} />
                     Add to Cart — {formatPrice(customizeTotal)}

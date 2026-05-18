@@ -1,6 +1,6 @@
 # Demonstration Guide
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 ## Demo Story
 
@@ -140,7 +140,7 @@ Open admin.
 
 Show:
 
-- dashboard
+- dashboard decision-support overview with KPIs, weekly trend, hourly demand, order distribution, top sellers, ratings, insights, and attention alerts
 - demand growth
 - hourly order volume
 - popular items
@@ -159,3 +159,5 @@ Admin analytics explain what customers order, when demand is high, which items p
 - Say customer comments are anonymous in the public menu.
 - Say staff controls daily store status.
 - Say admin focuses on analytics and decision support.
+- Say the live Supabase database already has the base schema; current seed files are setup and patch scripts for active features.
+- Use `POSSIBLE_QUESTIONS_AND_ANSWERS.md` when preparing for reviewer follow-up questions.

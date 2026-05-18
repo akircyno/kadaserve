@@ -1,6 +1,6 @@
 # Group Defense Guide
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 ## Suggested Role Assignment
 
@@ -119,6 +119,15 @@ Feedback is not only a comment box. It becomes satisfaction and preference data 
 - Customer comments shown in the menu are anonymous.
 - Admin analytics are decision-support views.
 - Staff owns daily store status control.
+- The current seed files are setup and patch scripts; the live Supabase project already has the earlier base schema.
+
+## Reviewer Preparation
+
+Before rehearsal, each member should read:
+
+- `FINAL_DEFENSE_REVIEW.md` for the reviewer-focused system summary.
+- `POSSIBLE_QUESTIONS_AND_ANSWERS.md` for short panel answers.
+- `DEMONSTRATION_CHECKLIST.md` for final feature checks.
 
 ## Strong Closing Statement
 

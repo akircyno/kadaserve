@@ -25,13 +25,6 @@ const sugarLevels = [
   { label: "0% (No Sugar)", value: 0 },
 ];
 
-const iceLevels = [
-  { label: "No Ice", value: "no_ice" },
-  { label: "Less", value: "less" },
-  { label: "Regular", value: "regular" },
-  { label: "Extra", value: "extra" },
-];
-
 const sizes = [
   { label: "Small", value: "small", price: 0 },
   { label: "Medium", value: "medium", price: 0 },
@@ -79,7 +72,6 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
   const [quantity, setQuantity] = useState(1);
   const [sugarLevel, setSugarLevel] = useState(100);
-  const [iceLevel, setIceLevel] = useState("regular");
   const [size, setSize] = useState("medium");
   const [temperature, setTemperature] = useState("iced");
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
@@ -92,7 +84,6 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
     startTransition(() => {
       setQuantity(editingItem.quantity);
       setSugarLevel(editingItem.sugar_level);
-      setIceLevel(editingItem.ice_level ?? "regular");
       setSize(editingItem.size);
       setTemperature(editingItem.temperature);
       setSelectedAddons(editingItem.addons);
@@ -119,7 +110,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
   const selectedNutrition = useMemo(
     () =>
       getMenuItemNutrition(menuItem, {
-        sugarLevel: isPastry || !menuItem.has_sugar_level ? 100 : sugarLevel,
+        sugarLevel: isPastry ? 100 : sugarLevel,
         size: isPastry ? "medium" : size,
         addons: isPastry ? [] : selectedAddons,
       }),
@@ -142,7 +133,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
       base_price: menuItem.base_price,
       quantity,
       sugar_level: isPastry ? 100 : sugarLevel,
-      ice_level: isPastry || !menuItem.has_ice_level ? null : iceLevel,
+      ice_level: null,
       size: isPastry ? "regular" : size,
       temperature: isPastry ? "room" : temperature,
       addons: isPastry ? [] : selectedAddons,
@@ -238,7 +229,7 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
 
           <div className="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-[1.3fr_0.9fr]">
             <div className="space-y-6">
-              {!isPastry && menuItem.has_sugar_level && (
+              {!isPastry && (
                 <div>
                   <h2 className="text-lg font-bold">Sweetness Level</h2>
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -251,28 +242,6 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                         className={`kada-press rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
                           sugarLevel === item.value
                             ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8] shadow-[0_8px_18px_rgba(13,46,24,0.16)]"
-                            : "border-[#708061] bg-white/60 text-[#26402F]"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!isPastry && menuItem.has_ice_level && (
-                <div>
-                  <h2 className="text-lg font-bold">Ice Level</h2>
-                  <div className="mt-3 flex flex-wrap gap-3">
-                    {iceLevels.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => setIceLevel(item.value)}
-                        className={`kada-press rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                          iceLevel === item.value
-                            ? "border-[#123E26] bg-[#123E26] text-[#FFF1D8]"
                             : "border-[#708061] bg-white/60 text-[#26402F]"
                         }`}
                       >

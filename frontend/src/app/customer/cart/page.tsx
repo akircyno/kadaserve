@@ -32,7 +32,6 @@ import {
   getMenuItemNutrition,
   nutritionMetricLabels,
 } from "@/lib/nutrition";
-import type { CustomerOrder } from "@/types/orders";
 import type { StoreStatusPayload } from "@/lib/store-status";
 
 type CustomerAddress = {
@@ -43,32 +42,12 @@ type CustomerAddress = {
   is_default: boolean;
 };
 
-type QrPhPayment = {
-  orderId: string;
-  paymongoMode: "test" | "live";
-  qrCodeImageUrl: string;
-  qrCodeLabel: string;
-  totalAmount: number;
-  expiresAt: string | null;
-  expiresInMinutes: number;
-};
-
 const isPayMongoCheckoutEnabled =
   process.env.NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT === "true";
 const checkoutOrderTypeStorageKey = "kadaserve_checkout_order_type";
 
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
-}
-
-function getQrPhMinutesLeft(payment: QrPhPayment, nowMs: number) {
-  const expiresAt = payment.expiresAt ? new Date(payment.expiresAt).getTime() : 0;
-
-  if (!expiresAt) {
-    return payment.expiresInMinutes;
-  }
-
-  return Math.max(0, Math.ceil((expiresAt - nowMs) / 60000));
 }
 
 function formatAddonLabel(value: string) {
@@ -128,11 +107,6 @@ export default function CartPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isReturningToMenu, setIsReturningToMenu] = useState(false);
-  const [qrPhPayment, setQrPhPayment] = useState<QrPhPayment | null>(null);
-  const [qrCountdownNow, setQrCountdownNow] = useState(() => Date.now());
-  const qrPhMinutesLeft = qrPhPayment
-    ? getQrPhMinutesLeft(qrPhPayment, qrCountdownNow)
-    : 0;
 
   useEffect(() => {
     const savedOrderType = window.sessionStorage.getItem(
@@ -156,74 +130,6 @@ export default function CartPage() {
       return [...retainedIds, ...newIds];
     });
   }, [items]);
-
-  useEffect(() => {
-    if (!qrPhPayment) {
-      return;
-    }
-
-    const activeQrPayment = qrPhPayment;
-    let isActive = true;
-
-    async function syncQrOrderStatus() {
-      setQrCountdownNow(Date.now());
-
-      try {
-        const response = await fetch("/api/customer/orders", {
-          method: "GET",
-          cache: "no-store",
-        });
-        const result = (await response.json()) as {
-          orders?: CustomerOrder[];
-          error?: string;
-        };
-
-        if (!isActive || !response.ok) {
-          return;
-        }
-
-        const matchingOrder = result.orders?.find(
-          (order) => order.id === activeQrPayment.orderId
-        );
-
-        if (
-          matchingOrder?.payment_status === "paid" &&
-          matchingOrder.status !== "pending_payment"
-        ) {
-          setQrPhPayment(null);
-          showToast({
-            title: "Thank you for ordering",
-            description: `Order ${activeQrPayment.orderId.slice(0, 8).toUpperCase()} is paid and ready for tracking.`,
-            variant: "success",
-          });
-          router.replace(`/customer?tab=orders&orderId=${activeQrPayment.orderId}`);
-          return;
-        }
-
-        if (
-          matchingOrder &&
-          ["cancelled", "expired"].includes(matchingOrder.status)
-        ) {
-          setQrPhPayment(null);
-          showToast({
-            title: "Payment expired",
-            description: "The unpaid QR Ph checkout was cancelled.",
-            variant: "error",
-          });
-        }
-      } catch {
-        // Keep the QR visible; the next poll or customer tracker can recover.
-      }
-    }
-
-    void syncQrOrderStatus();
-    const intervalId = window.setInterval(syncQrOrderStatus, 3000);
-
-    return () => {
-      isActive = false;
-      window.clearInterval(intervalId);
-    };
-  }, [qrPhPayment, router, showToast]);
 
   async function loadSavedAddresses() {
     try {
@@ -605,11 +511,9 @@ export default function CartPage() {
       const orderId = result.orderId as string;
       const checkoutUrl =
         typeof result.checkoutUrl === "string" ? result.checkoutUrl : "";
-      const qrCodeImageUrl =
-        typeof result.qrCodeImageUrl === "string" ? result.qrCodeImageUrl : "";
 
       if (checkoutUrl) {
-        setSuccessMessage("Redirecting to PayMongo checkout...");
+        setSuccessMessage("Redirecting to PayMongo online checkout...");
         showToast({
           title: "Redirecting to payment",
           description: "PayMongo checkout is opening now.",
@@ -620,35 +524,15 @@ export default function CartPage() {
         return;
       }
 
-      if (qrCodeImageUrl && result.paymentFlow === "qrph") {
-        setQrPhPayment({
-          orderId,
-          paymongoMode: result.paymongoMode === "live" ? "live" : "test",
-          qrCodeImageUrl,
-          qrCodeLabel:
-            typeof result.qrCodeLabel === "string"
-              ? result.qrCodeLabel
-              : "KadaServe QR Ph",
-          totalAmount:
-            typeof result.totalAmount === "number" ? result.totalAmount : grandTotal,
-          expiresAt:
-            typeof result.qrCodeExpiresAt === "string"
-              ? result.qrCodeExpiresAt
-              : null,
-          expiresInMinutes:
-            typeof result.qrCodeExpiresInMinutes === "number"
-              ? result.qrCodeExpiresInMinutes
-              : 30,
-        });
-        setSuccessMessage(
-          `Scan the QR Ph code to pay order ${orderId.slice(0, 8).toUpperCase()}.`
-        );
+      if (paymentMethod === "online") {
+        const message =
+          "PayMongo online checkout did not return a redirect URL.";
+        setError(message);
         showToast({
-          title: "QR Ph ready",
-          description: "Scan the PayMongo QR within 5 minutes to complete payment.",
-          variant: "info",
+          title: "Checkout failed",
+          description: message,
+          variant: "error",
         });
-        clearCart();
         return;
       }
 
@@ -680,15 +564,6 @@ export default function CartPage() {
     setIsReturningToMenu(true);
     window.sessionStorage.setItem("kadaserve_skip_customer_splash", "true");
     router.push("/customer?tab=menu");
-  }
-
-  function closeQrPhPayment() {
-    const orderId = qrPhPayment?.orderId;
-    setQrPhPayment(null);
-
-    if (orderId) {
-      router.replace(`/customer?tab=orders&orderId=${orderId}&payment=processing`);
-    }
   }
 
   return (
@@ -1158,7 +1033,7 @@ export default function CartPage() {
                         disabled={!isPayMongoCheckoutEnabled}
                         title={
                           isPayMongoCheckoutEnabled
-                            ? "Pay with QR Ph through PayMongo"
+                            ? "Pay online through PayMongo"
                             : "Online payment is coming soon"
                         }
                         className={`kada-hover-lift flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
@@ -1170,18 +1045,19 @@ export default function CartPage() {
                         <WalletCards className="h-5 w-5 shrink-0" />
                         <span>
                           <span className="block text-sm font-black">
-                            QR Ph Online Payment
+                            Online Payment
                           </span>
                           <span className="mt-0.5 block text-xs font-semibold opacity-75">
-                            Scan a PayMongo QR using any QR Ph-supported wallet.
+                            Redirect to PayMongo&apos;s secure checkout page.
                           </span>
                         </span>
                       </button>
                     </div>
                     {paymentMethod === "online" ? (
                       <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                        KadaServe will generate a PayMongo QR Ph code. Your order
-                        stays pending until PayMongo confirms payment.
+                        KadaServe will redirect you to PayMongo&apos;s secure
+                        checkout page. Choose your preferred method there, such
+                        as card, GCash, Maya, or QRPh.
                       </p>
                     ) : !isPayMongoCheckoutEnabled ? (
                       <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
@@ -1372,63 +1248,6 @@ export default function CartPage() {
                 Use another
               </button>
             </div>
-          </section>
-        </div>
-      ) : null}
-
-      {qrPhPayment ? (
-        <div className="fixed inset-0 z-[95] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="kada-soft-pop w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                  PayMongo QR Ph
-                </p>
-                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                  Scan to pay {peso(qrPhPayment.totalAmount)}
-                </h2>
-              </div>
-              <span
-                className={`rounded-full px-3 py-1 font-sans text-xs font-black uppercase ${
-                  qrPhPayment.paymongoMode === "live"
-                    ? "bg-[#E6F2E8] text-[#0F441D]"
-                    : "bg-[#FFF0DA] text-[#684B35]"
-                }`}
-              >
-                {qrPhPayment.paymongoMode}
-              </span>
-            </div>
-
-            <div className="kada-cart-pulse mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrPhPayment.qrCodeImageUrl}
-                alt="PayMongo QR Ph payment code"
-                className="mx-auto aspect-square w-full max-w-[280px] rounded-[18px] bg-white object-contain p-3"
-              />
-              <p className="mt-3 font-sans text-sm font-black text-[#0D2E18]">
-                Order #{qrPhPayment.orderId.slice(0, 8).toUpperCase()}
-              </p>
-              <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                Pay with any QR Ph-supported wallet or banking app. This QR
-                expires in about {qrPhMinutesLeft} minute
-                {qrPhMinutesLeft === 1 ? "" : "s"}.
-              </p>
-            </div>
-
-            <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
-              KadaServe will close this QR and open tracking after PayMongo
-              confirms payment.
-            </div>
-
-            <button
-              type="button"
-              onClick={closeQrPhPayment}
-              className="kada-glow-ring mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
-            >
-              View Order Tracker
-            </button>
           </section>
         </div>
       ) : null}

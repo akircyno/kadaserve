@@ -5,34 +5,52 @@ import { createAdminClient } from "@/lib/supabase/admin";
 type PayMongoWebhookEvent = {
   data?: {
     id?: string;
+    type?: string;
+    data?: PayMongoCheckoutResource | null;
     attributes?: {
       type?: string;
       livemode?: boolean;
-      data?: {
-        id?: string;
-        attributes?: {
-          metadata?: Record<string, unknown> | null;
-          payment_intent_id?: string;
-          payments?: Array<{
-            id?: string;
-            attributes?: {
-              status?: string;
-              payment_intent_id?: string;
-              source?: {
-                type?: string;
-              } | null;
-            };
-          }>;
-          source?: {
-            type?: string;
-          } | null;
-          status?: string;
-          payment_method_used?: string | null;
-        };
-      };
+      data?: PayMongoCheckoutResource | null;
     };
   };
 };
+
+type PayMongoPayment = {
+  id?: string;
+  attributes?: {
+    payment_intent_id?: string;
+    payment_method?: {
+      type?: string;
+    } | null;
+    source?: {
+      type?: string;
+    } | null;
+    status?: string;
+  };
+};
+
+type PayMongoCheckoutResource = {
+  id?: string;
+  attributes?: {
+    metadata?: Record<string, unknown> | null;
+    payment_intent?:
+      | string
+      | {
+          id?: string;
+        }
+      | null;
+    payment_intent_id?: string;
+    payment_method_used?: string | null;
+    payments?: PayMongoPayment[];
+    reference_number?: string | null;
+    source?: {
+      type?: string;
+    } | null;
+    status?: string;
+  };
+};
+
+type PayMongoPaymentIntentRef = string | { id?: string } | null | undefined;
 
 function parsePayMongoSignature(header: string) {
   return header.split(",").reduce<Record<string, string>>((parts, part) => {
@@ -84,35 +102,59 @@ function verifyPayMongoSignature(rawBody: string, signatureHeader: string | null
   );
 }
 
+function getEventType(payload: PayMongoWebhookEvent) {
+  return payload.data?.attributes?.type ?? payload.data?.type ?? null;
+}
+
 function getCheckoutSession(payload: PayMongoWebhookEvent) {
-  return payload.data?.attributes?.data ?? null;
+  return payload.data?.attributes?.data ?? payload.data?.data ?? null;
+}
+
+function getPaymentIntentId(paymentIntent: PayMongoPaymentIntentRef) {
+  if (typeof paymentIntent === "string") {
+    return paymentIntent;
+  }
+
+  if (paymentIntent && typeof paymentIntent === "object" && "id" in paymentIntent) {
+    return typeof paymentIntent.id === "string" ? paymentIntent.id : null;
+  }
+
+  return null;
 }
 
 function getOrderId(payload: PayMongoWebhookEvent) {
   const resource = getCheckoutSession(payload);
   const metadataOrderId = resource?.attributes?.metadata?.order_id;
+  const referenceNumber = resource?.attributes?.reference_number;
 
-  return typeof metadataOrderId === "string" ? metadataOrderId : null;
+  if (typeof metadataOrderId === "string") {
+    return metadataOrderId;
+  }
+
+  return typeof referenceNumber === "string" ? referenceNumber : null;
 }
 
 function getPaymentDetails(payload: PayMongoWebhookEvent) {
   const resource = getCheckoutSession(payload);
+  const eventType = getEventType(payload);
   const payment = resource?.attributes?.payments?.find(
     (item) => item.attributes?.status === "paid"
-  );
+  ) ?? resource?.attributes?.payments?.[0];
 
   return {
     checkoutSessionId:
-      payload.data?.attributes?.type === "checkout_session.payment.paid"
+      eventType === "checkout_session.payment.paid"
         ? resource?.id ?? null
         : null,
     paymentId: payment?.id ?? resource?.id ?? null,
     paymentIntentId:
+      getPaymentIntentId(resource?.attributes?.payment_intent ?? null) ??
       payment?.attributes?.payment_intent_id ??
       resource?.attributes?.payment_intent_id ??
       null,
     paymentMethodUsed:
       resource?.attributes?.payment_method_used ??
+      payment?.attributes?.payment_method?.type ??
       payment?.attributes?.source?.type ??
       resource?.attributes?.source?.type ??
       null,
@@ -130,7 +172,7 @@ export async function POST(request: Request) {
     }
 
     const payload = JSON.parse(rawBody) as PayMongoWebhookEvent;
-    const eventType = payload.data?.attributes?.type;
+    const eventType = getEventType(payload);
 
     if (
       eventType !== "checkout_session.payment.paid" &&
@@ -149,15 +191,17 @@ export async function POST(request: Request) {
       paymentMethodUsed,
     } = getPaymentDetails(payload);
 
-    if (!orderId && !paymentIntentId) {
+    if (!orderId && !paymentIntentId && !checkoutSessionId) {
       return NextResponse.json(
-        { error: "Webhook is missing order metadata or payment intent." },
+        { error: "Webhook is missing order metadata, payment intent, or checkout session." },
         { status: 400 }
       );
     }
 
     const supabase = createAdminClient();
     const paidAt = new Date().toISOString();
+    const paymentMethodFallback = checkoutSessionId ? "hosted_checkout" : "qrph";
+    const resolvedPaymentMethodUsed = paymentMethodUsed ?? paymentMethodFallback;
 
     if (eventType === "payment.failed" || eventType === "qrph.expired") {
       let query = supabase
@@ -167,14 +211,16 @@ export async function POST(request: Request) {
           payment_status: "unpaid",
           paymongo_payment_id: paymentId,
           paymongo_payment_intent_id: paymentIntentId,
-          paymongo_payment_method_used: paymentMethodUsed ?? "qrph",
+          paymongo_payment_method_used: resolvedPaymentMethodUsed,
         })
         .eq("payment_method", "online")
         .eq("status", "pending_payment");
 
       query = orderId
         ? query.eq("id", orderId)
-        : query.eq("paymongo_payment_intent_id", paymentIntentId);
+        : paymentIntentId
+        ? query.eq("paymongo_payment_intent_id", paymentIntentId)
+        : query.eq("paymongo_checkout_session_id", checkoutSessionId);
 
       const { error } = await query;
 
@@ -193,7 +239,7 @@ export async function POST(request: Request) {
         paymongo_checkout_session_id: checkoutSessionId,
         paymongo_payment_id: paymentId,
         paymongo_payment_intent_id: paymentIntentId,
-        paymongo_payment_method_used: paymentMethodUsed ?? "qrph",
+        paymongo_payment_method_used: resolvedPaymentMethodUsed,
         paid_at: paidAt,
       })
       .eq("payment_method", "online")
@@ -201,7 +247,9 @@ export async function POST(request: Request) {
 
     query = orderId
       ? query.eq("id", orderId)
-      : query.eq("paymongo_payment_intent_id", paymentIntentId);
+      : paymentIntentId
+      ? query.eq("paymongo_payment_intent_id", paymentIntentId)
+      : query.eq("paymongo_checkout_session_id", checkoutSessionId);
 
     const { error } = await query;
 
