@@ -79,55 +79,89 @@ short-term restaurant demand prediction."
 
 ### Guardrails
 
-- If fewer than ~14 days of daily aggregate history exist, or the design matrix is singular
+- Minimum history refined to a precise number, not an approximation: the lag-7 regressor
+  consumes the first 7 days of any series (no prior-week value exists for them), so the
+  minimum viable series length is **21 days** (7 warm-up + 14 modelable rows, enough for a
+  meaningful chronological train/test split). Below that, or if the design matrix is singular
   (e.g. degenerate/constant data), skip forecasting and show an honest empty state ("Not
   enough order history yet for a forecast") — consistent with existing empty-state patterns
-  already in the dashboard (e.g. "No orders yet").
+  already in the dashboard (e.g. "No orders yet"). Real data today (32 days, 2026-04-30 to
+  2026-05-31) clears this threshold.
 
 ## Architecture
 
-New files, kept small and single-purpose per existing lib conventions
-(cf. `frontend/src/lib/orders/stale-orders.ts`):
+New files, kept small and single-purpose, following the codebase's actual (flat) lib
+convention — `frontend/src/lib/analytics-ranking.ts`, `admin-order-totals.ts`, etc. are all
+flat, not nested — so these live alongside them rather than under a new `analytics/` subfolder:
 
-- `frontend/src/lib/analytics/linear-regression.ts` — generic OLS solver via closed-form
+- `frontend/src/lib/linear-regression.ts` — generic OLS solver via closed-form
   normal equations (Gaussian elimination on XᵀX). No new npm dependency. Pure function(s),
   independently testable with synthetic data of known coefficients.
-- `frontend/src/lib/analytics/demand-forecast.ts` — domain logic: builds the feature matrix
+- `frontend/src/lib/demand-forecast.ts` — domain logic: builds the feature matrix
   from daily order aggregates, calls the solver, computes diagnostics, produces the 7-day
   forecast. Depends on `linear-regression.ts` only.
+- `frontend/src/lib/peak-hour-intensity.ts` — extracted statistical classification
+  (`mean + k·σ`), pulled out of `peak-hours/route.ts` into its own zero-dependency file so it's
+  independently testable (route files import `next/server`, which complicates the test
+  harness described below).
 
 New API route:
 
-- `frontend/src/app/api/admin/analytics/demand-forecast/route.ts` — staff/admin-gated (same
-  auth pattern as existing admin analytics routes), reads `analytics_daily`, returns forecast
-  + diagnostics + coefficients as JSON.
+- `frontend/src/app/api/admin/analytics/demand-forecast/route.ts` — admin-gated (same
+  `assertAdminAccess` pattern as `peak-hours/route.ts` and `daily/route.ts`). Reads live from
+  `orders` and recomputes daily counts on each request, the same way `peak-hours/route.ts`'s
+  `GET` does — rather than depending on the persisted `analytics_daily` table, which is only
+  refreshed when an admin explicitly triggers its `POST` and could be stale. Returns the 7-day
+  forecast, diagnostics, coefficients, and the last 30 days of history (for the chart) as JSON.
 
 Modified:
 
-- `frontend/src/app/api/admin/analytics/peak-hours/route.ts` — `getIntensity` changes from
-  fixed ratio thresholds (`≥0.8·max`) to statistical classification against the window's own
-  mean (μ) and standard deviation (σ) of order counts: `high` = count ≥ μ + 1σ, `medium` =
-  μ ≤ count < μ + 1σ, `low` = count < μ. Keeps the existing three-tier output shape so no
-  downstream UI changes are needed beyond the reclassification itself.
-- `frontend/src/features/admin/components/admin-overview-view.tsx` — replace
-  `OrdersByDayBarChart` (custom CSS bars) with a `recharts` `LineChart`: historical daily
-  orders + forecasted next 7 days in a visually distinct style, ±RMSE shaded band. Add a
-  tooltip showing model diagnostics, reusing the existing `formula`/`formulaExplanation`
-  tooltip pattern already used for KPI tiles.
-- Default date-range logic (wherever "this month" is currently hardcoded as the default,
-  in `admin-overview-view.tsx` / `admin-orders-view.tsx`) — fall back to the most recent
-  period containing data instead of the literal current calendar month.
+- `frontend/src/app/api/admin/analytics/peak-hours/route.ts` — replaces the local
+  `getIntensity` (fixed ratio thresholds, `≥0.8·max`) with `classifyIntensity` imported from
+  the new `peak-hour-intensity.ts`: `high` = count ≥ μ + 1σ, `medium` = μ ≤ count < μ + 1σ,
+  `low` = count < μ, where μ/σ are the mean/standard deviation of that window's own order
+  counts. Keeps the existing three-tier output shape so no downstream UI changes are needed
+  beyond the reclassification itself.
+- `frontend/src/features/admin/components/admin-overview-view.tsx` — add a new
+  `DemandForecastChart` component, a hand-rolled SVG line chart following the exact pattern
+  already established by `HourlyDemandCurve` in this same file (coordinate mapping, path
+  building, brand colors). **Correction from the original spec**: closer reading found the
+  codebase already has a working, well-styled native SVG chart component for exactly this
+  purpose — pulling in `recharts` (installed but otherwise unused) would mean re-theming it to
+  match brand colors for no real benefit over extending the existing pattern, and would be the
+  one inconsistent chart in the dashboard. Shows historical daily orders (solid line) +
+  forecasted next 7 days (dashed continuation) with a shaded ±RMSE band. Added as a new `Panel`
+  reusing the existing `formula`/`formulaExplanation` tooltip pattern already used for KPI
+  tiles, to show model diagnostics inline.
+- `frontend/src/features/admin/components/admin-dashboard.tsx:546` — root cause found:
+  `const dashboardTimeFilter = "month" as const;` is a hardcoded literal (not even a
+  `useState`), always meaning the literal current calendar month regardless of data. Fix:
+  compute it — if any valid order falls in the current calendar month, keep `"month"`;
+  otherwise fall back to `"custom"` with `customStartDate`/`customEndDate` set to the first/last
+  day of the month containing the most recent order. This reuses the `"custom"` time-filter
+  path that `getAdminReportOrders`/`isWithinAdminTimeFilter` already support
+  (`frontend/src/lib/admin-order-totals.ts`) — no new filtering logic needed.
 
 ## Testing
 
 Project has no Jest/Vitest; existing convention is a standalone verify script
-(`test:nutrition` → `scripts/verify-nutrition.mjs`). Following the same pattern:
+(`test:nutrition` → `scripts/verify-nutrition.mjs`), which transpiles a single self-contained
+`.ts` file at runtime via the TypeScript compiler API and dynamic-imports it as a `data:` URL.
+That trick only works for files with zero imports of their own — `demand-forecast.ts` imports
+from `linear-regression.ts`, so its harness instead transpiles both to temp `.mjs` files (in an
+OS temp dir, cleaned up after) and imports the dependent file by path, patching the relative
+import specifier to include the `.mjs` extension Node's ESM resolver requires.
 
-- `scripts/verify-demand-forecast.mjs` — feeds synthetic data with known coefficients into
-  the OLS solver and asserts they're recovered within tolerance; sanity-checks the
-  Durbin-Watson calculation against a known reference value; checks guardrail behavior
-  (insufficient data → graceful skip, not a crash).
-- New `package.json` script: `"test:demand-forecast": "node scripts/verify-demand-forecast.mjs"`.
+- `scripts/verify-analytics.mjs` — one script covering both new lib modules (matches this
+  spec's single sub-project scope rather than one script per file):
+  - Feeds synthetic data with known coefficients into the OLS solver, asserts they're
+    recovered within tolerance.
+  - Sanity-checks the Durbin-Watson calculation against a known reference value.
+  - Checks `generateDemandForecast` guardrail behavior (series shorter than 21 days →
+    returns `null`, not a crash).
+  - Checks `classifyIntensity` (from `peak-hour-intensity.ts`) against hand-computed
+    mean/σ thresholds.
+- New `package.json` script: `"test:analytics": "node scripts/verify-analytics.mjs"`.
 
 ## Risks / open questions
 
