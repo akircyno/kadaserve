@@ -231,4 +231,26 @@ try {
   await rm(tempDir, { recursive: true, force: true });
 }
 
+console.log("\nTesting peak-hour-intensity.ts...");
+
+const { getMean, getStandardDeviation, classifyIntensity } = await importDataUrlModule(
+  "../src/lib/peak-hour-intensity.ts"
+);
+
+{
+  const values = [2, 4, 4, 4, 5, 5, 7, 9];
+  const mean = getMean(values);
+  const stdDev = getStandardDeviation(values, mean);
+
+  assert.equal(mean, 5);
+  assert.ok(Math.abs(stdDev - 2) < 1e-9, `expected stdDev 2, got ${stdDev}`);
+  console.log("  PASS: getMean/getStandardDeviation match hand-computed population stats");
+
+  assert.equal(classifyIntensity(0, mean, stdDev), "low");
+  assert.equal(classifyIntensity(4, mean, stdDev), "low");
+  assert.equal(classifyIntensity(5, mean, stdDev), "medium");
+  assert.equal(classifyIntensity(7, mean, stdDev), "high");
+  console.log("  PASS: classifyIntensity buckets correctly at mean and mean+stdDev boundaries");
+}
+
 console.log("\nAll checks passed.");

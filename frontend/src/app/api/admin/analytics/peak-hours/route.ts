@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { classifyIntensity, getMean, getStandardDeviation } from "@/lib/peak-hour-intensity";
 
 type AnalyticsHourlyRow = {
   order_date: string;
@@ -134,28 +135,6 @@ function getDateRange(request: Request) {
   };
 }
 
-function getIntensity(orderCount: number, maxOrderCount: number) {
-  if (orderCount <= 0) {
-    return "low";
-  }
-
-  const ratio = orderCount / Math.max(1, maxOrderCount);
-
-  if (ratio >= 0.8) {
-    return "high";
-  }
-
-  if (ratio >= 0.5) {
-    return "high";
-  }
-
-  if (ratio >= 0.25) {
-    return "medium";
-  }
-
-  return "low";
-}
-
 function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowRow[] {
   const monthlyBuckets = new Map<
     string,
@@ -189,10 +168,9 @@ function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowR
 
   const detectedAt = new Date().toISOString();
   const buckets = Array.from(monthlyBuckets.values());
-  const maxOrderCount = Math.max(
-    1,
-    ...buckets.map((bucket) => bucket.totalOrderCount)
-  );
+  const bucketCounts = buckets.map((bucket) => bucket.totalOrderCount);
+  const meanOrderCount = getMean(bucketCounts);
+  const standardDeviation = getStandardDeviation(bucketCounts, meanOrderCount);
 
   return buckets
     .map((bucket) => ({
@@ -200,7 +178,7 @@ function buildPeakHourWindows(hourlyRows: AnalyticsHourlyRow[]): PeakHourWindowR
       hour_start: bucket.hourStart,
       hour_end: (bucket.hourStart + 1) % 24,
       avg_order_count: Number(bucket.totalOrderCount.toFixed(2)),
-      intensity: getIntensity(bucket.totalOrderCount, maxOrderCount),
+      intensity: classifyIntensity(bucket.totalOrderCount, meanOrderCount, standardDeviation),
       detected_at: detectedAt,
     }))
     .sort(
