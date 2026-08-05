@@ -211,6 +211,48 @@ export function getAdminReportOrders(
   });
 }
 
+export function computeAdminDashboardRange(validOrders: StaffOrder[]): {
+  timeFilter: "month" | "custom";
+  customStartDate: string | undefined;
+  customEndDate: string | undefined;
+} {
+  const currentMonthOrders = getAdminReportOrders(validOrders, { timeFilter: "month" });
+
+  if (currentMonthOrders.length > 0) {
+    return {
+      timeFilter: "month" as const,
+      customStartDate: undefined as string | undefined,
+      customEndDate: undefined as string | undefined,
+    };
+  }
+
+  const mostRecentOrder = [...validOrders].sort(
+    (left, right) => new Date(right.ordered_at).getTime() - new Date(left.ordered_at).getTime()
+  )[0];
+
+  if (!mostRecentOrder) {
+    return {
+      timeFilter: "month" as const,
+      customStartDate: undefined as string | undefined,
+      customEndDate: undefined as string | undefined,
+    };
+  }
+
+  const recentDate = getManilaDateOnly(new Date(mostRecentOrder.ordered_at));
+  const firstDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth(), 1);
+  const lastDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth() + 1, 0);
+  const toDateInput = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`;
+
+  return {
+    timeFilter: "custom" as const,
+    customStartDate: toDateInput(firstDayOfMonth),
+    customEndDate: toDateInput(lastDayOfMonth),
+  };
+}
+
 export function isValidAdminOrder(order: StaffOrder) {
   return order.status !== "cancelled" && order.status !== "expired";
 }
