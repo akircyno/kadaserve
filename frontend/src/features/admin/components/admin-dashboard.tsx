@@ -248,6 +248,27 @@ type AdminAnalyticsItemRow = {
   updated_at: string;
 };
 
+type AdminAnalyticsDemandForecastResult = {
+  forecast: Array<{ date: string; predictedOrders: number }>;
+  diagnostics: {
+    rSquared: number;
+    rmse: number;
+    mae: number;
+    baselineRmse: number;
+    baselineMae: number;
+    durbinWatson: number;
+    trainingDays: number;
+    testDays: number;
+  };
+  coefficients: {
+    intercept: number;
+    trend: number;
+    lagSameWeekday: number;
+    dayOfWeek: Record<string, number>;
+  };
+  history: Array<{ date: string; orderCount: number }>;
+} | null;
+
 function normalizeSuggestion(value: string) {
   return value.trim().replaceAll("_", " ");
 }
@@ -523,6 +544,7 @@ export function AdminDashboard() {
   );
   const [analyticsItems, setAnalyticsItems] = useState<AdminAnalyticsItemRow[]>([]);
   const [peakHourWindows, setPeakHourWindows] = useState<PeakHourWindow[]>([]);
+  const [demandForecast, setDemandForecast] = useState<AdminAnalyticsDemandForecastResult>(null);
   const [feedbackRows, setFeedbackRows] = useState<AdminFeedbackRow[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<StaffOrder | null>(null);
   const [search, setSearch] = useState("");
@@ -1228,6 +1250,7 @@ export function AdminDashboard() {
         analyticsWeeklyResponse,
         analyticsItemsResponse,
         peakHourWindowsResponse,
+        demandForecastResponse,
       ] = await Promise.all([
         fetch("/api/staff/orders/list", { method: "GET" }),
         fetch("/api/admin/menu", { method: "GET" }),
@@ -1236,6 +1259,7 @@ export function AdminDashboard() {
         fetch("/api/admin/analytics/weekly", { method: "GET" }),
         fetch("/api/admin/analytics/items", { method: "GET" }),
         fetch("/api/admin/analytics/peak-hours?range=month", { method: "GET" }),
+        fetch("/api/admin/analytics/demand-forecast", { method: "GET" }),
       ]);
 
       const ordersResult = await ordersResponse.json();
@@ -1256,6 +1280,15 @@ export function AdminDashboard() {
       };
       const peakHourWindowsResult = (await peakHourWindowsResponse.json()) as {
         peakHourWindows?: PeakHourWindow[];
+        error?: string;
+      };
+      type DemandForecastResponseBody = NonNullable<AdminAnalyticsDemandForecastResult>;
+      const demandForecastResult = (await demandForecastResponse.json()) as {
+        forecast?: DemandForecastResponseBody["forecast"];
+        diagnostics?: DemandForecastResponseBody["diagnostics"];
+        coefficients?: DemandForecastResponseBody["coefficients"];
+        history?: DemandForecastResponseBody["history"];
+        reason?: string;
         error?: string;
       };
 
@@ -1309,6 +1342,22 @@ export function AdminDashboard() {
         setPeakHourWindows(peakHourWindowsResult.peakHourWindows ?? []);
       } else {
         setPeakHourWindows([]);
+      }
+      if (
+        demandForecastResponse.ok &&
+        demandForecastResult.forecast &&
+        demandForecastResult.diagnostics &&
+        demandForecastResult.coefficients &&
+        demandForecastResult.history
+      ) {
+        setDemandForecast({
+          forecast: demandForecastResult.forecast,
+          diagnostics: demandForecastResult.diagnostics,
+          coefficients: demandForecastResult.coefficients,
+          history: demandForecastResult.history,
+        });
+      } else {
+        setDemandForecast(null);
       }
       setLastSyncedAt(new Date());
     } catch {
@@ -1765,6 +1814,7 @@ export function AdminDashboard() {
                 totalOrdersLabel={dashboardTotalOrdersLabel}
                 search={debouncedSearch}
                 weekdayCounts={dashboardMetrics.weekdayCounts}
+                demandForecast={demandForecast}
                 isLoading={isLoading}
                 isRefreshing={isRefreshingAnalytics}
               />

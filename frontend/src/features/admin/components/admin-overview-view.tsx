@@ -725,6 +725,132 @@ function OrdersByDayBarChart({
   );
 }
 
+function formatShortDate(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${dateKey}T00:00:00+08:00`));
+}
+
+function DemandForecastChart({
+  history,
+  forecast,
+  rmse,
+}: {
+  history: Array<{ date: string; orderCount: number }>;
+  forecast: Array<{ date: string; predictedOrders: number }>;
+  rmse: number;
+}) {
+  const width = 760;
+  const height = 200;
+  const padding = { top: 22, right: 30, bottom: 34, left: 44 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+
+  const historyPoints = history.map((point) => ({ date: point.date, value: point.orderCount }));
+  const forecastPoints = forecast.map((point) => ({ date: point.date, value: point.predictedOrders }));
+  const allPoints = [...historyPoints, ...forecastPoints];
+  const maxValue = Math.max(1, ...allPoints.map((point) => point.value + rmse));
+
+  const toCoordinates = (points: typeof allPoints, startIndex: number) =>
+    points.map((point, index) => {
+      const globalIndex = startIndex + index;
+      const x =
+        allPoints.length === 1
+          ? width / 2
+          : padding.left + (innerWidth * globalIndex) / (allPoints.length - 1);
+      const y = padding.top + innerHeight - (point.value / maxValue) * innerHeight;
+
+      return { ...point, x, y };
+    });
+
+  const historyCoordinates = toCoordinates(historyPoints, 0);
+  const forecastCoordinates = toCoordinates(forecastPoints, historyPoints.length);
+  const bridgePoint = historyCoordinates.at(-1);
+  const forecastLineCoordinates = bridgePoint ? [bridgePoint, ...forecastCoordinates] : forecastCoordinates;
+
+  const buildLinePath = (points: Array<{ x: number; y: number }>) =>
+    points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+
+  const historyLinePath = buildLinePath(historyCoordinates);
+  const forecastLinePath = buildLinePath(forecastLineCoordinates);
+
+  const toBandY = (value: number, offset: number) =>
+    padding.top + innerHeight - (Math.min(maxValue, Math.max(0, value + offset)) / maxValue) * innerHeight;
+
+  const bandPath =
+    forecastLineCoordinates.length > 1
+      ? [
+          ...forecastLineCoordinates.map(
+            (point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${toBandY(point.value, -rmse)}`
+          ),
+          ...[...forecastLineCoordinates].reverse().map((point) => `L ${point.x} ${toBandY(point.value, rmse)}`),
+          "Z",
+        ].join(" ")
+      : "";
+
+  const labelPoints = [...historyCoordinates, ...forecastCoordinates];
+  const labelEvery = Math.max(1, Math.ceil(labelPoints.length / 8));
+
+  return (
+    <div className="mt-1 rounded-[14px] bg-[#FFFCF7] px-1 py-1">
+      <svg
+        aria-label="Demand forecast chart"
+        className="h-[220px] w-full overflow-visible"
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        {bandPath ? <path d={bandPath} fill="rgba(104,75,53,0.14)" /> : null}
+        {historyLinePath ? (
+          <path
+            d={historyLinePath}
+            fill="none"
+            stroke="#0D2E18"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4"
+          />
+        ) : null}
+        {forecastLinePath ? (
+          <path
+            d={forecastLinePath}
+            fill="none"
+            stroke="#684B35"
+            strokeDasharray="7 7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4"
+          />
+        ) : null}
+        {labelPoints.map((point, index) =>
+          index % labelEvery === 0 ? (
+            <text
+              key={point.date}
+              fill="#8C6C48"
+              fontSize="11"
+              fontWeight="800"
+              textAnchor="middle"
+              x={point.x}
+              y={height - 10}
+            >
+              {formatShortDate(point.date)}
+            </text>
+          ) : null
+        )}
+      </svg>
+      <div className="mt-1 flex items-center justify-center gap-4 font-sans text-[0.66rem] font-bold text-[#684B35]">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-4 rounded-full bg-[#0D2E18]" /> Actual
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-4 rounded-full border-t-2 border-dashed border-[#684B35]" /> Forecast (±{rmse.toFixed(1)})
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function OrderTypeDistributionDonut({
   items,
 }: {
@@ -1254,6 +1380,7 @@ export function DashboardView({
   weekdayCounts,
   isLoading = false,
   isRefreshing = false,
+  demandForecast = null,
 }: {
   averageRating: number;
   averageOrderValue: number;
@@ -1273,6 +1400,26 @@ export function DashboardView({
   weekdayCounts: Array<{ day: string; orders: number }>;
   isLoading?: boolean;
   isRefreshing?: boolean;
+  demandForecast?: {
+    forecast: Array<{ date: string; predictedOrders: number }>;
+    diagnostics: {
+      rSquared: number;
+      rmse: number;
+      mae: number;
+      baselineRmse: number;
+      baselineMae: number;
+      durbinWatson: number;
+      trainingDays: number;
+      testDays: number;
+    };
+    coefficients: {
+      intercept: number;
+      trend: number;
+      lagSameWeekday: number;
+      dayOfWeek: Record<string, number>;
+    };
+    history: Array<{ date: string; orderCount: number }>;
+  } | null;
 }) {
   const keyword = search?.trim().toLowerCase() ?? "";
   const [isDemandGrowthOpen, setIsDemandGrowthOpen] = useState(false);
@@ -1649,6 +1796,34 @@ export function DashboardView({
           ) : null}
         </div>
       ) : null}
+
+      <div
+        className="kada-admin-content-enter grid gap-3"
+        style={{ animationDelay: "820ms" }}
+      >
+        <div id="admin-demand-forecast" className="scroll-mt-28">
+          <Panel
+            title="Demand Forecast"
+            formulaTitle="Demand Forecast Formula"
+            formula="Forecast = day-of-week + trend + same-weekday-last-week (multiple linear regression)"
+            formulaExplanation={
+              demandForecast
+                ? `Model fit: R² ${demandForecast.diagnostics.rSquared}, RMSE ${demandForecast.diagnostics.rmse} orders (naive baseline RMSE ${demandForecast.diagnostics.baselineRmse}), Durbin-Watson ${demandForecast.diagnostics.durbinWatson}. Trained on ${demandForecast.diagnostics.trainingDays} days, tested on ${demandForecast.diagnostics.testDays}.`
+                : "Not enough order history yet to fit a forecast."
+            }
+          >
+            {demandForecast ? (
+              <DemandForecastChart
+                history={demandForecast.history}
+                forecast={demandForecast.forecast}
+                rmse={demandForecast.diagnostics.rmse}
+              />
+            ) : (
+              <EmptyState label="Not enough order history yet for a demand forecast." />
+            )}
+          </Panel>
+        </div>
+      </div>
 
       {/* Top Items, Ratings, Insights, and Attention */}
       {showTopItems || showSatisfaction || showInsights || showNeedsAttention ? (
