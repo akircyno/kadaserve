@@ -74,8 +74,63 @@ const {
 // Durbin-Watson: alternating residuals => DW close to 4 (negative autocorrelation)
 {
   const dw = calculateDurbinWatson([1, -1, 1, -1, 1, -1]);
-  assert.ok(dw > 3.2, `expected DW near 4 for alternating residuals, got ${dw}`);
+  // For perfectly alternating residuals, DW = 20/6 = 3.333...
+  assert.ok(Math.abs(dw - 20 / 6) < 1e-6, `expected DW = 20/6 for alternating residuals, got ${dw}`);
   console.log("  PASS: calculateDurbinWatson detects negative autocorrelation");
+}
+
+// R-squared: zero-variance target (constant values) with perfect fit => 1
+{
+  const target = [5, 5, 5, 5];
+  const fittedValues = [5, 5, 5, 5];
+  const rSquared = calculateRSquared(target, fittedValues);
+  assert.equal(rSquared, 1, `expected R² = 1 for constant target with perfect fit, got ${rSquared}`);
+  assert.ok(!isNaN(rSquared), `expected R² to be a number, not NaN`);
+  console.log("  PASS: calculateRSquared handles zero-variance target correctly");
+}
+
+// Error handling: singular design matrix (linearly dependent columns)
+{
+  const designMatrix = [
+    [1, 0],  // column 2 is all zeros, making X^T*X singular
+    [2, 0],
+    [3, 0],
+  ];
+  const target = [1, 2, 3];
+  assert.throws(
+    () => fitOls(designMatrix, target),
+    /singular/i,
+    "expected fitOls to throw on singular design matrix"
+  );
+  console.log("  PASS: fitOls throws on singular design matrix");
+}
+
+// Error handling: mismatched dimensions
+{
+  const designMatrix = [
+    [1, 0],
+    [1, 1],
+    [1, 2],
+  ];
+  const target = [1, 2];  // only 2 values but 3 rows in design matrix
+  assert.throws(
+    () => fitOls(designMatrix, target),
+    /must match/i,
+    "expected fitOls to throw on dimension mismatch"
+  );
+  console.log("  PASS: fitOls throws on mismatched dimensions");
+}
+
+// Error handling: empty design matrix
+{
+  const designMatrix = [];
+  const target = [];
+  assert.throws(
+    () => fitOls(designMatrix, target),
+    /zero observations/i,
+    "expected fitOls to throw on empty inputs"
+  );
+  console.log("  PASS: fitOls throws on zero observations");
 }
 
 console.log("\nAll linear-regression.ts checks passed.");
