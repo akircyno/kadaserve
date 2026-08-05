@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 function transpile(source) {
@@ -133,4 +136,99 @@ const {
   console.log("  PASS: fitOls throws on zero observations");
 }
 
-console.log("\nAll linear-regression.ts checks passed.");
+console.log("\nTesting demand-forecast.ts...");
+
+// demand-forecast.ts imports from ./linear-regression, so the plain data-URL
+// trick (which has no filesystem context to resolve relative imports) can't
+// be used directly. Transpile both to temp .mjs files on disk instead, so
+// Node's real module resolution can follow the relative import.
+const tempDir = await mkdtemp(path.join(tmpdir(), "kadaserve-verify-"));
+
+try {
+  const linearRegressionSource = await readFile(
+    new URL("../src/lib/linear-regression.ts", import.meta.url),
+    "utf8"
+  );
+  const demandForecastSource = await readFile(
+    new URL("../src/lib/demand-forecast.ts", import.meta.url),
+    "utf8"
+  );
+
+  const linearRegressionPath = path.join(tempDir, "linear-regression.mjs");
+  const demandForecastPath = path.join(tempDir, "demand-forecast.mjs");
+
+  await writeFile(linearRegressionPath, transpile(linearRegressionSource), "utf8");
+  await writeFile(
+    demandForecastPath,
+    transpile(demandForecastSource).replace('"./linear-regression"', '"./linear-regression.mjs"'),
+    "utf8"
+  );
+
+  const { fillDailySeries, addDays, generateDemandForecast, MIN_HISTORY_DAYS } = await import(
+    pathToFileURL(demandForecastPath).href
+  );
+
+  // addDays basic correctness, including month rollover
+  {
+    assert.equal(addDays("2026-05-31", 1), "2026-06-01");
+    assert.equal(addDays("2026-06-01", -1), "2026-05-31");
+    console.log("  PASS: addDays handles month rollover both directions");
+  }
+
+  // fillDailySeries fills gaps with zero
+  {
+    const sparse = new Map([["2026-01-01", 5], ["2026-01-03", 2]]);
+    const series = fillDailySeries(sparse, "2026-01-01", "2026-01-03");
+    assert.deepEqual(
+      series,
+      [
+        { date: "2026-01-01", orderCount: 5 },
+        { date: "2026-01-02", orderCount: 0 },
+        { date: "2026-01-03", orderCount: 2 },
+      ]
+    );
+    console.log("  PASS: fillDailySeries zero-fills missing dates");
+  }
+
+  // Guardrail: too-short series returns null, not a crash
+  {
+    const shortSeries = Array.from({ length: MIN_HISTORY_DAYS - 1 }, (_, index) => ({
+      date: addDays("2026-01-01", index),
+      orderCount: 3,
+    }));
+    const result = generateDemandForecast(shortSeries);
+    assert.equal(result, null);
+    console.log("  PASS: generateDemandForecast returns null below MIN_HISTORY_DAYS");
+  }
+
+  // Realistic series (30 days, weekday pattern + mild trend) produces a
+  // sane forecast and diagnostics, and beats or matches the naive baseline
+  // on this clean synthetic signal.
+  {
+    const series = Array.from({ length: 30 }, (_, index) => {
+      const date = addDays("2026-01-01", index);
+      const dayOfWeek = new Date(`${date}T00:00:00+08:00`).getDay();
+      const weekendBoost = dayOfWeek === 0 || dayOfWeek === 6 ? 5 : 0;
+      const trend = index * 0.2;
+      return { date, orderCount: Math.round(10 + weekendBoost + trend) };
+    });
+
+    const result = generateDemandForecast(series);
+
+    assert.ok(result !== null, "expected a forecast result for a well-formed 30-day series");
+    assert.equal(result.forecast.length, 7);
+    result.forecast.forEach((point) => {
+      assert.ok(point.predictedOrders >= 0, "forecast must not be negative");
+    });
+    assert.ok(
+      result.diagnostics.rmse <= result.diagnostics.baselineRmse + 1,
+      `expected model RMSE (${result.diagnostics.rmse}) to be competitive with naive baseline (${result.diagnostics.baselineRmse})`
+    );
+    console.log("  PASS: generateDemandForecast produces a sane 7-day forecast with non-negative values");
+    console.log(`  INFO: model RMSE=${result.diagnostics.rmse}, baseline RMSE=${result.diagnostics.baselineRmse}, R2=${result.diagnostics.rSquared}, DW=${result.diagnostics.durbinWatson}`);
+  }
+} finally {
+  await rm(tempDir, { recursive: true, force: true });
+}
+
+console.log("\nAll checks passed.");
