@@ -31,6 +31,7 @@ import {
   getAdminOrderTotals,
   getAdminOrdersMetricLabel,
   getAdminReportOrders,
+  getManilaDateOnly,
   isValidAdminOrder,
 } from "@/lib/admin-order-totals";
 import {
@@ -543,10 +544,51 @@ export function AdminDashboard() {
     [orders]
   );
 
-  const dashboardTimeFilter = "month" as const;
+  const dashboardRange = useMemo(() => {
+    const currentMonthOrders = getAdminReportOrders(validOrders, { timeFilter: "month" });
+
+    if (currentMonthOrders.length > 0) {
+      return {
+        timeFilter: "month" as const,
+        customStartDate: undefined as string | undefined,
+        customEndDate: undefined as string | undefined,
+      };
+    }
+
+    const mostRecentOrder = [...validOrders].sort(
+      (left, right) => new Date(right.ordered_at).getTime() - new Date(left.ordered_at).getTime()
+    )[0];
+
+    if (!mostRecentOrder) {
+      return {
+        timeFilter: "month" as const,
+        customStartDate: undefined as string | undefined,
+        customEndDate: undefined as string | undefined,
+      };
+    }
+
+    const recentDate = getManilaDateOnly(new Date(mostRecentOrder.ordered_at));
+    const firstDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth(), 1);
+    const lastDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth() + 1, 0);
+    const toDateInput = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+        date.getDate()
+      ).padStart(2, "0")}`;
+
+    return {
+      timeFilter: "custom" as const,
+      customStartDate: toDateInput(firstDayOfMonth),
+      customEndDate: toDateInput(lastDayOfMonth),
+    };
+  }, [validOrders]);
   const dashboardOrders = useMemo(
-    () => getAdminReportOrders(validOrders, { timeFilter: dashboardTimeFilter }),
-    [validOrders]
+    () =>
+      getAdminReportOrders(validOrders, {
+        timeFilter: dashboardRange.timeFilter,
+        customStartDate: dashboardRange.customStartDate,
+        customEndDate: dashboardRange.customEndDate,
+      }),
+    [validOrders, dashboardRange]
   );
   const dashboardOrderTotals = useMemo(
     () => getAdminOrderTotals(dashboardOrders),
@@ -859,7 +901,11 @@ export function AdminDashboard() {
     monthlyRevenue: dashboardOrderTotals.totalRevenue,
     weekdayCounts: dashboardWeekdayCounts,
   };
-  const dashboardTotalOrdersLabel = getAdminOrdersMetricLabel(dashboardTimeFilter);
+  const dashboardTotalOrdersLabel = getAdminOrdersMetricLabel(
+    dashboardRange.timeFilter,
+    dashboardRange.customStartDate,
+    dashboardRange.customEndDate
+  );
   const searchSuggestions = useMemo<AdminSearchSuggestion[]>(() => {
     const suggestions: AdminSearchSuggestion[] = [];
     const seen = new Set<string>();

@@ -154,8 +154,12 @@ export function getAdminReportRangeLabel(
   return today.getFullYear().toString();
 }
 
-export function getAdminOrdersMetricLabel(timeFilter: AdminTimeFilter) {
-  return `${getAdminReportRangeLabel(timeFilter)} Orders`;
+export function getAdminOrdersMetricLabel(
+  timeFilter: AdminTimeFilter,
+  customStartDate?: string,
+  customEndDate?: string
+) {
+  return `${getAdminReportRangeLabel(timeFilter, customStartDate, customEndDate)} Orders`;
 }
 
 export function getAdminReportOrders(
