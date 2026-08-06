@@ -792,6 +792,7 @@ function DemandForecastChart({
 
   const labelPoints = [...historyCoordinates, ...forecastCoordinates];
   const labelEvery = Math.max(1, Math.ceil(labelPoints.length / 8));
+  const yTicks = Array.from(new Set([Math.round(maxValue), Math.round(maxValue / 2), 0]));
 
   return (
     <div className="mt-1 rounded-[14px] bg-[#FFFCF7] px-1 py-1">
@@ -801,6 +802,34 @@ function DemandForecastChart({
         role="img"
         viewBox={`0 0 ${width} ${height}`}
       >
+        {yTicks.map((tick) => {
+          const y = padding.top + innerHeight - (tick / maxValue) * innerHeight;
+
+          return (
+            <g key={tick}>
+              <line
+                stroke="#E8D9BE"
+                strokeDasharray="7 10"
+                strokeWidth="1"
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+              />
+              <text
+                fill="#8C6C48"
+                fontSize="12"
+                fontWeight="800"
+                textAnchor="end"
+                x={padding.left - 12}
+                y={y + 4}
+              >
+                {tick}
+              </text>
+            </g>
+          );
+        })}
+
         {bandPath ? <path d={bandPath} fill="rgba(104,75,53,0.14)" /> : null}
         {historyLinePath ? (
           <path
@@ -1617,6 +1646,7 @@ export function DashboardView({
     !keyword ||
     matchesSearch("Weekly Trend", keyword) ||
     weeklyTrendCounts.some((item) => matchesSearch(item.label, keyword));
+  const showDemandForecast = !keyword || matchesSearch("Demand Forecast", keyword);
   const hasDashboardResults =
     showKpi ||
     showInsights ||
@@ -1626,7 +1656,8 @@ export function DashboardView({
     showTopItems ||
     showSatisfaction ||
     showHourly ||
-    showWeekly;
+    showWeekly ||
+    showDemandForecast;
 
   if (isLoading) {
     return (
@@ -1797,33 +1828,35 @@ export function DashboardView({
         </div>
       ) : null}
 
-      <div
-        className="kada-admin-content-enter grid gap-3"
-        style={{ animationDelay: "820ms" }}
-      >
-        <div id="admin-demand-forecast" className="scroll-mt-28">
-          <Panel
-            title="Demand Forecast"
-            formulaTitle="Demand Forecast Formula"
-            formula="Forecast = day-of-week + trend + same-weekday-last-week (multiple linear regression)"
-            formulaExplanation={
-              demandForecast
-                ? `Model fit: R² ${demandForecast.diagnostics.rSquared}, RMSE ${demandForecast.diagnostics.rmse} orders (naive baseline RMSE ${demandForecast.diagnostics.baselineRmse}), Durbin-Watson ${demandForecast.diagnostics.durbinWatson}. Trained on ${demandForecast.diagnostics.trainingDays} days, tested on ${demandForecast.diagnostics.testDays}.`
-                : "Not enough order history yet to fit a forecast."
-            }
-          >
-            {demandForecast ? (
-              <DemandForecastChart
-                history={demandForecast.history}
-                forecast={demandForecast.forecast}
-                rmse={demandForecast.diagnostics.rmse}
-              />
-            ) : (
-              <EmptyState label="Not enough order history yet for a demand forecast." />
-            )}
-          </Panel>
+      {showDemandForecast ? (
+        <div
+          className="kada-admin-content-enter grid gap-3"
+          style={{ animationDelay: "820ms" }}
+        >
+          <div id="admin-demand-forecast" className="scroll-mt-28">
+            <Panel
+              title="Demand Forecast"
+              formulaTitle="Demand Forecast Formula"
+              formula="Forecast = day-of-week + trend + same-weekday-last-week (multiple linear regression)"
+              formulaExplanation={
+                demandForecast
+                  ? `Model fit: R² ${demandForecast.diagnostics.rSquared}, RMSE ${demandForecast.diagnostics.rmse} orders (naive baseline RMSE ${demandForecast.diagnostics.baselineRmse}), Durbin-Watson ${demandForecast.diagnostics.durbinWatson}. Trained on ${demandForecast.diagnostics.trainingDays} days, tested on ${demandForecast.diagnostics.testDays}.`
+                  : "Not enough order history yet to fit a forecast."
+              }
+            >
+              {demandForecast ? (
+                <DemandForecastChart
+                  history={demandForecast.history}
+                  forecast={demandForecast.forecast}
+                  rmse={demandForecast.diagnostics.rmse}
+                />
+              ) : (
+                <EmptyState label="Not enough order history yet for a demand forecast." />
+              )}
+            </Panel>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Top Items, Ratings, Insights, and Attention */}
       {showTopItems || showSatisfaction || showInsights || showNeedsAttention ? (

@@ -4,8 +4,9 @@ import { fillDailySeries, generateDemandForecast, MIN_HISTORY_DAYS } from "@/lib
 
 type AnalyticsOrderRow = {
   ordered_at: string;
-  status: string;
 };
+
+const LOOKBACK_DAYS = 180;
 
 const ANALYTICS_TIME_ZONE = "Asia/Manila";
 
@@ -54,9 +55,13 @@ export async function GET() {
     }
 
     const { supabase } = access;
+    const lookbackStart = new Date();
+    lookbackStart.setDate(lookbackStart.getDate() - LOOKBACK_DAYS);
+
     const { data: orders, error } = await supabase
       .from("orders")
-      .select("ordered_at, status")
+      .select("ordered_at")
+      .gte("ordered_at", lookbackStart.toISOString())
       .neq("status", "cancelled")
       .neq("status", "expired")
       .order("ordered_at", { ascending: true })

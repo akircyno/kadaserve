@@ -43,9 +43,10 @@ export function isWithinAdminTimeFilter(
   value: string,
   timeFilter: AdminTimeFilter,
   customStartDate?: string,
-  customEndDate?: string
+  customEndDate?: string,
+  referenceDate: Date = new Date()
 ) {
-  const today = getManilaDateOnly(new Date());
+  const today = getManilaDateOnly(referenceDate);
   const orderDate = getManilaDateOnly(new Date(value));
 
   if (timeFilter === "custom") {
@@ -171,6 +172,7 @@ export function getAdminReportOrders(
     typeFilter = "all",
     customStartDate,
     customEndDate,
+    referenceDate = new Date(),
   }: {
     customEndDate?: string;
     customStartDate?: string;
@@ -178,6 +180,7 @@ export function getAdminReportOrders(
     statusFilter?: AdminStatusFilter;
     timeFilter: AdminTimeFilter;
     typeFilter?: AdminTypeFilter;
+    referenceDate?: Date;
   }
 ) {
   const activeStatuses = new Set<OrderStatus>([
@@ -193,7 +196,8 @@ export function getAdminReportOrders(
       order.ordered_at,
       timeFilter,
       customStartDate,
-      customEndDate
+      customEndDate,
+      referenceDate
     );
     const matchesStatus =
       statusFilter === "all"
@@ -211,12 +215,18 @@ export function getAdminReportOrders(
   });
 }
 
-export function computeAdminDashboardRange(validOrders: StaffOrder[]): {
+export function computeAdminDashboardRange(
+  validOrders: StaffOrder[],
+  referenceDate: Date = new Date()
+): {
   timeFilter: "month" | "custom";
   customStartDate: string | undefined;
   customEndDate: string | undefined;
 } {
-  const currentMonthOrders = getAdminReportOrders(validOrders, { timeFilter: "month" });
+  const currentMonthOrders = getAdminReportOrders(validOrders, {
+    timeFilter: "month",
+    referenceDate,
+  });
 
   if (currentMonthOrders.length > 0) {
     return {

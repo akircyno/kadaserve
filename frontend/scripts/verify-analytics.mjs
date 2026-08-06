@@ -207,7 +207,8 @@ try {
   {
     const series = Array.from({ length: 30 }, (_, index) => {
       const date = addDays("2026-01-01", index);
-      const dayOfWeek = new Date(`${date}T00:00:00+08:00`).getDay();
+      const [year, month, day] = date.split("-").map(Number);
+      const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
       const weekendBoost = dayOfWeek === 0 || dayOfWeek === 6 ? 5 : 0;
       const trend = index * 0.2;
       return { date, orderCount: Math.round(10 + weekendBoost + trend) };

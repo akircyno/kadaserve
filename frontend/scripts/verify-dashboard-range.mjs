@@ -17,6 +17,11 @@ async function importDataUrlModule(relativePath) {
 
 console.log("Testing computeAdminDashboardRange (admin-order-totals.ts, real exported function)...");
 
+// Fixed reference date used for every scenario below so the test is
+// deterministic regardless of when it's actually run (not tied to wall-clock
+// "now"). Falls in August 2026, matching the synthetic order dates.
+const REFERENCE_DATE = new Date("2026-08-15T12:00:00Z");
+
 const { computeAdminDashboardRange, getAdminReportOrders, getAdminOrdersMetricLabel } =
   await importDataUrlModule("../src/lib/admin-order-totals.ts");
 
@@ -32,9 +37,9 @@ function makeOrder(orderedAt) {
   };
 }
 
-// Scenario 1: current real-world month (August 2026, per system clock) has NO
-// orders among the synthetic set (only May orders exist) -> must fall back to
-// a custom range covering May 2026, the month of the most recent order. This
+// Scenario 1: the reference "current" month (August 2026) has NO orders
+// among the synthetic set (only May orders exist) -> must fall back to a
+// custom range covering May 2026, the month of the most recent order. This
 // reproduces the exact historical bug scenario: real data spanned only
 // 2026-04-30..2026-05-31, and "now" being past May caused "month" to show 0.
 {
@@ -44,7 +49,7 @@ function makeOrder(orderedAt) {
     makeOrder("2026-05-31T10:00:00Z"),
   ];
 
-  const range = computeAdminDashboardRange(validOrders);
+  const range = computeAdminDashboardRange(validOrders, REFERENCE_DATE);
   console.log("  Scenario 1 range:", JSON.stringify(range));
   assert.equal(range.timeFilter, "custom");
   assert.equal(range.customStartDate, "2026-05-01");
@@ -65,12 +70,13 @@ function makeOrder(orderedAt) {
   console.log("  PASS: empty current month falls back to most-recent-month-with-data as a custom range");
 }
 
-// Scenario 2: current month has at least one order -> must stay on "month"
-// (no fallback needed), matching what the live dev database looks like today
-// (an order exists on 2026-08-03).
+// Scenario 2: the reference "current" month (August 2026) has at least one
+// order -> must stay on "month" (no fallback needed), matching what the live
+// dev database looked like when this scenario was written (an order on
+// 2026-08-03).
 {
   const validOrders = [makeOrder("2026-08-03T14:00:00Z"), makeOrder("2026-05-01T10:00:00Z")];
-  const range = computeAdminDashboardRange(validOrders);
+  const range = computeAdminDashboardRange(validOrders, REFERENCE_DATE);
   console.log("  Scenario 2 range:", JSON.stringify(range));
   assert.equal(range.timeFilter, "month");
   assert.equal(range.customStartDate, undefined);

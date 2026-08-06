@@ -63,7 +63,8 @@ export function fillDailySeries(
 }
 
 function getDayOfWeekIndex(dateKey: string): number {
-  return new Date(`${dateKey}T00:00:00+08:00`).getDay();
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
 function buildFeatureRow(dateKey: string, trendIndex: number, lagValue: number): number[] {

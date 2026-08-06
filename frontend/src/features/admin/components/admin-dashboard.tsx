@@ -921,6 +921,7 @@ export function AdminDashboard() {
         ["Top Items", "admin-top-items"],
         ["Satisfaction", "admin-satisfaction"],
         ["Orders by Hour", "admin-hourly-demand-curve"],
+        ["Demand Forecast", "admin-demand-forecast"],
         ["Admin Snapshot", "admin-decision-support"],
         ["Demand Help", "admin-decision-support"],
         ["Customer Help", "admin-decision-support"],
