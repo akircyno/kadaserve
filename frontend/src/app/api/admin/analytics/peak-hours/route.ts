@@ -99,8 +99,8 @@ function getDayOfWeekNumber(row: AnalyticsHourlyRow) {
     return dayFromName;
   }
 
-  const dateValue = new Date(`${row.order_date}T00:00:00+08:00`);
-  const fallbackDay = dateValue.getDay();
+  const [year, month, day] = row.order_date.split("-").map(Number);
+  const fallbackDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 
   return Number.isFinite(fallbackDay) ? fallbackDay : 0;
 }
