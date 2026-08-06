@@ -117,8 +117,11 @@ swept, see Evaluation).
 score(candidate) = Σ over customer's owned items [ weightedSim(candidate, owned) × ahpScore(owned) ]
 ```
 
-The existing AHP preference score becomes the weight, so the two systems compose rather than
-compete. Candidates are restricted to `is_available = true` items the customer has not ordered.
+`ahpScore(owned)` is the existing `ScoredItem.score` field in `recommendations.ts` — documented
+there as "Composite score in [0, 1]" and already computed by the current engine. The AHP score
+thus becomes the CF weight, so the two systems compose rather than compete. Candidates are
+restricted to items where `RecommendationMenuItem.isAvailable === true` and which the customer
+has not previously ordered.
 
 **Minimum threshold.** A candidate qualifies for the discovery slot only if its score exceeds
 `CF_MIN_SCORE = 0.05` **and** its best contributing pair has support `n ≥ 2`. The support floor
@@ -128,29 +131,65 @@ discarded and the slot falls through to popularity.
 
 ## Integration
 
-The Top-N assembly in `recommendations.ts` currently fills slots 1–2 from top AHP-scored known
-items and slot 3+ from global popularity. The change: **slot 3 becomes a CF discovery slot**,
-labeled and explained as such ("Customers who ordered <item> also enjoyed this"), falling
-through to the existing popularity fallback when no candidate clears the minimum score
-threshold.
+The "cascade hybrid" block in `recommendations.ts` currently fills slot 1 with `"Best for You"`
+(basis `preference`), slot 2 with `"You Might Also Like"` (also basis `preference` — the
+second-highest scored known item), then loops global popularity for any remaining slots up to 3.
 
-Slots 1–2 and the cold-start path (no completed orders → pure popularity) are unchanged, so
-new-customer experience is byte-identical to today's.
+The change: **insert a CF discovery attempt between slot 2 and the popularity loop.** If a
+candidate clears the threshold, it takes slot 3; otherwise the existing popularity loop fills it
+exactly as today.
+
+The CF slot needs a **new** basis and label, because `"You Might Also Like"` is already taken by
+slot 2 and this codebase deliberately keeps labels mechanically distinct (see the existing
+`TOP_SELLER_MIN_ORDER_COUNT` comment about avoiding decorative labels):
+
+- `RecommendationBasis`: add `"collaborative"`
+- `RecommendationLabel`: add `"Customers Also Enjoyed"`
+- `buildExplanation` gains a `collaborative` case naming the specific neighbor item that drove
+  the recommendation ("Customers who ordered Mocha also enjoyed this") — the neighbor name is
+  real, not decorative, so the explanation stays honest.
+
+Slots 1–2 and the cold-start path (no completed orders → pure popularity) are untouched, so
+new-customer experience is identical to today's.
 
 ## Evaluation
 
-**Protocol.** Leave-one-out with a **temporal** holdout: for each customer with ≥2 distinct
-items, hold out their most recently ordered distinct item, generate Top-K from the remaining
-history, and check whether the held-out item appears. Temporal rather than random holdout —
-random selection leaks future information and inflates results.
+**Two protocols, because one would rig the comparison.**
+
+A naive design — hold out the customer's most recent *distinct* item and see who predicts it —
+is not a fair three-way test. AHP-only scores exclusively items already present in the
+customer's history, so on a novel-item target it scores a structural **zero by construction**,
+not because it performs badly. Reporting that as "CF beats the current system" would be
+indefensible under questioning. So the harness runs both of these:
+
+**Protocol A — next-order prediction (headline, fair three-way).** For each customer with ≥2
+orders, hold out their most recent *order*; targets are the distinct items in it, which may
+well be repeat purchases. Generate Top-K from all prior history. All three strategies can
+legitimately compete here: AHP predicts repeats, popularity predicts crowd favorites, CF
+predicts neighbors. This is the standard next-basket protocol and is the number to lead with.
+
+**Protocol B — novel-item discovery (secondary, isolates the new capability).** For each
+customer with ≥2 distinct items, hold out the most recent item they had *not previously
+ordered*. This measures discovery specifically, and the honest expectation is that AHP-only
+scores 0 — which the report states explicitly as a structural property of the current design,
+not a performance result. The meaningful comparison in Protocol B is **CF vs. popularity**,
+since only those two can surface unseen items.
+
+Both use a **temporal** holdout, never random — random selection leaks future information into
+the training history and inflates every metric. Note the evaluable populations differ (Protocol
+A needs ≥2 orders; Protocol B needs ≥2 distinct items); the script reports each n separately.
 
 **Metrics.** Precision@K and Recall@K exactly as defined in Chapter 2.6.5–2.6.6, averaged
-across evaluable customers, at K = 1, 3, 5. K=3 is the production Top-N size and is the headline
-number; K=1 and K=5 bracket it to show how the ranking behaves as the list tightens or widens.
-Note that with a single held-out item per customer, Recall@K is either 0 or 1 per customer and
-Precision@K is capped at 1/K — both are reported as means across customers, and Chapter 3 should
-state this interpretation explicitly rather than letting a low Precision@5 read as poor
-performance when 0.2 is its ceiling.
+across evaluable customers, at K = 1, 3, 5. K=3 is the production Top-N size (matching Chapter
+2.6.4's stated N=3) and is the headline; K=1 and K=5 bracket it to show how ranking behaves as
+the list tightens or widens.
+
+**A ceiling effect Chapter 3 must state explicitly.** When a customer has exactly one held-out
+target — always true in Protocol B, and common in Protocol A — Recall@K is binary (0 or 1) and
+Precision@K cannot exceed 1/K. So Precision@5 has a hard ceiling of 0.20 and Precision@3 of
+0.33. Without that caveat in the write-up, a reader sees "Precision@5 = 0.18" and concludes the
+model performs poorly, when it is in fact at 90% of its mathematical maximum. Report the ceiling
+alongside the value.
 
 **Strategies compared (all three, same protocol):**
 
