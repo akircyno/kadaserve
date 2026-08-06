@@ -38,15 +38,6 @@ export type DemandForecastResult = {
 export const MIN_HISTORY_DAYS = 21;
 const FORECAST_HORIZON_DAYS = 7;
 const MIN_TRAIN_TEST_ROWS = 14;
-const DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
 
 export function addDays(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
