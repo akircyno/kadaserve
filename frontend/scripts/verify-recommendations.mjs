@@ -102,4 +102,88 @@ const {
   console.log("  PASS: predictCandidateScore sums weighted contributions and identifies the driver pair");
 }
 
-console.log("\nAll item-similarity.ts checks passed.");
+console.log("\nTesting recommendations.ts CF integration...");
+
+// recommendations.ts imports from ./item-similarity and ./recommendation-weights,
+// both relative imports — the plain data-URL trick can't resolve those, so
+// transpile all three to temp .mjs files on disk, same pattern used for
+// demand-forecast.ts in the admin-analytics feature's verify-analytics.mjs.
+const tempDir2 = await mkdtemp(path.join(tmpdir(), "kadaserve-verify-reco-"));
+
+try {
+  const itemSimilaritySource = await readFile(new URL("../src/lib/item-similarity.ts", import.meta.url), "utf8");
+  const weightsSource = await readFile(new URL("../src/lib/recommendation-weights.ts", import.meta.url), "utf8");
+  const recommendationsSource = await readFile(new URL("../src/lib/recommendations.ts", import.meta.url), "utf8");
+
+  const itemSimilarityPath = path.join(tempDir2, "item-similarity.mjs");
+  const weightsPath = path.join(tempDir2, "recommendation-weights.mjs");
+  const recommendationsPath = path.join(tempDir2, "recommendations.mjs");
+
+  await writeFile(itemSimilarityPath, transpile(itemSimilaritySource), "utf8");
+  await writeFile(weightsPath, transpile(weightsSource), "utf8");
+  await writeFile(
+    recommendationsPath,
+    transpile(recommendationsSource)
+      .replace('"./recommendation-weights"', '"./recommendation-weights.mjs"')
+      .replace('"./item-similarity"', '"./item-similarity.mjs"'),
+    "utf8"
+  );
+
+  const { getRecommendationsForCustomer } = await import(pathToFileURL(recommendationsPath).href);
+
+  // Two customers co-purchase Latte+Muffin; a third customer has only ever
+  // ordered Latte. With CF enabled, Muffin should be discoverable for the
+  // third customer even though they have never ordered it.
+  const menuItems = [
+    { id: "latte", name: "Latte", category: "coffee", price: 100, isAvailable: true },
+    { id: "muffin", name: "Muffin", category: "pastry", price: 80, isAvailable: true },
+    { id: "tea", name: "Tea", category: "non-coffee", price: 90, isAvailable: true },
+  ];
+  const now = new Date().toISOString();
+  const orders = [
+    { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: now, items: [{ menuItemId: "latte", name: "Latte", quantity: 1 }, { menuItemId: "muffin", name: "Muffin", quantity: 1 }] },
+    { id: "o2", customerId: "c2", customerName: "C2", status: "completed", orderedAt: now, items: [{ menuItemId: "latte", name: "Latte", quantity: 1 }, { menuItemId: "muffin", name: "Muffin", quantity: 1 }] },
+    { id: "o3", customerId: "c3", customerName: "C3", status: "completed", orderedAt: now, items: [{ menuItemId: "latte", name: "Latte", quantity: 3 }] },
+  ];
+
+  const withCf = getRecommendationsForCustomer({
+    customerId: "c3",
+    customerName: "C3",
+    menuItems,
+    orders,
+    feedback: [],
+    hourOfDay: 14,
+    collaborativeLambda: 1, // low lambda so a support=2 pair clears threshold easily in this tiny fixture
+  });
+  const cfSlot = withCf.recommendations.find((r) => r.basis === "collaborative");
+  assert.ok(cfSlot, "expected a collaborative-basis recommendation to appear for c3");
+  assert.equal(cfSlot.item.id, "muffin");
+  assert.equal(cfSlot.label, "Customers Also Enjoyed");
+  assert.ok(cfSlot.reason.includes("Latte"), `expected reason to name the driver item, got: ${cfSlot.reason}`);
+  console.log("  PASS: CF slot surfaces a never-ordered item backed by real cross-customer support");
+
+  const withoutCf = getRecommendationsForCustomer({
+    customerId: "c3",
+    customerName: "C3",
+    menuItems,
+    orders,
+    feedback: [],
+    hourOfDay: 14,
+    enableCollaborativeSlot: false,
+  });
+  assert.ok(
+    !withoutCf.recommendations.some((r) => r.basis === "collaborative"),
+    "enableCollaborativeSlot=false should suppress the CF slot"
+  );
+  console.log("  PASS: enableCollaborativeSlot=false reproduces pre-CF (AHP-only) behavior");
+
+  assert.ok(
+    !withCf.recommendations.some((r) => r.basis === "collaborative" && r.item.id === "latte"),
+    "CF must not recommend an item the customer already ordered"
+  );
+  console.log("  PASS: CF slot never recommends an already-ordered item");
+} finally {
+  await rm(tempDir2, { recursive: true, force: true });
+}
+
+console.log("\nAll checks passed.");
