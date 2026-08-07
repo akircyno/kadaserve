@@ -311,6 +311,31 @@ try {
     });
     console.log("  PASS: runEvaluation produces bounded, well-formed metrics across all strategies and k values");
   }
+
+  // evaluateStrategy (via runEvaluation): precisionCeiling reflects each scenario's own
+  // target-set size (min(1, |targets|/k)), not a flat 1/k. A Protocol A scenario whose
+  // held-out order has 2 distinct items has a true ceiling of min(1, 2/3) at k=3, not 1/3.
+  {
+    const menuItems = [
+      { id: "a", name: "A", category: "coffee", price: 100, isAvailable: true },
+      { id: "b", name: "B", category: "pastry", price: 80, isAvailable: true },
+      { id: "c", name: "C", category: "coffee", price: 90, isAvailable: true },
+    ];
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+      { id: "o2", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-08T00:00:00Z", items: [{ menuItemId: "b", name: "B", quantity: 1 }, { menuItemId: "c", name: "C", quantity: 1 }] },
+    ];
+    const results = runEvaluation("A", orders, menuItems, [], [], [3], 3);
+    assert.equal(results.length, 3); // 3 strategies * 1 k value
+    const expectedCeiling = Math.min(1, 2 / 3);
+    results.forEach((r) => {
+      assert.ok(
+        Math.abs(r.precisionCeiling - expectedCeiling) < 1e-9,
+        `expected precisionCeiling ~${expectedCeiling} for a 2-item held-out target at k=3, got ${r.precisionCeiling}`
+      );
+    });
+    console.log("  PASS: precisionCeiling reflects per-scenario target-set size (min(1, |targets|/k)), not a flat 1/k");
+  }
 } finally {
   await rm(tempDir3, { recursive: true, force: true });
 }

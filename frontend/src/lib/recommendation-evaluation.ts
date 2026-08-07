@@ -202,11 +202,13 @@ export function evaluateStrategy(
 
   const precisions: number[] = [];
   const recalls: number[] = [];
+  const ceilings: number[] = [];
 
   scenarios.forEach((scenario) => {
     const topK = generateTopKForStrategy(strategy, scenario, menuItems, feedback, globalRanking, k, lambda);
     precisions.push(precisionAtK(topK, scenario.targetItemIds, k));
     recalls.push(recallAtK(topK, scenario.targetItemIds, k));
+    ceilings.push(Math.min(1, scenario.targetItemIds.size / k));
   });
 
   return {
@@ -215,7 +217,7 @@ export function evaluateStrategy(
     n: scenarios.length,
     meanPrecision: precisions.reduce((sum, v) => sum + v, 0) / precisions.length,
     meanRecall: recalls.reduce((sum, v) => sum + v, 0) / recalls.length,
-    precisionCeiling: 1 / k,
+    precisionCeiling: ceilings.reduce((sum, v) => sum + v, 0) / ceilings.length,
   };
 }
 
