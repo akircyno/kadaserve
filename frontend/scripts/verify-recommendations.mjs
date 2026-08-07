@@ -186,4 +186,133 @@ try {
   await rm(tempDir2, { recursive: true, force: true });
 }
 
+console.log("\nTesting recommendation-evaluation.ts...");
+
+const tempDir3 = await mkdtemp(path.join(tmpdir(), "kadaserve-verify-eval-"));
+
+try {
+  const files = {
+    "item-similarity.ts": "../src/lib/item-similarity.ts",
+    "recommendation-weights.ts": "../src/lib/recommendation-weights.ts",
+    "recommendations.ts": "../src/lib/recommendations.ts",
+    "recommendation-evaluation.ts": "../src/lib/recommendation-evaluation.ts",
+  };
+  const sources = {};
+  for (const [name, rel] of Object.entries(files)) {
+    sources[name] = await readFile(new URL(rel, import.meta.url), "utf8");
+  }
+
+  const outPaths = {};
+  for (const name of Object.keys(files)) {
+    outPaths[name] = path.join(tempDir3, name.replace(".ts", ".mjs"));
+  }
+
+  await writeFile(outPaths["item-similarity.ts"], transpile(sources["item-similarity.ts"]), "utf8");
+  await writeFile(outPaths["recommendation-weights.ts"], transpile(sources["recommendation-weights.ts"]), "utf8");
+  await writeFile(
+    outPaths["recommendations.ts"],
+    transpile(sources["recommendations.ts"])
+      .replace('"./recommendation-weights"', '"./recommendation-weights.mjs"')
+      .replace('"./item-similarity"', '"./item-similarity.mjs"'),
+    "utf8"
+  );
+  await writeFile(
+    outPaths["recommendation-evaluation.ts"],
+    transpile(sources["recommendation-evaluation.ts"]).replace('"./recommendations"', '"./recommendations.mjs"'),
+    "utf8"
+  );
+
+  const {
+    buildProtocolAScenarios,
+    buildProtocolBScenarios,
+    precisionAtK,
+    recallAtK,
+    runEvaluation,
+  } = await import(pathToFileURL(outPaths["recommendation-evaluation.ts"]).href);
+
+  // precisionAtK / recallAtK: hand-computed
+  {
+    const recommended = ["a", "b", "c"];
+    const targets = new Set(["b"]);
+    assert.ok(Math.abs(precisionAtK(recommended, targets, 3) - 1 / 3) < 1e-9);
+    assert.equal(recallAtK(recommended, targets, 3), 1);
+    assert.equal(recallAtK(["x", "y"], targets, 2), 0);
+    console.log("  PASS: precisionAtK and recallAtK match hand-computed values");
+  }
+
+  // buildProtocolAScenarios: holds out the single most recent order
+  {
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+      { id: "o2", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-05T00:00:00Z", items: [{ menuItemId: "b", name: "B", quantity: 1 }] },
+    ];
+    const scenarios = buildProtocolAScenarios(orders);
+    assert.equal(scenarios.length, 1);
+    assert.equal(scenarios[0].customerId, "c1");
+    assert.deepEqual([...scenarios[0].targetItemIds], ["b"]);
+    assert.equal(scenarios[0].trainingOrders.length, 1);
+    assert.equal(scenarios[0].trainingOrders[0].id, "o1");
+    console.log("  PASS: buildProtocolAScenarios holds out the most recent order and keeps earlier history");
+  }
+
+  // buildProtocolAScenarios: customers with only 1 order are not evaluable
+  {
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+    ];
+    assert.equal(buildProtocolAScenarios(orders).length, 0);
+    console.log("  PASS: buildProtocolAScenarios skips customers with fewer than 2 orders");
+  }
+
+  // buildProtocolBScenarios: only a true singleton item is held out
+  {
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }, { menuItemId: "b", name: "B", quantity: 1 }] },
+      { id: "o2", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-05T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+    ];
+    const scenarios = buildProtocolBScenarios(orders);
+    assert.equal(scenarios.length, 1);
+    assert.deepEqual([...scenarios[0].targetItemIds], ["b"]);
+    const remainingItemIds = scenarios[0].trainingOrders.flatMap((o) => o.items.map((i) => i.menuItemId));
+    assert.ok(!remainingItemIds.includes("b"), "held-out singleton must be fully removed from training history");
+    assert.equal(remainingItemIds.filter((id) => id === "a").length, 2, "non-singleton item must be untouched");
+    console.log("  PASS: buildProtocolBScenarios only holds out true singleton (never-repeated) items");
+  }
+
+  // buildProtocolBScenarios: no singleton item -> customer not evaluable
+  {
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+      { id: "o2", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-05T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+    ];
+    assert.equal(buildProtocolBScenarios(orders).length, 0);
+    console.log("  PASS: buildProtocolBScenarios skips customers with no true singleton item");
+  }
+
+  // runEvaluation: end-to-end smoke test, all strategies/k produce bounded metrics
+  {
+    const menuItems = [
+      { id: "a", name: "A", category: "coffee", price: 100, isAvailable: true },
+      { id: "b", name: "B", category: "pastry", price: 80, isAvailable: true },
+      { id: "c", name: "C", category: "coffee", price: 90, isAvailable: true },
+    ];
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+      { id: "o2", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-08T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+      { id: "o3", customerId: "c2", customerName: "C2", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }, { menuItemId: "b", name: "B", quantity: 1 }] },
+      { id: "o4", customerId: "c2", customerName: "C2", status: "completed", orderedAt: "2026-01-08T00:00:00Z", items: [{ menuItemId: "b", name: "B", quantity: 1 }] },
+    ];
+    const results = runEvaluation("A", orders, menuItems, [], [], [1, 3], 3);
+    assert.equal(results.length, 6); // 3 strategies * 2 k values
+    results.forEach((r) => {
+      assert.ok(r.n >= 0);
+      assert.ok(r.meanPrecision >= 0 && r.meanPrecision <= 1);
+      assert.ok(r.meanRecall >= 0 && r.meanRecall <= 1);
+    });
+    console.log("  PASS: runEvaluation produces bounded, well-formed metrics across all strategies and k values");
+  }
+} finally {
+  await rm(tempDir3, { recursive: true, force: true });
+}
+
 console.log("\nAll checks passed.");
