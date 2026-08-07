@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:nutrition": "node scripts/verify-nutrition.mjs"
+    "test:nutrition": "node scripts/verify-nutrition.mjs",
+    "test:recommendations": "node scripts/verify-recommendations.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
