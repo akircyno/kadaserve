@@ -175,9 +175,11 @@ async function main() {
     console.log("\n=== Protocol B: Novel-Item Discovery (isolates CF; AHP-only is a structural 0 by design) ===");
     const protocolB = runEvaluation("B", orders, menuItems, feedback, globalRanking, [1, 3, 5], 3);
     printMetricsTable("Protocol B results", protocolB);
-    console.log("\nNote: ahp_only rows in Protocol B are expected to be 0.000 — the current system can only");
-    console.log("score items already in a customer's history, so it cannot recommend a truly novel item by");
-    console.log("construction. This is documented, not a bug.");
+    console.log("\nNote: 'ahp_only' here is the pre-CF production system (personal preference scoring plus");
+    console.log("the existing popularity fallback) with only the new CF discovery slot disabled — it is NOT");
+    console.log("restricted to previously-ordered items, since the popularity fallback can already surface");
+    console.log("novel items non-personally. The meaningful comparison is whether 'hybrid' (CF's personalized");
+    console.log("discovery) outperforms 'ahp_only' (blind popularity discovery) at recommending genuinely new items.");
 
     console.log("\n=== Lambda sensitivity sweep (Protocol B, hybrid strategy, k=3) ===");
     const sweep = runLambdaSweep(orders, menuItems, feedback, globalRanking, [1, 2, 3, 5], 3);
