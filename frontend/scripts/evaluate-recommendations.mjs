@@ -172,7 +172,7 @@ async function main() {
     const protocolA = runEvaluation("A", orders, menuItems, feedback, globalRanking, [1, 3, 5], 3);
     printMetricsTable("Protocol A results", protocolA);
 
-    console.log("\n=== Protocol B: Novel-Item Discovery (isolates CF; AHP-only is a structural 0 by design) ===");
+    console.log("\n=== Protocol B: Novel-Item Discovery (isolates CF's contribution vs. the existing popularity fallback) ===");
     const protocolB = runEvaluation("B", orders, menuItems, feedback, globalRanking, [1, 3, 5], 3);
     printMetricsTable("Protocol B results", protocolB);
     console.log("\nNote: 'ahp_only' here is the pre-CF production system (personal preference scoring plus");
