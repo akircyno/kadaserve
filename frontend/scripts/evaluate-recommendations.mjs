@@ -102,6 +102,14 @@ function printMetricsTable(title, metrics) {
 }
 
 async function main() {
+  // Finding 7: AHP scoring uses Date.now() internally for recency, so composite
+  // scores (and therefore every metric below) can shift slightly if this script
+  // is re-run on a different date, even against identical underlying data.
+  // Print provenance so a captured run is reproducible/attributable later.
+  console.log(`Run timestamp: ${new Date().toISOString()}`);
+  console.log("Protocol A/B k values: [1, 3, 5], lambda (significance weighting): 3");
+  console.log("Lambda sweep: lambda in [1, 2, 3, 5], k: 3");
+
   const env = await loadEnvLocal();
   const baseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -160,7 +168,7 @@ async function main() {
   }));
 
   console.log(
-    `Loaded ${orders.length} completed/delivered orders, ${menuItems.length} menu items, ${feedback.length} feedback rows.`
+    `Loaded ${orders.length} completed/delivered orders, ${menuItems.length} menu items, ${feedback.length} feedback rows, ${globalRanking.length} analytics_items rows (fetched for logging only — NOT passed into evaluation, since analytics_items is computed from the full orders table and would leak held-out targets back into the popularity ranking being scored).`
   );
 
   const { evaluationModule, tempDir } = await loadRecommendationEvaluationModule();
@@ -168,12 +176,23 @@ async function main() {
   try {
     const { runEvaluation, runLambdaSweep } = evaluationModule;
 
+    console.log(
+      "\nNote: this is per-customer leave-one-out evaluation — each customer's held-out order/item is"
+    );
+    console.log(
+      "removed from their own training history only, but other customers' full order history (including"
+    );
+    console.log(
+      "orders that postdate the held-out one) remains in the shared popularity/similarity model. This is"
+    );
+    console.log("not a strict global temporal split.");
+
     console.log("\n=== Protocol A: Next-Order Prediction (fair three-way headline) ===");
-    const protocolA = runEvaluation("A", orders, menuItems, feedback, globalRanking, [1, 3, 5], 3);
+    const protocolA = runEvaluation("A", orders, menuItems, feedback, [], [1, 3, 5], 3);
     printMetricsTable("Protocol A results", protocolA);
 
     console.log("\n=== Protocol B: Novel-Item Discovery (isolates CF's contribution vs. the existing popularity fallback) ===");
-    const protocolB = runEvaluation("B", orders, menuItems, feedback, globalRanking, [1, 3, 5], 3);
+    const protocolB = runEvaluation("B", orders, menuItems, feedback, [], [1, 3, 5], 3);
     printMetricsTable("Protocol B results", protocolB);
     console.log("\nNote: 'ahp_only' here is the pre-CF production system (personal preference scoring plus");
     console.log("the existing popularity fallback) with only the new CF discovery slot disabled — it is NOT");
@@ -182,7 +201,7 @@ async function main() {
     console.log("discovery) outperforms 'ahp_only' (blind popularity discovery) at recommending genuinely new items.");
 
     console.log("\n=== Lambda sensitivity sweep (Protocol B, hybrid strategy, k=3) ===");
-    const sweep = runLambdaSweep(orders, menuItems, feedback, globalRanking, [1, 2, 3, 5], 3);
+    const sweep = runLambdaSweep(orders, menuItems, feedback, [], [1, 2, 3, 5], 3);
     console.log("lambda".padEnd(8), "n".padEnd(4), "precision".padEnd(12), "recall");
     sweep.forEach((s) => {
       console.log(

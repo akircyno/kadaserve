@@ -133,11 +133,20 @@ export function computeItemNeighbors(
  * `driver` is the single (candidate, owned) pair with the highest
  * weightedSimilarity — used both for the minimum-support threshold check
  * and to name the item in the customer-facing explanation.
+ *
+ * `minSupport` structurally excludes any contributing (candidate, owned)
+ * pair whose support is below the threshold — not just the driver pair.
+ * Without this, a low-support (spurious, e.g. n=1) pair could still add to
+ * the summed score even though it would fail the driver-pair support check
+ * on its own, letting up to the rest of the total score come from pairs the
+ * threshold was meant to exclude entirely. Defaults to 0 (no filtering) for
+ * backward compatibility with existing callers/tests.
  */
 export function predictCandidateScore(
   neighbors: Map<string, NeighborScore[]>,
   candidateItemId: string,
-  ownedItemScores: Map<string, number>
+  ownedItemScores: Map<string, number>,
+  minSupport = 0
 ): CandidatePrediction {
   let score = 0;
   let driver: (NeighborScore & { ownedItemId: string }) | null = null;
@@ -149,7 +158,7 @@ export function predictCandidateScore(
     }
 
     const match = ownedNeighbors.find((n) => n.itemId === candidateItemId);
-    if (!match) {
+    if (!match || match.support < minSupport) {
       return;
     }
 

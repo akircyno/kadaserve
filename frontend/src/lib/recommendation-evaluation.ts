@@ -65,10 +65,16 @@ export function buildProtocolAScenarios(orders: RecommendationOrder[]): Evaluati
  * Protocol B — novel-item discovery. For each customer, finds items ordered
  * exactly once across their whole history (true singletons — removing the
  * one order-line makes the item fully absent from their remaining history),
- * and holds out the most recently ordered singleton. AHP-only can only score
- * items already in a customer's history, so it scores a structural 0 here by
- * design — that is documented, not a bug. The meaningful comparison is CF vs.
- * popularity.
+ * and holds out the most recently ordered singleton. Only customers with >=2
+ * distinct items in their full history are evaluable, so real training
+ * history remains after holdout (see the totalByItem.size check below).
+ *
+ * `ahp_only` here means CF is disabled, but the pre-existing popularity
+ * fallback remains active — it is NOT restricted to previously-ordered
+ * items, and can still recommend popular novel items, just without
+ * personalized similarity-based ranking. The meaningful comparison Protocol
+ * B measures is whether `hybrid`'s personalized discovery outperforms
+ * `ahp_only`'s blind popularity-based discovery.
  */
 export function buildProtocolBScenarios(orders: RecommendationOrder[]): EvaluationScenario[] {
   const finalOrders = orders.filter((o) => FINAL_STATUSES.has(o.status));
@@ -103,6 +109,15 @@ export function buildProtocolBScenarios(orders: RecommendationOrder[]): Evaluati
     );
 
     if (singletonOccurrences.length === 0) return;
+
+    // The evaluable population is "customers with >=2 distinct items" (design
+    // spec) so that after holding out one singleton, real training history
+    // remains and the three strategies can actually be distinguished. A
+    // customer whose entire history is a single distinct item would have an
+    // empty trainingOrders after holdout, forcing the cold-start path (pure
+    // popularity for all three strategies) and contributing zero
+    // discriminative signal while still inflating n.
+    if (totalByItem.size < 2) return;
 
     const mostRecent = [...singletonOccurrences].sort(
       (a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime()

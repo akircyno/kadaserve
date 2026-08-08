@@ -586,7 +586,7 @@ export function getRecommendationsForCustomer({
       const candidateKey = itemKey(candidateItem);
       if (ownedItemScores.has(candidateKey) || seen.has(candidateKey)) continue;
 
-      const prediction = predictCandidateScore(globalStats.itemNeighbors, candidateKey, ownedItemScores);
+      const prediction = predictCandidateScore(globalStats.itemNeighbors, candidateKey, ownedItemScores, CF_MIN_SUPPORT);
       if (
         prediction.score > CF_MIN_SCORE &&
         prediction.driver &&

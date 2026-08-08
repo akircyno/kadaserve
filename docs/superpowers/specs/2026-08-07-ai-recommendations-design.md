@@ -157,10 +157,12 @@ new-customer experience is identical to today's.
 **Two protocols, because one would rig the comparison.**
 
 A naive design — hold out the customer's most recent *distinct* item and see who predicts it —
-is not a fair three-way test. AHP-only scores exclusively items already present in the
-customer's history, so on a novel-item target it scores a structural **zero by construction**,
-not because it performs badly. Reporting that as "CF beats the current system" would be
-indefensible under questioning. So the harness runs both of these:
+is not a fair three-way test. AHP-only means CF is disabled, but the pre-existing popularity
+fallback remains active, so it is not restricted to items already present in the customer's
+history — it can still recommend popular novel items, just without personalized
+similarity-based ranking. Reporting a naive novel-item test as "CF beats the current system"
+without accounting for that fallback would be indefensible under questioning. So the harness
+runs both of these:
 
 **Protocol A — next-order prediction (headline, fair three-way).** For each customer with ≥2
 orders, hold out their most recent *order*; targets are the distinct items in it, which may
@@ -170,10 +172,10 @@ predicts neighbors. This is the standard next-basket protocol and is the number 
 
 **Protocol B — novel-item discovery (secondary, isolates the new capability).** For each
 customer with ≥2 distinct items, hold out the most recent item they had *not previously
-ordered*. This measures discovery specifically, and the honest expectation is that AHP-only
-scores 0 — which the report states explicitly as a structural property of the current design,
-not a performance result. The meaningful comparison in Protocol B is **CF vs. popularity**,
-since only those two can surface unseen items.
+ordered*. This measures discovery specifically. AHP-only is not restricted to previously-ordered
+items — its popularity fallback can still surface novel items non-personally — so it is not
+expected to score a structural 0 here; the meaningful comparison in Protocol B is whether
+**hybrid's personalized discovery outperforms ahp_only's blind popularity-based discovery**.
 
 Both use a **temporal** holdout, never random — random selection leaks future information into
 the training history and inflates every metric. Note the evaluable populations differ (Protocol

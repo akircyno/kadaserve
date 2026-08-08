@@ -102,6 +102,38 @@ const {
   console.log("  PASS: predictCandidateScore sums weighted contributions and identifies the driver pair");
 }
 
+// predictCandidateScore: minSupport structurally excludes low-support contributing
+// pairs from the SUMMED score, not just from the driver-pair check. Candidate B has
+// two contributing owned items: A (support=2, high) and C (support=1, low).
+{
+  const records = [
+    { customerId: "c1", itemId: "A", quantity: 1 },
+    { customerId: "c1", itemId: "B", quantity: 1 },
+    { customerId: "c2", itemId: "A", quantity: 1 },
+    { customerId: "c2", itemId: "B", quantity: 1 },
+    { customerId: "c3", itemId: "C", quantity: 1 },
+    { customerId: "c3", itemId: "B", quantity: 1 },
+  ];
+  const neighbors = computeItemNeighbors(records, 3);
+  const ownedItemScores = new Map([["A", 0.8], ["C", 0.8]]);
+
+  const unfiltered = predictCandidateScore(neighbors, "B", ownedItemScores);
+  const filtered = predictCandidateScore(neighbors, "B", ownedItemScores, 2);
+  const aOnly = predictCandidateScore(neighbors, "B", new Map([["A", 0.8]]));
+
+  assert.ok(
+    filtered.score < unfiltered.score,
+    "minSupport=2 should exclude the C-B pair's contribution (support=1), producing a smaller score"
+  );
+  assert.ok(
+    Math.abs(filtered.score - aOnly.score) < 1e-9,
+    `filtered score should equal the high-support A-B contribution alone, got ${filtered.score} vs ${aOnly.score}`
+  );
+  assert.equal(filtered.driver.ownedItemId, "A", "the only surviving driver should be the high-support pair");
+
+  console.log("  PASS: predictCandidateScore's minSupport excludes below-threshold pairs from the summed score, not just the driver");
+}
+
 console.log("\nTesting recommendations.ts CF integration...");
 
 // recommendations.ts imports from ./item-similarity and ./recommendation-weights,
@@ -175,7 +207,7 @@ try {
     !withoutCf.recommendations.some((r) => r.basis === "collaborative"),
     "enableCollaborativeSlot=false should suppress the CF slot"
   );
-  console.log("  PASS: enableCollaborativeSlot=false reproduces pre-CF (AHP-only) behavior");
+  console.log("  PASS: enableCollaborativeSlot=false suppresses the CF slot");
 
   assert.ok(
     !withCf.recommendations.some((r) => r.basis === "collaborative" && r.item.id === "latte"),
@@ -287,6 +319,22 @@ try {
     ];
     assert.equal(buildProtocolBScenarios(orders).length, 0);
     console.log("  PASS: buildProtocolBScenarios skips customers with no true singleton item");
+  }
+
+  // buildProtocolBScenarios: a customer with exactly one distinct item (ordered
+  // once, ever) has a "singleton" but zero remaining history after holdout —
+  // this must NOT produce a scenario, since it can't discriminate between
+  // strategies (all three fall through to the identical cold-start path).
+  {
+    const orders = [
+      { id: "o1", customerId: "c1", customerName: "C1", status: "completed", orderedAt: "2026-01-01T00:00:00Z", items: [{ menuItemId: "a", name: "A", quantity: 1 }] },
+    ];
+    assert.equal(
+      buildProtocolBScenarios(orders).length,
+      0,
+      "a customer whose entire history is a single distinct item must be excluded (would leave empty trainingOrders)"
+    );
+    console.log("  PASS: buildProtocolBScenarios skips customers with only one distinct item in their whole history");
   }
 
   // runEvaluation: end-to-end smoke test, all strategies/k produce bounded metrics

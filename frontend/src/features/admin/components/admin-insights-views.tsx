@@ -117,6 +117,7 @@ function getRecommendationTone(basis: string) {
 function getPreferenceBasisLabel(basis: string) {
   if (basis === "preference") return "Preference";
   if (basis === "top_seller") return "Top seller";
+  if (basis === "collaborative") return "Customers Also Enjoyed";
   return "Popularity";
 }
 
