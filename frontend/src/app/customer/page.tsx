@@ -40,8 +40,8 @@ type AnalyticsItemRow = {
 
 type InitialTopRecommendation = {
   rank: number;
-  label: "Best for You" | "Top Seller" | "Popular Now";
-  basis: "preference" | "top_seller" | "popularity";
+  label: "Best for You" | "Top Seller" | "Popular Now" | "Customers Also Enjoyed";
+  basis: "preference" | "top_seller" | "popularity" | "collaborative";
   reason: string;
   item_id: string;
   item_name: string;
