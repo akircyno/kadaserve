@@ -1836,12 +1836,12 @@ export function DashboardView({
           <div id="admin-demand-forecast" className="scroll-mt-28">
             <Panel
               title="Demand Forecast"
-              formulaTitle="Demand Forecast Formula"
-              formula="Forecast = day-of-week + trend + same-weekday-last-week (multiple linear regression)"
+              formulaTitle="What This Chart Means"
+              formula="Predicts your orders for the next 7 days, using your past order history."
               formulaExplanation={
                 demandForecast
-                  ? `Model fit: R² ${demandForecast.diagnostics.rSquared}, RMSE ${demandForecast.diagnostics.rmse} orders (naive baseline RMSE ${demandForecast.diagnostics.baselineRmse}), Durbin-Watson ${demandForecast.diagnostics.durbinWatson}. Trained on ${demandForecast.diagnostics.trainingDays} days, tested on ${demandForecast.diagnostics.testDays}.`
-                  : "Not enough order history yet to fit a forecast."
+                  ? `The dashed line is the prediction. The shaded area around it shows how much the real number could go up or down — wider shading means less certainty. (Model accuracy: explains ${Math.round(demandForecast.diagnostics.rSquared * 100)}% of past order changes, typically off by about ${Math.round(demandForecast.diagnostics.rmse)} orders. Based on ${demandForecast.diagnostics.trainingDays} days of history.)`
+                  : "Not enough order history yet to make a prediction."
               }
             >
               {demandForecast ? (
