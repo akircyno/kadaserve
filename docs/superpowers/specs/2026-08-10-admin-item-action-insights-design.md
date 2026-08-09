@@ -1,6 +1,6 @@
 # Actionable Item Insights (Admin Dashboard) — Design
 
-Status: Approved by user (2026-08-10), pending write-up review
+Status: Implemented (2026-08-10)
 Origin: Follow-up polish requested during live testing of Revision #1 (AI Analytics) — the
 owner asked for the dashboard to suggest concrete actions, not just flag problems.
 
