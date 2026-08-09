@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Clock,
+  TrendingDown,
   TrendingUp,
   Flame,
   Info,
@@ -15,6 +16,7 @@ import {
   Star,
   X,
 } from "lucide-react";
+import { buildItemActionInsights, type ItemActionInsightIcon } from "@/lib/item-action-insights";
 
 const STORE_HOURS_LABEL = "Store hours: 5:00 PM - 12:00 AM";
 type OverviewIcon = React.ComponentType<{
@@ -239,34 +241,6 @@ function MetricCard({
         <MiniSparkline color={sparkColor ?? accentColor} data={sparkData} />
       </div>
     </div>
-  );
-}
-
-function InsightCard({
-  detail,
-  label,
-  value,
-  icon: Icon,
-}: {
-  detail: string
-  label: string
-  value: string
-  icon: OverviewIcon
-}) {
-  return (
-    <article className="flex min-w-0 items-start gap-3 rounded-[10px] border border-[#EFE3CF] bg-[#FFF8EF] px-3 py-2.5 transition hover:border-[#D8C8AA] hover:bg-[#FFF0DA]/45">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#EFE3CF] bg-[#FFFCF7] text-[#0D2E18]">
-        <Icon size={14} strokeWidth={1.9} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-sans text-xs font-black text-[#0D2E18]">
-          {label}: <span className="font-black">{value}</span>
-        </p>
-        <p className="mt-1 line-clamp-2 font-sans text-[0.7rem] font-medium leading-relaxed text-[#7D6B55]">
-          {detail}
-        </p>
-      </div>
-    </article>
   );
 }
 
@@ -1398,6 +1372,7 @@ export function DashboardView({
   hourlyDateLabel,
   hourlyCounts,
   itemRanking,
+  hasRealRatingData,
   maxHourlyOrders,
   maxItemOrders,
   weeklyTrendCounts,
@@ -1418,6 +1393,7 @@ export function DashboardView({
   hourlyDateLabel: string;
   hourlyCounts: Array<{ label: string; orders: number }>;
   itemRanking: Array<{ item: string; orders: number; revenue: number; rating: number }>;
+  hasRealRatingData: boolean;
   maxHourlyOrders: number;
   maxItemOrders: number;
   weeklyTrendCounts: Array<{ label: string; orders: number }>;
@@ -1569,58 +1545,78 @@ export function DashboardView({
     ...(satisfactionLabel === "Needs review"
       ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
       : []),
-  ].slice(0, 3);
+  ].slice(0, 2);
 
-  const visibleInsights = [
+  const generalInsights = [
     {
-      label: "Peak Hour",
-      value: busiestHour.orders > 0 ? busiestHour.label : "No data",
-      detail:
+      icon: Clock,
+      title: `Peak Hour: ${busiestHour.orders > 0 ? busiestHour.label : "No data"}`,
+      description:
         busiestHour.orders > 0
           ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
           : "Wait for more order data.",
-      icon: Clock,
+      type: "info" as const,
     },
     {
-      label: "Weekly Growth",
-      value: trendLabel,
-      detail:
+      icon: TrendingUp,
+      title: `Weekly Growth: ${trendLabel}`,
+      description:
         weeklyTrendCounts.length < 2
           ? "Need more data for comparison."
           : `${latestWeek} orders vs ${previousWeek} last week.`,
-      icon: TrendingUp,
+      type: "info" as const,
     },
     {
-      label: "Top Favorite",
-      value: topItem?.item ?? "-",
-      detail: topItem
+      icon: Star,
+      title: `Top Favorite: ${topItem?.item ?? "-"}`,
+      description: topItem
         ? `${topItem.orders} orders. Good item to recommend.`
         : "Collect order data first.",
-      icon: Star,
+      type: "info" as const,
     },
     {
-      label: "Satisfaction",
-      value: satisfactionLabel,
-      detail:
+      icon: Smile,
+      title: `Satisfaction: ${satisfactionLabel}`,
+      description:
         feedbackCount > 0
           ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
           : "Encourage customer feedback.",
-      icon: Smile,
+      type: "info" as const,
     },
+  ];
+
+  const ITEM_ACTION_ICONS: Record<ItemActionInsightIcon, OverviewIcon> = {
+    TrendingDown,
+    Flame,
+  };
+
+  const itemActionInsights = buildItemActionInsights(
+    itemRanking,
+    hasRealRatingData,
+    totalOrders
+  ).map((insight) => ({
+    icon: ITEM_ACTION_ICONS[insight.icon],
+    title: insight.title,
+    description: insight.description,
+    type: insight.type,
+  }));
+
+  const visibleInsights = [
+    ...needsAttentionItems,
+    ...itemActionInsights,
+    ...generalInsights,
   ].filter(
     (insight) =>
       !keyword ||
-      matchesSearch(insight.label, keyword) ||
-      matchesSearch(insight.value, keyword) ||
-      matchesSearch(insight.detail, keyword)
+      matchesSearch(insight.title, keyword) ||
+      matchesSearch(insight.description, keyword)
   );
-  
+
   const visibleItemRanking = keyword
     ? itemRanking.filter((item) => matchesSearch(item.item, keyword))
     : itemRanking;
   
   const showInsights = !keyword || visibleInsights.length > 0;
-  const showNeedsAttention = needsAttentionItems.length > 0 && (!keyword || matchesSearch("attention", keyword) || matchesSearch("alert", keyword));
   const showKpi = !keyword || visibleKpiCards.length > 0;
   const showOrdersWeek =
     !keyword ||
@@ -1650,7 +1646,6 @@ export function DashboardView({
   const hasDashboardResults =
     showKpi ||
     showInsights ||
-    showNeedsAttention ||
     showOrdersWeek ||
     showOrderTypeDistribution ||
     showTopItems ||
@@ -1859,7 +1854,7 @@ export function DashboardView({
       ) : null}
 
       {/* Top Items, Ratings, Insights, and Attention */}
-      {showTopItems || showSatisfaction || showInsights || showNeedsAttention ? (
+      {showTopItems || showSatisfaction || showInsights ? (
         <div
           className="kada-admin-content-enter grid gap-3 xl:grid-cols-[1.15fr_1fr_1fr]"
           style={{ animationDelay: "880ms" }}
@@ -1910,51 +1905,29 @@ export function DashboardView({
             </div>
           ) : null}
 
-          {showInsights || showNeedsAttention ? (
+          {showInsights ? (
             <div className="grid gap-3 xl:min-h-[310px]">
-              {showInsights ? (
-                <Panel
-                  id="admin-decision-support"
-                  className="scroll-mt-28"
-                  title="Insights"
-                >
-                  {visibleInsights.length > 0 ? (
-                    <div className="grid gap-2">
-                      {visibleInsights.slice(0, 3).map((insight) => (
-                        <InsightCard
-                          key={insight.label}
-                          detail={insight.detail}
-                          label={insight.label}
-                          value={insight.value}
-                          icon={insight.icon}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState label="No insights match this search" />
-                  )}
-                </Panel>
-              ) : null}
-
-              {showNeedsAttention ? (
-                <Panel
-                  id="admin-needs-attention"
-                  className="scroll-mt-28"
-                  title="Needs Attention"
-                >
+              <Panel
+                id="admin-decision-support"
+                className="scroll-mt-28"
+                title="Insights"
+              >
+                {visibleInsights.length > 0 ? (
                   <div className="space-y-2">
-                    {needsAttentionItems.map((item, idx) => (
+                    {visibleInsights.slice(0, 4).map((insight, idx) => (
                       <NeedsAttentionItem
                         key={idx}
-                        icon={item.icon}
-                        title={item.title}
-                        description={item.description}
-                        type={item.type}
+                        icon={insight.icon}
+                        title={insight.title}
+                        description={insight.description}
+                        type={insight.type}
                       />
                     ))}
                   </div>
-                </Panel>
-              ) : null}
+                ) : (
+                  <EmptyState label="No insights match this search" />
+                )}
+              </Panel>
             </div>
           ) : null}
         </div>
