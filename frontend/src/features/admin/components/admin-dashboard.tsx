@@ -1804,7 +1804,14 @@ export function AdminDashboard() {
                 hourlyDateLabel={analyticsHourlyDateLabel}
                 hourlyCounts={hourlyCounts}
                 itemRanking={displayItemRanking}
-                hasRealRatingData={feedbackRows.length > 0}
+                // Both conditions are required: analyticsItemRanking.length > 0 confirms
+                // displayItemRanking isn't the fabricated-rating fallback, and
+                // feedbackRows.length > 0 confirms that fetch didn't fail independently
+                // while analyticsItemRanking happened to be populated. Either alone can be
+                // true while the other is false (they're separate fetches), and dropping
+                // either one reopens the false "review your recipe" warning this guards
+                // against — see docs/superpowers/specs/2026-08-10-admin-item-action-insights-design.md.
+                hasRealRatingData={analyticsItemRanking.length > 0 && feedbackRows.length > 0}
                 maxHourlyOrders={maxHourlyOrders}
                 maxItemOrders={maxItemOrders}
                 weeklyTrendCounts={weeklyTrendCounts}
