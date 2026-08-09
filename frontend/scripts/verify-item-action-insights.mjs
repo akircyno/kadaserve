@@ -103,6 +103,26 @@ const { buildItemActionInsights } = await importDataUrlModule(
   console.log("  PASS: no real rating data suggests a promo to gather feedback");
 }
 
+// Per-item guard: even when hasRealRatingData is true (some items in the
+// menu have real feedback), an individual item with rating 0 has no
+// feedback of its own -- a rating of 0 on a 1-5 scale can only mean "no
+// data," never a real low rating. Must still produce the "not enough
+// feedback" message, not the low-rating warning.
+{
+  const result = buildItemActionInsights(
+    [
+      { item: "Anchor", orders: 15, rating: 4.5 },
+      { item: "Struggler", orders: 4, rating: 0 },
+    ],
+    true,
+    20
+  );
+  assert.equal(result.length, 1);
+  assert.ok(result[0].description.includes("Not enough feedback to diagnose"));
+  assert.ok(!result[0].description.includes("reviewing the recipe"));
+  console.log("  PASS: a per-item rating of 0 is treated as no feedback, even when hasRealRatingData is true overall");
+}
+
 // Regression test: the fabricated fallback rating formula in
 // admin-dashboard.tsx produces values in the 3.8-4.8 range purely from order
 // count (Math.min(4.8, 3.8 + orders / 20)) -- NOT real customer sentiment.
@@ -168,9 +188,10 @@ const { buildItemActionInsights } = await importDataUrlModule(
 }
 
 // Cap and priority: 5 base items at 20 (dilution) + Struggler(1), MildLow(9),
-// Popular(60). avg=21.25. Deviations: Popular=38.75, Struggler=20.25,
-// MildLow=12.25. Only the top 2 by deviation should be returned, regardless
-// of direction, and MildLow (the smallest deviation) must be excluded.
+// Popular(60). avg=21.25. Log-ratio deviations: Struggler |ln(1/21.25)|=3.056,
+// Popular |ln(60/21.25)|=1.038, MildLow |ln(9/21.25)|=0.859. Only the top 2 by
+// deviation should be returned, regardless of direction, and MildLow (the
+// smallest deviation) must be excluded.
 {
   const baseItems = Array.from({ length: 5 }, (_, index) => ({
     item: `Base${index + 1}`,
@@ -188,13 +209,41 @@ const { buildItemActionInsights } = await importDataUrlModule(
     20
   );
   assert.equal(result.length, 2);
-  assert.ok(result[0].description.includes("Popular"), "largest deviation (Popular) should be first");
-  assert.ok(result[1].description.includes("Struggler"), "second-largest deviation (Struggler) should be second");
+  assert.ok(result[0].description.includes("Struggler"), "largest log-ratio deviation (Struggler) should be first");
+  assert.ok(result[1].description.includes("Popular"), "second-largest log-ratio deviation (Popular) should be second");
   assert.ok(
     !result.some((insight) => insight.description.includes("MildLow")),
-    "MildLow has the smallest deviation and should be excluded by the cap"
+    "MildLow has the smallest log-ratio deviation and should be excluded by the cap"
   );
-  console.log("  PASS: cap keeps only the 2 largest deviations, mixing low and high demand");
+  console.log("  PASS: cap keeps only the 2 largest log-ratio deviations, mixing low and high demand");
+}
+
+// Regression test for the final-review Critical finding: ratio-based
+// detection must be paired with ratio-based ranking, or high-demand items
+// (whose absolute deviation from average is structurally always larger)
+// would permanently crowd out low-demand items from the capped result.
+// Realistic 6-item menu: 2 items well above 2x average, but Herbal Tea (at
+// ~4.5% of average) is a far more extreme outlier on a ratio scale and must
+// still surface ahead of the high-demand items.
+{
+  const result = buildItemActionInsights(
+    [
+      { item: "Spanish Latte", orders: 120, rating: 4.5 },
+      { item: "Caramel Macchiato", orders: 100, rating: 4.5 },
+      { item: "Americano", orders: 20, rating: 4.5 },
+      { item: "Hot Choco", orders: 15, rating: 4.5 },
+      { item: "Matcha", orders: 10, rating: 4.5 },
+      { item: "Herbal Tea", orders: 2, rating: 4.5 },
+    ],
+    true,
+    20
+  );
+  assert.equal(result.length, 2);
+  assert.ok(
+    result.some((insight) => insight.description.includes("Herbal Tea")),
+    "the most extreme ratio outlier (Herbal Tea) must not be crowded out by high-demand items with larger absolute deviation"
+  );
+  console.log("  PASS: extreme low-demand outliers still surface even when high-demand items are present");
 }
 
 console.log("\nAll item-action-insights.ts checks passed.");

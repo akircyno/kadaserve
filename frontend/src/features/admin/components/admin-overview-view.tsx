@@ -24,6 +24,11 @@ type OverviewIcon = React.ComponentType<{
   className?: string;
   strokeWidth?: number;
 }>;
+
+const ITEM_ACTION_ICONS: Record<ItemActionInsightIcon, OverviewIcon> = {
+  TrendingDown,
+  Flame,
+};
 type OrderTypeDistributionItem = {
   label: string;
   count: number;
@@ -249,11 +254,13 @@ function NeedsAttentionItem({
   title,
   description,
   type = "info",
+  isSuggestedAction = false,
 }: {
   icon: OverviewIcon
   title: string
   description: string
   type?: "warning" | "success" | "info"
+  isSuggestedAction?: boolean
 }) {
   const typeStyles = {
     warning: {
@@ -287,6 +294,11 @@ function NeedsAttentionItem({
         <Icon size={13} strokeWidth={1.9} className={style.icon} />
       </div>
       <div className="min-w-0 flex-1">
+        {isSuggestedAction ? (
+          <p className="mb-0.5 font-sans text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#2E7D3F]">
+            Suggested Action
+          </p>
+        ) : null}
         <p className={`truncate font-sans text-xs font-bold ${style.title}`}>
           {title}
         </p>
@@ -1530,42 +1542,58 @@ export function DashboardView({
 
   // Build "Needs Attention" alerts
   const needsAttentionItems = [
-    ...(totalOrders === 0 
-      ? [{ icon: TrendingUp, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const }]
+    ...(totalOrders === 0
+      ? [{ icon: TrendingUp, title: "No orders yet", description: "Start accepting orders to see analytics", type: "info" as const, isSuggestedAction: false }]
       : []),
     ...(topItem && topItem.rating < 3.5
-      ? [{ icon: AlertTriangle, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const }]
+      ? [{ icon: AlertTriangle, title: `${topItem.item} rating dropped`, description: `Rating: ${topItem.rating.toFixed(1)}/5. Check quality or preparation.`, type: "warning" as const, isSuggestedAction: false }]
       : []),
     ...(busiestHour.orders > 0 && busiestHour.label
-      ? [{ icon: Flame, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const }]
+      ? [{ icon: Flame, title: `Peak demand: ${busiestHour.label}`, description: `Expect ~${busiestHour.orders} orders. Prepare ingredients and staff.`, type: "info" as const, isSuggestedAction: false }]
       : []),
     ...(trendDelta < -20
-      ? [{ icon: TrendingUp, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const }]
+      ? [{ icon: TrendingUp, title: "Order volume declined", description: `Week-over-week: ${trendLabel}. Review pricing or marketing.`, type: "warning" as const, isSuggestedAction: false }]
       : []),
     ...(satisfactionLabel === "Needs review"
-      ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const }]
+      ? [{ icon: Smile, title: "Customer satisfaction needs attention", description: `Average rating: ${averageRating.toFixed(1)}/5. Review feedback and improve.`, type: "warning" as const, isSuggestedAction: false }]
       : []),
   ].slice(0, 2);
 
+  const hasPeakDemandAlert = needsAttentionItems.some((item) => item.title.startsWith("Peak demand:"));
+  const hasOrderDeclineAlert = needsAttentionItems.some((item) => item.title === "Order volume declined");
+  const hasSatisfactionAlert = needsAttentionItems.some(
+    (item) => item.title === "Customer satisfaction needs attention"
+  );
+
   const generalInsights = [
-    {
-      icon: Clock,
-      title: `Peak Hour: ${busiestHour.orders > 0 ? busiestHour.label : "No data"}`,
-      description:
-        busiestHour.orders > 0
-          ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
-          : "Wait for more order data.",
-      type: "info" as const,
-    },
-    {
-      icon: TrendingUp,
-      title: `Weekly Growth: ${trendLabel}`,
-      description:
-        weeklyTrendCounts.length < 2
-          ? "Need more data for comparison."
-          : `${latestWeek} orders vs ${previousWeek} last week.`,
-      type: "info" as const,
-    },
+    ...(hasPeakDemandAlert
+      ? []
+      : [
+          {
+            icon: Clock,
+            title: `Peak Hour: ${busiestHour.orders > 0 ? busiestHour.label : "No data"}`,
+            description:
+              busiestHour.orders > 0
+                ? `${busiestHour.orders} orders at peak. Busiest day: ${busiestDay.day}.`
+                : "Wait for more order data.",
+            type: "info" as const,
+            isSuggestedAction: false,
+          },
+        ]),
+    ...(hasOrderDeclineAlert
+      ? []
+      : [
+          {
+            icon: TrendingUp,
+            title: `Weekly Growth: ${trendLabel}`,
+            description:
+              weeklyTrendCounts.length < 2
+                ? "Need more data for comparison."
+                : `${latestWeek} orders vs ${previousWeek} last week.`,
+            type: "info" as const,
+            isSuggestedAction: false,
+          },
+        ]),
     {
       icon: Star,
       title: `Top Favorite: ${topItem?.item ?? "-"}`,
@@ -1573,32 +1601,36 @@ export function DashboardView({
         ? `${topItem.orders} orders. Good item to recommend.`
         : "Collect order data first.",
       type: "info" as const,
+      isSuggestedAction: false,
     },
-    {
-      icon: Smile,
-      title: `Satisfaction: ${satisfactionLabel}`,
-      description:
-        feedbackCount > 0
-          ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
-          : "Encourage customer feedback.",
-      type: "info" as const,
-    },
+    ...(hasSatisfactionAlert
+      ? []
+      : [
+          {
+            icon: Smile,
+            title: `Satisfaction: ${satisfactionLabel}`,
+            description:
+              feedbackCount > 0
+                ? `${averageRating.toFixed(1)}/5 from ${feedbackCount} ratings.`
+                : "Encourage customer feedback.",
+            type: "info" as const,
+            isSuggestedAction: false,
+          },
+        ]),
   ];
 
-  const ITEM_ACTION_ICONS: Record<ItemActionInsightIcon, OverviewIcon> = {
-    TrendingDown,
-    Flame,
-  };
+  const itemActionTotalOrders = itemRanking.reduce((sum, row) => sum + row.orders, 0);
 
   const itemActionInsights = buildItemActionInsights(
     itemRanking,
     hasRealRatingData,
-    totalOrders
+    itemActionTotalOrders
   ).map((insight) => ({
     icon: ITEM_ACTION_ICONS[insight.icon],
     title: insight.title,
     description: insight.description,
     type: insight.type,
+    isSuggestedAction: true,
   }));
 
   const visibleInsights = [
@@ -1616,7 +1648,12 @@ export function DashboardView({
     ? itemRanking.filter((item) => matchesSearch(item.item, keyword))
     : itemRanking;
   
-  const showInsights = !keyword || visibleInsights.length > 0;
+  const showInsights =
+    !keyword ||
+    matchesSearch("Insights", keyword) ||
+    matchesSearch("attention", keyword) ||
+    matchesSearch("alert", keyword) ||
+    visibleInsights.length > 0;
   const showKpi = !keyword || visibleKpiCards.length > 0;
   const showOrdersWeek =
     !keyword ||
@@ -1914,13 +1951,14 @@ export function DashboardView({
               >
                 {visibleInsights.length > 0 ? (
                   <div className="space-y-2">
-                    {visibleInsights.slice(0, 4).map((insight, idx) => (
+                    {visibleInsights.slice(0, 4).map((insight) => (
                       <NeedsAttentionItem
-                        key={idx}
+                        key={insight.title}
                         icon={insight.icon}
                         title={insight.title}
                         description={insight.description}
                         type={insight.type}
+                        isSuggestedAction={insight.isSuggestedAction}
                       />
                     ))}
                   </div>

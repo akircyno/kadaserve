@@ -1804,7 +1804,7 @@ export function AdminDashboard() {
                 hourlyDateLabel={analyticsHourlyDateLabel}
                 hourlyCounts={hourlyCounts}
                 itemRanking={displayItemRanking}
-                hasRealRatingData={analyticsItemRanking.length > 0}
+                hasRealRatingData={feedbackRows.length > 0}
                 maxHourlyOrders={maxHourlyOrders}
                 maxItemOrders={maxItemOrders}
                 weeklyTrendCounts={weeklyTrendCounts}

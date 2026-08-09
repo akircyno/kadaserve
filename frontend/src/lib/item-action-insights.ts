@@ -30,6 +30,17 @@ type FlaggedItem = {
   deviation: number;
 };
 
+// Ranks flagged items on the same scale they were detected on (a ratio to
+// the average), not an absolute order-count difference. Absolute
+// differences are structurally biased toward high-demand items (their
+// deviation is always > averageOrders, while low-demand deviation is always
+// <= averageOrders), which would make low-demand suggestions unreachable
+// whenever 2+ high-demand items exist. Math.max(orders, 0.5) avoids -Infinity
+// for a zero-order item.
+function getRatioDeviation(orders: number, averageOrders: number): number {
+  return Math.abs(Math.log(Math.max(orders, 0.5) / averageOrders));
+}
+
 export function buildItemActionInsights(
   itemRanking: ItemRankingRow[],
   hasRealRatingData: boolean,
@@ -50,9 +61,9 @@ export function buildItemActionInsights(
 
   for (const row of itemRanking) {
     if (row.orders < LOW_DEMAND_RATIO * averageOrders) {
-      flagged.push({ row, direction: "low", deviation: averageOrders - row.orders });
+      flagged.push({ row, direction: "low", deviation: getRatioDeviation(row.orders, averageOrders) });
     } else if (row.orders > HIGH_DEMAND_RATIO * averageOrders) {
-      flagged.push({ row, direction: "high", deviation: row.orders - averageOrders });
+      flagged.push({ row, direction: "high", deviation: getRatioDeviation(row.orders, averageOrders) });
     }
   }
 
@@ -63,12 +74,12 @@ export function buildItemActionInsights(
       return {
         icon: "Flame",
         title: `${row.item} is in high demand`,
-        description: `${row.item} is selling much more than usual — make sure you have enough cups, ingredients, and stock to keep up with demand.`,
+        description: `${row.item} is selling much more than most other items — make sure you have enough cups, ingredients, and stock to keep up with demand.`,
         type: "info",
       };
     }
 
-    if (!hasRealRatingData) {
+    if (!hasRealRatingData || row.rating <= 0) {
       return {
         icon: "TrendingDown",
         title: `${row.item} has low demand`,

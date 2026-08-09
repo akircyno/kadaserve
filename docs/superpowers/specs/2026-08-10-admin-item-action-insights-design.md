@@ -109,9 +109,15 @@ Trigger logic inside the function:
      cups, ingredients, and stock to keep up with demand."* (type: `"info"`; no rating
      branching needed, this is an operational heads-up, not a diagnosis)
 4. **Cap:** at most 2 item-level cards total (low- and high-demand candidates share the same
-   cap). Rank all flagged items by how far they deviate from the average
-   (`abs(orders - averageOrders)`, descending) and take the top 2, so the most extreme
-   outliers — whichever direction — surface first.
+   cap). Rank all flagged items by a **log-ratio deviation** from the average
+   (`abs(ln(orders / averageOrders))`, descending) and take the top 2. An earlier version of
+   this design used a plain absolute difference (`abs(orders - averageOrders)`), which was
+   found during final review to be mathematically biased toward high-demand items — every
+   possible high-demand deviation is `> averageOrders` while every possible low-demand
+   deviation is `<= averageOrders`, so high-demand items would always outrank low-demand ones
+   regardless of how extreme the low-demand item actually was. The log-ratio scale is
+   symmetric: an item at 0.5x the average and an item at 2x the average have the same
+   deviation magnitude, matching the symmetric detection thresholds.
 
 ## Data flow
 
@@ -163,6 +169,23 @@ standalone-script convention (no Jest/Vitest), with content-presence assertions.
   reasoning bug this design exists to avoid.
 - Cap and priority: more than 2 flagged items (mixing low- and high-demand outliers) returns
   only the 2 with the largest deviation from average, regardless of direction.
+
+## Known limitations
+
+- **Item-level ratings are not truly per-item.** `frontend/src/app/api/admin/analytics/items/route.ts`
+  attributes an order's average feedback score to every item within that order (feedback is
+  submitted per-order, not per-item, and the join is by `order_id`). An order containing both
+  a well-loved drink and a mediocre pastry credits both items equally. This is a pre-existing
+  characteristic of the analytics pipeline, not something introduced by this feature — but
+  this feature is the first place that draws a per-item causal suggestion ("customers who try
+  this item like it") from that number, which makes the limitation load-bearing in a way it
+  wasn't before. Worth being able to explain if asked; fixing the underlying join (using the
+  `menu_item_id` column already present on feedback rows) is future work, not done here.
+- **"Low/high demand" is scoped to whatever period `itemRanking` covers** (in practice, all
+  non-cancelled orders ever, not the dashboard's currently-selected date range), while the
+  rest of the dashboard is typically viewing a specific period. A "high demand" label is a
+  lifetime-aggregate statement, not a claim about the current period specifically. Scoping
+  item ranking to the dashboard's selected range is real future work, not done in this pass.
 
 ## References
 
