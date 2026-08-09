@@ -51,7 +51,10 @@ scrutiny.
 2. Add per-item actionable suggestions: when a specific menu item has low demand, suggest a
    concrete next step (not just "review it"), differentiated by *why* it's likely
    underperforming (rating-based diagnosis).
-3. Guard against noisy suggestions on thin data (both at the "should we run item analysis
+3. Also flag items with unusually **high** demand — a different, operational suggestion
+   (stock/prep up), not a diagnosis. High demand isn't a problem to explain, it's a
+   heads-up to act on before running low on cups/ingredients.
+4. Guard against noisy suggestions on thin data (both at the "should we run item analysis
    at all" level, and at the "do we trust this item's rating" level).
 
 ## Non-goals
@@ -89,17 +92,26 @@ Trigger logic inside the function:
 1. **Data guard:** if `totalOrders < 20`, return `[]`. Thin-data periods don't get item
    suggestions at all (same spirit as `MIN_HISTORY_DAYS` in `demand-forecast.ts` — don't
    draw conclusions from too little data).
-2. **Low-demand detection:** compute `averageOrders` across all items in `itemRanking`; flag
-   any item where `orders < 0.5 * averageOrders`.
-3. **Suggestion per flagged item**, in this priority order:
-   - `!hasRealRatingData` → *"Not enough feedback to diagnose — a short promo could help
-     surface why it's not selling."* (type: `"info"`)
-   - `hasRealRatingData && rating >= 4.0` → *"Customers who try [item] like it — feature it
-     more, bundle it with a bestseller, or add it to recommendations."* (type: `"info"`)
-   - `hasRealRatingData && rating < 4.0` → *"[item] has low demand and low ratings —
-     consider reviewing the recipe or quality before promoting it further."*
+2. **Demand deviation detection:** compute `averageOrders` across all items in
+   `itemRanking`. Flag two kinds of outliers, symmetric on a ratio scale around the average:
+   - **Low demand:** `orders < 0.5 * averageOrders`.
+   - **High demand:** `orders > 2 * averageOrders`.
+3. **Suggestion per flagged item:**
+   - Low demand, `!hasRealRatingData` → *"Not enough feedback to diagnose — a short promo
+     could help surface why it's not selling."* (type: `"info"`)
+   - Low demand, `hasRealRatingData && rating >= 4.0` → *"Customers who try [item] like
+     it — feature it more, bundle it with a bestseller, or add it to recommendations."*
+     (type: `"info"`)
+   - Low demand, `hasRealRatingData && rating < 4.0` → *"[item] has low demand and low
+     ratings — consider reviewing the recipe or quality before promoting it further."*
      (type: `"warning"`)
-4. **Cap:** at most 2 item-level cards, taking the 2 lowest-`orders` flagged items first.
+   - High demand → *"[item] is selling much more than usual — make sure you have enough
+     cups, ingredients, and stock to keep up with demand."* (type: `"info"`; no rating
+     branching needed, this is an operational heads-up, not a diagnosis)
+4. **Cap:** at most 2 item-level cards total (low- and high-demand candidates share the same
+   cap). Rank all flagged items by how far they deviate from the average
+   (`abs(orders - averageOrders)`, descending) and take the top 2, so the most extreme
+   outliers — whichever direction — surface first.
 
 ## Data flow
 
@@ -139,14 +151,18 @@ never throw.
 standalone-script convention (no Jest/Vitest), with content-presence assertions. Covers:
 
 - Data guard: `totalOrders < 20` → empty result.
-- Below-average trigger: item at exactly 50% of average is not flagged (strict `<`), item
+- Low-demand boundary: item at exactly 50% of average is not flagged (strict `<`), item
   below is flagged.
-- All three suggestion buckets (no real rating data, rating ≥ 4.0, rating < 4.0).
+- High-demand boundary: item at exactly 200% of average is not flagged (strict `>`), item
+  above is flagged.
+- All three low-demand suggestion buckets (no real rating data, rating ≥ 4.0, rating < 4.0)
+  plus the high-demand suggestion.
 - The fallback-rating edge case specifically: `hasRealRatingData: false` with a `rating`
   value in the fabricated 3.8-4.8 range must still produce the "not enough feedback" message,
   not a false "customers like it" message — this is the regression test for the circular-
   reasoning bug this design exists to avoid.
-- Cap: more than 2 flagged items still returns only 2, the lowest-`orders` ones.
+- Cap and priority: more than 2 flagged items (mixing low- and high-demand outliers) returns
+  only the 2 with the largest deviation from average, regardless of direction.
 
 ## References
 
