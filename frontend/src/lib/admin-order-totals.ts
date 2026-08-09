@@ -43,9 +43,10 @@ export function isWithinAdminTimeFilter(
   value: string,
   timeFilter: AdminTimeFilter,
   customStartDate?: string,
-  customEndDate?: string
+  customEndDate?: string,
+  referenceDate: Date = new Date()
 ) {
-  const today = getManilaDateOnly(new Date());
+  const today = getManilaDateOnly(referenceDate);
   const orderDate = getManilaDateOnly(new Date(value));
 
   if (timeFilter === "custom") {
@@ -154,8 +155,12 @@ export function getAdminReportRangeLabel(
   return today.getFullYear().toString();
 }
 
-export function getAdminOrdersMetricLabel(timeFilter: AdminTimeFilter) {
-  return `${getAdminReportRangeLabel(timeFilter)} Orders`;
+export function getAdminOrdersMetricLabel(
+  timeFilter: AdminTimeFilter,
+  customStartDate?: string,
+  customEndDate?: string
+) {
+  return `${getAdminReportRangeLabel(timeFilter, customStartDate, customEndDate)} Orders`;
 }
 
 export function getAdminReportOrders(
@@ -167,6 +172,7 @@ export function getAdminReportOrders(
     typeFilter = "all",
     customStartDate,
     customEndDate,
+    referenceDate = new Date(),
   }: {
     customEndDate?: string;
     customStartDate?: string;
@@ -174,6 +180,7 @@ export function getAdminReportOrders(
     statusFilter?: AdminStatusFilter;
     timeFilter: AdminTimeFilter;
     typeFilter?: AdminTypeFilter;
+    referenceDate?: Date;
   }
 ) {
   const activeStatuses = new Set<OrderStatus>([
@@ -189,7 +196,8 @@ export function getAdminReportOrders(
       order.ordered_at,
       timeFilter,
       customStartDate,
-      customEndDate
+      customEndDate,
+      referenceDate
     );
     const matchesStatus =
       statusFilter === "all"
@@ -205,6 +213,54 @@ export function getAdminReportOrders(
 
     return matchesTime && matchesStatus && matchesType && matchesPayment;
   });
+}
+
+export function computeAdminDashboardRange(
+  validOrders: StaffOrder[],
+  referenceDate: Date = new Date()
+): {
+  timeFilter: "month" | "custom";
+  customStartDate: string | undefined;
+  customEndDate: string | undefined;
+} {
+  const currentMonthOrders = getAdminReportOrders(validOrders, {
+    timeFilter: "month",
+    referenceDate,
+  });
+
+  if (currentMonthOrders.length > 0) {
+    return {
+      timeFilter: "month" as const,
+      customStartDate: undefined as string | undefined,
+      customEndDate: undefined as string | undefined,
+    };
+  }
+
+  const mostRecentOrder = [...validOrders].sort(
+    (left, right) => new Date(right.ordered_at).getTime() - new Date(left.ordered_at).getTime()
+  )[0];
+
+  if (!mostRecentOrder) {
+    return {
+      timeFilter: "month" as const,
+      customStartDate: undefined as string | undefined,
+      customEndDate: undefined as string | undefined,
+    };
+  }
+
+  const recentDate = getManilaDateOnly(new Date(mostRecentOrder.ordered_at));
+  const firstDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth(), 1);
+  const lastDayOfMonth = new Date(recentDate.getFullYear(), recentDate.getMonth() + 1, 0);
+  const toDateInput = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`;
+
+  return {
+    timeFilter: "custom" as const,
+    customStartDate: toDateInput(firstDayOfMonth),
+    customEndDate: toDateInput(lastDayOfMonth),
+  };
 }
 
 export function isValidAdminOrder(order: StaffOrder) {
