@@ -20,19 +20,22 @@ import {
   AFTERNOON_HOURS,
   SNACK_HOURS,
 } from "./recommendation-weights";
+import { computeItemNeighbors, predictCandidateScore, type PurchaseRecord } from "./item-similarity";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
 export type RecommendationBasis =
   | "preference"
   | "top_seller"
-  | "popularity";
+  | "popularity"
+  | "collaborative";
 
 export type RecommendationLabel =
   | "Best for You"
   | "Top Seller"
   | "Popular Now"
-  | "You Might Also Like";
+  | "You Might Also Like"
+  | "Customers Also Enjoyed";
 
 export type RecommendationMenuItem = {
   id: string;
@@ -125,6 +128,13 @@ const FINAL_STATUSES = new Set(["completed", "delivered"]);
  * low-volume items from claiming an inflated ranking label.
  */
 const TOP_SELLER_MIN_ORDER_COUNT = 5;
+
+/** Significance-weighting decay parameter for collaborative-filtering similarity (see item-similarity.ts). */
+const CF_LAMBDA = 3;
+/** Minimum predicted CF score required before a discovery recommendation qualifies. */
+const CF_MIN_SCORE = 0.05;
+/** Minimum customer support required on the CF slot's best contributing pair. */
+const CF_MIN_SUPPORT = 2;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -298,11 +308,12 @@ function buildExplanation(
 
 // ─── Global stats builder ─────────────────────────────────────────────────────
 
-function getGlobalStats(
+export function getGlobalStats(
   menuItems: RecommendationMenuItem[],
   orders: RecommendationOrder[],
   feedback: RecommendationFeedback[],
-  globalRanking: RecommendationGlobalRankItem[]
+  globalRanking: RecommendationGlobalRankItem[],
+  collaborativeLambda: number
 ) {
   const availableItems = menuItems.filter((i) => i.isAvailable);
   const menuByKey = new Map<string, RecommendationMenuItem>(
@@ -354,7 +365,24 @@ function getGlobalStats(
       .filter((i) => !rankedSeen.has(itemKey(i))),
   ];
 
-  return { availableItems, menuByKey, mostPopular: canonicalMostPopular, popularity };
+  // ── Collaborative-filtering item neighbors (cross-customer) ─────────────
+  const purchaseRecords: PurchaseRecord[] = [];
+  orders
+    .filter((o) => FINAL_STATUSES.has(o.status))
+    .forEach((order) => {
+      order.items.forEach((oi) => {
+        const menuItem = menuByKey.get(orderItemKey(oi));
+        if (!menuItem) return;
+        purchaseRecords.push({
+          customerId: order.customerId,
+          itemId: itemKey(menuItem),
+          quantity: oi.quantity,
+        });
+      });
+    });
+  const itemNeighbors = computeItemNeighbors(purchaseRecords, collaborativeLambda);
+
+  return { availableItems, menuByKey, mostPopular: canonicalMostPopular, popularity, itemNeighbors };
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -367,6 +395,8 @@ export function getRecommendationsForCustomer({
   feedback,
   globalRanking = [],
   hourOfDay = new Date().getHours(),
+  enableCollaborativeSlot = true,
+  collaborativeLambda = CF_LAMBDA,
 }: {
   customerId: string;
   customerName: string;
@@ -379,8 +409,16 @@ export function getRecommendationsForCustomer({
    * Defaults to current server hour if omitted.
    */
   hourOfDay?: number;
+  /**
+   * Whether to attempt the collaborative-filtering discovery slot (slot 3).
+   * Set to false to reproduce pre-CF ("AHP-only") behavior — used by the
+   * evaluation harness to isolate CF's contribution.
+   */
+  enableCollaborativeSlot?: boolean;
+  /** Override for the significance-weighting lambda, used by the evaluation harness's lambda sweep. */
+  collaborativeLambda?: number;
 }): CustomerRecommendationProfile {
-  const globalStats = getGlobalStats(menuItems, orders, feedback, globalRanking);
+  const globalStats = getGlobalStats(menuItems, orders, feedback, globalRanking, collaborativeLambda);
 
   // ── Customer-scoped order history ────────────────────────────────────────
   const customerOrders = orders
@@ -537,6 +575,42 @@ export function getRecommendationsForCustomer({
       reason: buildExplanation("preference", { frequency: second.frequency, latestAt: second.latestAt, averageRating: second.averageRating }, null),
       score: second.score,
     });
+  }
+
+  // Slot 3 attempt: Collaborative-filtering discovery (new items the customer hasn't tried)
+  if (enableCollaborativeSlot && recommendations.length < 3) {
+    const ownedItemScores = new Map(scoredItems.map((s) => [itemKey(s.item), s.score]));
+    let bestCandidate: { item: RecommendationMenuItem; score: number; driverName: string } | null = null;
+
+    for (const candidateItem of globalStats.availableItems) {
+      const candidateKey = itemKey(candidateItem);
+      if (ownedItemScores.has(candidateKey) || seen.has(candidateKey)) continue;
+
+      const prediction = predictCandidateScore(globalStats.itemNeighbors, candidateKey, ownedItemScores, CF_MIN_SUPPORT);
+      if (
+        prediction.score > CF_MIN_SCORE &&
+        prediction.driver &&
+        prediction.driver.support >= CF_MIN_SUPPORT &&
+        (!bestCandidate || prediction.score > bestCandidate.score)
+      ) {
+        const driverItem = globalStats.menuByKey.get(prediction.driver.ownedItemId);
+        bestCandidate = {
+          item: candidateItem,
+          score: prediction.score,
+          driverName: driverItem?.name ?? "your favorites",
+        };
+      }
+    }
+
+    if (bestCandidate) {
+      push({
+        item: bestCandidate.item,
+        label: "Customers Also Enjoyed",
+        basis: "collaborative",
+        reason: `Customers who ordered ${bestCandidate.driverName} also enjoyed this`,
+        score: bestCandidate.score,
+      });
+    }
   }
 
   // Remaining slots: fill from global popularity (mechanically distinct from preference)

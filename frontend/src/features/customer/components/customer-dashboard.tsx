@@ -107,8 +107,8 @@ type PublicMenuFeedbackSummary = {
 
 type TopRecommendation = {
   rank: number;
-  label: "Best for You" | "Top Seller" | "Popular Now";
-  basis: "preference" | "top_seller" | "popularity";
+  label: "Best for You" | "Top Seller" | "Popular Now" | "Customers Also Enjoyed";
+  basis: "preference" | "top_seller" | "popularity" | "collaborative";
   reason: string;
   item_id: string;
   item_name: string;
@@ -713,6 +713,13 @@ function getRecommendationDisplayMeta(recommendation: MenuRecommendationCard) {
     return {
       label: "Top Seller",
       tag: "GLOBAL RANK",
+    };
+  }
+
+  if (recommendation.basis === "collaborative") {
+    return {
+      label: "Customers Also Enjoyed",
+      tag: "CUSTOMERS ALSO ENJOYED",
     };
   }
 
