@@ -32,8 +32,10 @@ import {
   getAdminOrderTotals,
   getAdminOrdersMetricLabel,
   getAdminReportOrders,
+  getAdminReportRangeLabel,
   isValidAdminOrder,
 } from "@/lib/admin-order-totals";
+import { buildAdminAnalyticsSummaryHtml } from "@/lib/admin-analytics-report";
 import {
   getAnalyticsOrderCount,
   sortAnalyticsItemsByGlobalRanking,
@@ -890,6 +892,45 @@ export function AdminDashboard() {
     monthlyRevenue: dashboardOrderTotals.totalRevenue,
     weekdayCounts: dashboardWeekdayCounts,
   };
+
+  function handleAnalyticsSummaryReport() {
+    const periodLabel = getAdminReportRangeLabel(
+      dashboardRange.timeFilter,
+      dashboardRange.customStartDate,
+      dashboardRange.customEndDate
+    );
+    const html = buildAdminAnalyticsSummaryHtml({
+      periodLabel,
+      kpis: {
+        totalOrders: dashboardMetrics.totalOrders,
+        totalRevenue: dashboardMetrics.totalRevenue,
+        averageOrderValue: dashboardMetrics.averageOrderValue,
+        averageRating: dashboardMetrics.averageRating,
+      },
+      weeklyTrend: weeklyTrendCounts,
+      topSellers: displayItemRanking,
+      peakHourWindows,
+      demandForecast,
+    });
+    const reportWindow = window.open("", "_blank");
+
+    if (!reportWindow) {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `kadaserve-analytics-summary-${new Date().toISOString().slice(0, 10)}.html`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+  }
+
   const dashboardTotalOrdersLabel = getAdminOrdersMetricLabel(
     dashboardRange.timeFilter,
     dashboardRange.customStartDate,
@@ -1650,8 +1691,8 @@ export function AdminDashboard() {
                 </div>
 
 
-              {/* CENTER: Refresh Button */}
-              <div className="hidden xl:block">
+              {/* CENTER: Refresh + Report Buttons */}
+              <div className="hidden items-center gap-2 xl:flex">
                 <button
                   type="button"
                   onClick={() => void handleRefreshAnalytics()}
@@ -1661,6 +1702,14 @@ export function AdminDashboard() {
                 >
                   <RefreshCw size={14} strokeWidth={1.8} className={isRefreshingAnalytics ? "animate-spin" : ""} />
                   {isRefreshingAnalytics ? "Refreshing" : "Refresh Analytics"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAnalyticsSummaryReport}
+                  aria-label="Generate analytics summary report"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-3.5 font-sans text-[0.7rem] font-bold text-[#684B35] transition hover:bg-white"
+                >
+                  Analytics Summary Report
                 </button>
               </div>
 
