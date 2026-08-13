@@ -25,6 +25,7 @@ import { createPortal } from "react-dom";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
+import { buildStaffSessionSummaryHtml } from "@/lib/staff-session-report";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
@@ -991,6 +992,28 @@ export function StaffDashboard() {
     [showToast]
   );
 
+  function handleSessionReport() {
+    const staffName = staffProfile?.fullName?.trim() || "Staff";
+    const html = buildStaffSessionSummaryHtml({ orders, staffName });
+    const reportWindow = window.open("", "_blank");
+
+    if (!reportWindow) {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `kadaserve-session-report-${new Date().toISOString().slice(0, 10)}.html`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+  }
+
   const headerContainerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -1916,6 +1939,13 @@ export function StaffDashboard() {
               <span className="rounded-full bg-[#EFE3CF] px-2.5 py-1 font-sans text-xs font-semibold text-[#684B35]">
                 {historyOrders.length} shown
               </span>
+              <button
+                type="button"
+                onClick={handleSessionReport}
+                className="rounded-full border border-[#0D2E18] px-3 py-1.5 font-sans text-xs font-semibold text-[#0D2E18] transition hover:bg-[#0D2E18] hover:text-[#FFF0DA]"
+              >
+                Session Report
+              </button>
               <Link
                 href="/staff/order-history"
                 className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-semibold text-[#FFF0DA]"
