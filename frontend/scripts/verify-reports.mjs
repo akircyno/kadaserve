@@ -113,7 +113,8 @@ try {
       staffName: "Chrizelda",
       referenceDate,
     });
-    assert.ok(html.includes(">1<"), "today's order should be counted in the Orders Handled stat");
+    const ordersHandledBlock = html.split("Orders Handled</div>")[1]?.slice(0, 40) ?? "";
+    assert.ok(ordersHandledBlock.includes(">1<"), "today's order should be counted in the Orders Handled stat");
     assert.ok(!html.includes("999"), "yesterday's order total must not appear in today's report");
     console.log("  PASS: today-scoping excludes orders from other days");
   }
