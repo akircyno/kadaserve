@@ -272,15 +272,16 @@ function makeKpis(overrides) {
     periodLabel: "May 2026",
     generatedAt: new Date("2026-08-12T06:00:00.000Z"),
     kpis: makeKpis(),
-    weeklyTrend: [{ label: "May 11-17", orders: 48 }],
+    weeklyTrend: [{ label: "May 11-17", orders: 45 }],
     topSellers: [{ item: "Spanish Latte", orders: 42, revenue: 3990, rating: 4.9 }],
     peakHourWindows: [
       { day_of_week: 1, hour_start: 19, hour_end: 20, avg_order_count: 5, intensity: "high" },
     ],
     demandForecast: null,
   });
+  const totalOrdersBlock = html.split("Total Orders</div>")[1]?.slice(0, 40) ?? "";
   assert.ok(html.includes("May 2026"));
-  assert.ok(html.includes("48")); // totalOrders
+  assert.ok(totalOrdersBlock.includes(">48<"), "totalOrders (48) should be scoped to the Total Orders stat, distinct from the weekly-trend value (45)");
   assert.ok(html.includes("₱6,672"));
   assert.ok(html.includes("4.6/5"));
   console.log("  PASS: KPI numbers are threaded through correctly");

@@ -84,7 +84,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
           th { background: #FFF0DA; color: #0D2E18; text-align: left; }
           th, td { border-bottom: 1px solid #E7D7BC; padding: 9px 7px; vertical-align: top; }
           .money { font-weight: 700; text-align: right; white-space: nowrap; }
-          .empty { color: #8C7A64; padding: 12px 0; }
+          .empty { color: #8C7A64; padding: 12px 0; text-align: center; }
           @media print { body { margin: 18px; } }
         </style>
       </head>
