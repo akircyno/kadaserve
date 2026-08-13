@@ -13,6 +13,7 @@
     "test:dashboard-range": "node scripts/verify-dashboard-range.mjs",
     "test:recommendations": "node scripts/verify-recommendations.mjs",
     "test:item-action-insights": "node scripts/verify-item-action-insights.mjs",
+    "test:reports": "node scripts/verify-reports.mjs",
     "evaluate:recommendations": "node scripts/evaluate-recommendations.mjs"
   },
   "dependencies": {
