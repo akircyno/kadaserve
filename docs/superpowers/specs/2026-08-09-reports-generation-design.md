@@ -1,6 +1,6 @@
 # Reports Generation Improvements — Design
 
-Status: Approved by user (2026-08-09), pending write-up review
+Status: Implemented (2026-08-12)
 Origin: Thesis defense panel revision — "Reports generation improvements" (Staff and Admin page)
 
 ## Context
