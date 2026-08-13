@@ -901,6 +901,7 @@ export function AdminDashboard() {
     );
     const html = buildAdminAnalyticsSummaryHtml({
       periodLabel,
+      hasRealRatingData: analyticsItemRanking.length > 0 && feedbackRows.length > 0,
       kpis: {
         totalOrders: dashboardMetrics.totalOrders,
         totalRevenue: dashboardMetrics.totalRevenue,

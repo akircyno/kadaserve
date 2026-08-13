@@ -113,8 +113,8 @@ try {
       staffName: "Chrizelda",
       referenceDate,
     });
-    const ordersHandledBlock = html.split("Orders Handled</div>")[1]?.slice(0, 40) ?? "";
-    assert.ok(ordersHandledBlock.includes(">1<"), "today's order should be counted in the Orders Handled stat");
+    const ordersHandledBlock = html.split("Orders Today</div>")[1]?.slice(0, 40) ?? "";
+    assert.ok(ordersHandledBlock.includes(">1<"), "today's order should be counted in the Orders Today stat");
     assert.ok(!html.includes("999"), "yesterday's order total must not appear in today's report");
     console.log("  PASS: today-scoping excludes orders from other days");
   }
@@ -221,7 +221,27 @@ try {
       referenceDate,
     });
     assert.ok(!html.includes("Juan Dela Cruz"), "full customer name must not appear unmasked");
+    assert.ok(html.includes("Juan C."), "the masked form (first name + last initial) should appear");
     console.log("  PASS: customer names in the report are masked, not shown in full");
+  }
+
+  // HTML escaping: a walk-in name containing HTML-special characters must
+  // never reach the output unescaped -- the report is written into a
+  // same-origin window via document.write, so this is a real risk, not a
+  // theoretical one.
+  {
+    const order = makeOrder({
+      id: "escaping-order",
+      walkin_name: '<script>alert(1)</script>',
+    });
+    const html = buildStaffSessionSummaryHtml({
+      orders: [order],
+      staffName: "Chrizelda",
+      referenceDate,
+    });
+    assert.ok(!html.includes("<script>alert"), "raw script tag must never appear unescaped");
+    assert.ok(html.includes("&lt;script&gt;"), "the walk-in name must be HTML-escaped");
+    console.log("  PASS: walk-in names containing HTML-special characters are escaped");
   }
 
   // Regression test: a cancelled order is (by definition) never "paid", but
@@ -272,6 +292,7 @@ function makeKpis(overrides) {
     periodLabel: "May 2026",
     generatedAt: new Date("2026-08-12T06:00:00.000Z"),
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [{ label: "May 11-17", orders: 45 }],
     topSellers: [{ item: "Spanish Latte", orders: 42, revenue: 3990, rating: 4.9 }],
     peakHourWindows: [
@@ -287,11 +308,30 @@ function makeKpis(overrides) {
   console.log("  PASS: KPI numbers are threaded through correctly");
 }
 
+// HTML escaping: periodLabel and item names must never reach the output
+// unescaped.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: '<img src=x onerror=alert(1)>',
+    kpis: makeKpis(),
+    hasRealRatingData: true,
+    weeklyTrend: [],
+    topSellers: [{ item: '<script>alert(2)</script>', orders: 1, revenue: 100, rating: 4.5 }],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  assert.ok(!html.includes("<img src=x onerror"), "periodLabel must be HTML-escaped");
+  assert.ok(!html.includes("<script>alert(2)"), "item names must be HTML-escaped");
+  assert.ok(html.includes("&lt;img") && html.includes("&lt;script&gt;"), "escaped versions should be present");
+  console.log("  PASS: periodLabel and item names are HTML-escaped");
+}
+
 // Weekly trend and top sellers render real rows.
 {
   const html = buildAdminAnalyticsSummaryHtml({
     periodLabel: "May 2026",
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [
       { label: "Apr 27-May 3", orders: 12 },
       { label: "May 4-10", orders: 24 },
@@ -309,11 +349,52 @@ function makeKpis(overrides) {
   console.log("  PASS: weekly trend and top sellers render the given rows");
 }
 
+// Regression test: hasRealRatingData: false must suppress numeric ratings
+// entirely, even when the (fabricated fallback) rating value looks
+// plausible -- this guards the exact landmine already fixed once in the
+// item-action-insights feature (a fabricated rating formula, orders/20 +
+// 3.8, must never be presented as a real customer rating).
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    hasRealRatingData: false,
+    weeklyTrend: [],
+    topSellers: [{ item: "Spanish Latte", orders: 42, revenue: 3990, rating: 4.4 }],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  const topSellersSectionIndex = html.indexOf("Top Sellers");
+  const topSellersSection = html.slice(topSellersSectionIndex, html.indexOf("Peak Hours", topSellersSectionIndex));
+  assert.ok(!topSellersSection.includes("4.4"), "a fabricated/unverified rating must not be printed as a real number");
+  assert.ok(topSellersSection.includes("—"), "should show a dash instead of a fabricated rating");
+  console.log("  PASS: hasRealRatingData false suppresses numeric ratings entirely");
+}
+
+// A rating of exactly 0 means "no feedback yet" (never a real 1-5 rating),
+// so it must render as a dash even when hasRealRatingData is true overall.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    hasRealRatingData: true,
+    weeklyTrend: [],
+    topSellers: [{ item: "New Item", orders: 5, revenue: 250, rating: 0 }],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  const topSellersSectionIndex = html.indexOf("Top Sellers");
+  const topSellersSection = html.slice(topSellersSectionIndex, html.indexOf("Peak Hours", topSellersSectionIndex));
+  assert.ok(topSellersSection.includes("—"), "a rating of exactly 0 should render as a dash, not '0.0'");
+  console.log("  PASS: a per-item rating of 0 renders as a dash, not a fabricated zero score");
+}
+
 // Peak hours: only the top 3 by avg_order_count appear, sorted descending.
 {
   const html = buildAdminAnalyticsSummaryHtml({
     periodLabel: "May 2026",
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [],
     topSellers: [],
     peakHourWindows: [
@@ -325,7 +406,7 @@ function makeKpis(overrides) {
     demandForecast: null,
   });
   const windowSectionIndex = html.indexOf("Peak Hours");
-  const windowSection = html.slice(windowSectionIndex, windowSectionIndex + 1200);
+  const windowSection = html.slice(windowSectionIndex, html.indexOf("Demand Forecast", windowSectionIndex));
   assert.ok(windowSection.includes("Friday"), "the 9-order Friday window should be in the top 3");
   assert.ok(windowSection.includes("Saturday"), "the 7-order Saturday window should be in the top 3");
   assert.ok(windowSection.includes("Monday"), "the 3-order Monday window should be in the top 3");
@@ -338,6 +419,7 @@ function makeKpis(overrides) {
   const html = buildAdminAnalyticsSummaryHtml({
     periodLabel: "May 2026",
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [],
     topSellers: [],
     peakHourWindows: [],
@@ -352,6 +434,7 @@ function makeKpis(overrides) {
   const html = buildAdminAnalyticsSummaryHtml({
     periodLabel: "May 2026",
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [],
     topSellers: [],
     peakHourWindows: [],
@@ -374,13 +457,14 @@ function makeKpis(overrides) {
   const html = buildAdminAnalyticsSummaryHtml({
     periodLabel: "May 2026",
     kpis: makeKpis(),
+    hasRealRatingData: true,
     weeklyTrend: [],
     topSellers: [],
     peakHourWindows: [],
     demandForecast: null,
   });
   const windowSectionIndex = html.indexOf("Peak Hours");
-  const windowSection = html.slice(windowSectionIndex, windowSectionIndex + 200);
+  const windowSection = html.slice(windowSectionIndex, html.indexOf("Demand Forecast", windowSectionIndex));
   assert.ok(windowSection.includes("Not enough data yet"));
   console.log("  PASS: empty peakHourWindows renders the graceful-degradation message, not a crash");
 }

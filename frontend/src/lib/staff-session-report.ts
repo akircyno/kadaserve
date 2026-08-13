@@ -142,11 +142,11 @@ export function buildStaffSessionSummaryHtml(params: {
       <body>
         <div class="brand">KadaServe</div>
         <section class="summary">
-          <h1>Session Summary &mdash; ${escapeHtml(staffName)}</h1>
-          <p>${escapeHtml(dateLabel)}</p>
+          <h1>Daily Session Summary</h1>
+          <p>Prepared by ${escapeHtml(staffName)} &middot; ${escapeHtml(dateLabel)}</p>
         </section>
         <div class="stats">
-          <div class="stat"><div class="label">Orders Handled</div><div class="value">${finishedOrders.length}</div></div>
+          <div class="stat"><div class="label">Orders Today</div><div class="value">${finishedOrders.length}</div></div>
           <div class="stat"><div class="label">Revenue Collected</div><div class="value">${escapeHtml(peso(totalRevenue))}</div></div>
           <div class="stat"><div class="label">Cash</div><div class="value">${escapeHtml(peso(cashRevenue))}</div></div>
           <div class="stat"><div class="label">Online</div><div class="value">${escapeHtml(peso(onlineRevenue))}</div></div>

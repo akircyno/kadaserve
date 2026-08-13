@@ -27,6 +27,7 @@ function formatPeakWindowLabel(window: { day_of_week: number; hour_start: number
 export function buildAdminAnalyticsSummaryHtml(params: {
   periodLabel: string;
   generatedAt?: Date;
+  hasRealRatingData: boolean;
   kpis: {
     totalOrders: number;
     totalRevenue: number;
@@ -47,7 +48,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
     diagnostics: { rSquared: number; rmse: number };
   } | null;
 }): string {
-  const { periodLabel, generatedAt = new Date(), kpis, weeklyTrend, topSellers, peakHourWindows, demandForecast } = params;
+  const { periodLabel, generatedAt = new Date(), hasRealRatingData, kpis, weeklyTrend, topSellers, peakHourWindows, demandForecast } = params;
 
   const generatedLabel = new Intl.DateTimeFormat("en-PH", {
     timeZone: "Asia/Manila",
@@ -91,19 +92,28 @@ export function buildAdminAnalyticsSummaryHtml(params: {
       <body>
         <div class="brand">KadaServe</div>
         <section class="summary">
-          <h1>Analytics Summary &mdash; ${escapeHtml(periodLabel)}</h1>
+          <h1>Analytics Summary</h1>
           <p>Generated ${escapeHtml(generatedLabel)}</p>
         </section>
 
-        <div class="stats">
-          <div class="stat"><div class="label">Total Orders</div><div class="value">${kpis.totalOrders}</div></div>
-          <div class="stat"><div class="label">Revenue</div><div class="value">${escapeHtml(peso(kpis.totalRevenue))}</div></div>
-          <div class="stat"><div class="label">Avg Order Value</div><div class="value">${escapeHtml(peso(kpis.averageOrderValue))}</div></div>
-          <div class="stat"><div class="label">Satisfaction</div><div class="value">${kpis.averageRating.toFixed(1)}/5</div></div>
-        </div>
+        <section>
+          <h2>Orders &amp; Revenue &mdash; ${escapeHtml(periodLabel)}</h2>
+          <div class="stats">
+            <div class="stat"><div class="label">Total Orders</div><div class="value">${kpis.totalOrders}</div></div>
+            <div class="stat"><div class="label">Revenue</div><div class="value">${escapeHtml(peso(kpis.totalRevenue))}</div></div>
+            <div class="stat"><div class="label">Avg Order Value</div><div class="value">${escapeHtml(peso(kpis.averageOrderValue))}</div></div>
+          </div>
+        </section>
 
         <section>
-          <h2>Weekly Trend</h2>
+          <h2>Satisfaction &mdash; All Feedback</h2>
+          <div class="stats">
+            <div class="stat"><div class="label">Average Rating</div><div class="value">${kpis.averageRating.toFixed(1)}/5</div></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Weekly Trend (Last 8 Weeks)</h2>
           ${
             weeklyTrend.length === 0
               ? `<p class="empty">Not enough data yet</p>`
@@ -121,7 +131,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
         </section>
 
         <section>
-          <h2>Top Sellers</h2>
+          <h2>Top Sellers (All Time)</h2>
           ${
             topSellers.length === 0
               ? `<p class="empty">Not enough data yet</p>`
@@ -137,7 +147,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
                       <td>${escapeHtml(item.item)}</td>
                       <td>${item.orders}</td>
                       <td class="money">${escapeHtml(peso(item.revenue))}</td>
-                      <td>${item.rating.toFixed(1)}</td>
+                      <td>${hasRealRatingData && item.rating > 0 ? item.rating.toFixed(1) : "—"}</td>
                     </tr>
                   `
                 )
@@ -149,7 +159,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
         </section>
 
         <section>
-          <h2>Peak Hours</h2>
+          <h2>Peak Hours (Last 30 Days)</h2>
           ${
             topPeakWindows.length === 0
               ? `<p class="empty">Not enough data yet</p>`
@@ -162,7 +172,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
                   (window) => `
                     <tr>
                       <td>${escapeHtml(formatPeakWindowLabel(window))}</td>
-                      <td>${window.avg_order_count.toFixed(1)}</td>
+                      <td>${Number(window.avg_order_count ?? 0).toFixed(1)}</td>
                       <td>${escapeHtml(window.intensity)}</td>
                     </tr>
                   `
@@ -178,7 +188,7 @@ export function buildAdminAnalyticsSummaryHtml(params: {
           <h2>Demand Forecast</h2>
           ${
             demandForecast
-              ? `<p>Next 7 days: <strong>${Math.round(forecastTotal)} predicted orders</strong> (R² ${demandForecast.diagnostics.rSquared.toFixed(3)}, RMSE ${demandForecast.diagnostics.rmse.toFixed(2)}).</p>`
+              ? `<p>Next ${demandForecast.forecast.length} days: <strong>${Math.round(forecastTotal)} predicted orders</strong> (R² ${demandForecast.diagnostics.rSquared.toFixed(3)}, RMSE ${demandForecast.diagnostics.rmse.toFixed(2)}).</p>`
               : `<p class="empty">Not enough order history yet for a forecast</p>`
           }
         </section>
