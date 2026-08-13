@@ -248,3 +248,140 @@ try {
 }
 
 console.log("\nAll staff-session-report.ts checks passed.");
+
+console.log("\nTesting admin-analytics-report.ts...");
+
+// Zero imports -- the simple data-URL trick works directly, no temp files.
+const { buildAdminAnalyticsSummaryHtml } = await importDataUrlModule(
+  "../src/lib/admin-analytics-report.ts"
+);
+
+function makeKpis(overrides) {
+  return {
+    totalOrders: 48,
+    totalRevenue: 6672,
+    averageOrderValue: 139,
+    averageRating: 4.6,
+    ...overrides,
+  };
+}
+
+// KPI numbers thread through correctly.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    generatedAt: new Date("2026-08-12T06:00:00.000Z"),
+    kpis: makeKpis(),
+    weeklyTrend: [{ label: "May 11-17", orders: 48 }],
+    topSellers: [{ item: "Spanish Latte", orders: 42, revenue: 3990, rating: 4.9 }],
+    peakHourWindows: [
+      { day_of_week: 1, hour_start: 19, hour_end: 20, avg_order_count: 5, intensity: "high" },
+    ],
+    demandForecast: null,
+  });
+  assert.ok(html.includes("May 2026"));
+  assert.ok(html.includes("48")); // totalOrders
+  assert.ok(html.includes("₱6,672"));
+  assert.ok(html.includes("4.6/5"));
+  console.log("  PASS: KPI numbers are threaded through correctly");
+}
+
+// Weekly trend and top sellers render real rows.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    weeklyTrend: [
+      { label: "Apr 27-May 3", orders: 12 },
+      { label: "May 4-10", orders: 24 },
+      { label: "May 11-17", orders: 48 },
+    ],
+    topSellers: [
+      { item: "Spanish Latte", orders: 42, revenue: 3990, rating: 4.9 },
+      { item: "Strawberry Matcha", orders: 36, revenue: 3240, rating: 4.8 },
+    ],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  assert.ok(html.includes("Apr 27-May 3") && html.includes("May 11-17"));
+  assert.ok(html.includes("Spanish Latte") && html.includes("Strawberry Matcha"));
+  console.log("  PASS: weekly trend and top sellers render the given rows");
+}
+
+// Peak hours: only the top 3 by avg_order_count appear, sorted descending.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    weeklyTrend: [],
+    topSellers: [],
+    peakHourWindows: [
+      { day_of_week: 1, hour_start: 19, hour_end: 20, avg_order_count: 3, intensity: "medium" },
+      { day_of_week: 5, hour_start: 20, hour_end: 21, avg_order_count: 9, intensity: "high" },
+      { day_of_week: 6, hour_start: 21, hour_end: 22, avg_order_count: 7, intensity: "high" },
+      { day_of_week: 0, hour_start: 14, hour_end: 15, avg_order_count: 1, intensity: "low" },
+    ],
+    demandForecast: null,
+  });
+  const windowSectionIndex = html.indexOf("Peak Hours");
+  const windowSection = html.slice(windowSectionIndex, windowSectionIndex + 1200);
+  assert.ok(windowSection.includes("Friday"), "the 9-order Friday window should be in the top 3");
+  assert.ok(windowSection.includes("Saturday"), "the 7-order Saturday window should be in the top 3");
+  assert.ok(windowSection.includes("Monday"), "the 3-order Monday window should be in the top 3");
+  assert.ok(!windowSection.includes("Sunday"), "the 1-order Sunday window (4th highest) should be excluded by the top-3 cap");
+  console.log("  PASS: peak hours shows only the top 3 windows by avg_order_count");
+}
+
+// Graceful degradation: demandForecast null.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    weeklyTrend: [],
+    topSellers: [],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  assert.ok(html.includes("Not enough order history yet for a forecast"));
+  console.log("  PASS: null demandForecast renders the graceful-degradation message, not a crash");
+}
+
+// Graceful degradation: demandForecast present, correct total/R2/RMSE shown.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    weeklyTrend: [],
+    topSellers: [],
+    peakHourWindows: [],
+    demandForecast: {
+      forecast: [
+        { date: "2026-06-01", predictedOrders: 10 },
+        { date: "2026-06-02", predictedOrders: 12 },
+      ],
+      diagnostics: { rSquared: 0.994, rmse: 0.38 },
+    },
+  });
+  assert.ok(html.includes("22 predicted orders"), "forecast total should be 10 + 12 = 22");
+  assert.ok(html.includes("0.994"));
+  assert.ok(html.includes("0.38"));
+  console.log("  PASS: a present demandForecast shows the correct next-7-day total, R2, and RMSE");
+}
+
+// Graceful degradation: peakHourWindows empty.
+{
+  const html = buildAdminAnalyticsSummaryHtml({
+    periodLabel: "May 2026",
+    kpis: makeKpis(),
+    weeklyTrend: [],
+    topSellers: [],
+    peakHourWindows: [],
+    demandForecast: null,
+  });
+  const windowSectionIndex = html.indexOf("Peak Hours");
+  const windowSection = html.slice(windowSectionIndex, windowSectionIndex + 200);
+  assert.ok(windowSection.includes("Not enough data yet"));
+  console.log("  PASS: empty peakHourWindows renders the graceful-degradation message, not a crash");
+}
+
+console.log("\nAll admin-analytics-report.ts checks passed.");
