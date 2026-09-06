@@ -1113,6 +1113,9 @@ export function CustomerDashboard({
   const [selectedFeedbackOrderId, setSelectedFeedbackOrderId] = useState<
     string | null
   >(null);
+  const [queuedFeedbackOrderIds, setQueuedFeedbackOrderIds] = useState<
+    string[]
+  >([]);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [selectedFeedbackItemId, setSelectedFeedbackItemId] = useState("");
   const [tasteRating, setTasteRating] = useState(0);
@@ -1560,7 +1563,7 @@ export function CustomerDashboard({
       return;
     }
 
-    const newlyEligibleOrder = customerOrders.find((order) => {
+    const newlyEligibleOrders = customerOrders.filter((order) => {
       const previousStatus = previousOrderStatuses.get(order.id);
 
       return (
@@ -1572,15 +1575,52 @@ export function CustomerDashboard({
       );
     });
 
-    if (newlyEligibleOrder) {
-      openFeedbackPromptForOrder(newlyEligibleOrder.id);
+    if (newlyEligibleOrders.length === 0) {
+      return;
     }
+
+    // Queue every order that just became feedback-eligible in this sync
+    // (not just the first one) so concurrent orders completing together
+    // each still get their own feedback prompt, one after another.
+    setQueuedFeedbackOrderIds((current) => {
+      const next = [...current];
+
+      newlyEligibleOrders.forEach((order) => {
+        if (
+          order.id !== selectedFeedbackOrderId &&
+          !next.includes(order.id)
+        ) {
+          next.push(order.id);
+        }
+      });
+
+      return next;
+    });
   }, [
     customerOrders,
     getFeedbackItemForOrder,
     isAuthenticated,
     isFeedbackPromptAllowed,
+    selectedFeedbackOrderId,
+  ]);
+
+  useEffect(() => {
+    if (isFeedbackPromptOpen || queuedFeedbackOrderIds.length === 0) {
+      return;
+    }
+
+    const [nextOrderId, ...remainingOrderIds] = queuedFeedbackOrderIds;
+
+    // Drop this order from the queue regardless of outcome: if it can no
+    // longer be prompted (already submitted/dismissed elsewhere since it
+    // was queued), this lets the effect re-run and try the next queued
+    // order instead of stalling the whole queue.
+    setQueuedFeedbackOrderIds(remainingOrderIds);
+    openFeedbackPromptForOrder(nextOrderId);
+  }, [
+    isFeedbackPromptOpen,
     openFeedbackPromptForOrder,
+    queuedFeedbackOrderIds,
   ]);
 
   useEffect(() => {
