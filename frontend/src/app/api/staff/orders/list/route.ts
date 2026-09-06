@@ -158,6 +158,27 @@ export async function GET() {
       );
     }
 
+    // admin_orders_view does not expose updated_at, so it's fetched directly
+    // from orders (used only to flag orders stuck in progress for too long).
+    const { data: orderTimestamps, error: orderTimestampsError } = orderIds.length
+      ? await supabase
+          .from("orders")
+          .select("id, updated_at")
+          .in("id", orderIds)
+          .returns<{ id: string; updated_at: string | null }[]>()
+      : { data: [], error: null };
+
+    if (orderTimestampsError) {
+      return NextResponse.json(
+        { error: orderTimestampsError.message },
+        { status: 500 }
+      );
+    }
+
+    const updatedAtByOrderId = new Map(
+      (orderTimestamps ?? []).map((order) => [order.id, order.updated_at])
+    );
+
     const orderItemsByOrderId = new Map<string, OrderItemRow[]>();
 
     (orderItems ?? []).forEach((item) => {
@@ -177,6 +198,7 @@ export async function GET() {
         total_amount: order.total_amount,
         delivery_fee: order.delivery_fee,
         ordered_at: order.ordered_at,
+        updated_at: updatedAtByOrderId.get(order.id) ?? null,
         walkin_name: order.walkin_name,
         delivery_address: order.delivery_address,
         delivery_lat: order.delivery_lat,

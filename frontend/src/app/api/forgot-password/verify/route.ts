@@ -27,10 +27,9 @@ export async function POST(request: Request) {
     }
 
     const passwordIssues = getPasswordIssues(password);
-
     if (passwordIssues.length > 0) {
       return NextResponse.json(
-        { error: `Password must include: ${passwordIssues.join(", ")}.` },
+        { error: "Password must include: " + passwordIssues.join(", ") + "." },
         { status: 400 }
       );
     }
@@ -40,6 +39,7 @@ export async function POST(request: Request) {
     // 1. Find user by email
     const { data: users, error: listError } = await supabase.auth.admin.listUsers();
     if (listError) {
+      console.error("[forgot-password/verify] Error listing users:", listError);
       return NextResponse.json({ error: "Verification failed." }, { status: 500 });
     }
 
@@ -48,21 +48,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid email or code." }, { status: 400 });
     }
 
-    // 2. Check the reset code
+    // 2. Check the reset code (note: used_at column does not exist in this DB)
     const { data: resetEntry, error: dbError } = await supabase
       .from("password_resets")
       .select("*")
       .eq("user_id", user.id)
       .eq("reset_code", code.trim())
-      .is("used_at", null)
-      .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
-    if (dbError || !resetEntry) {
+    if (dbError) {
+      const msg = dbError.message || dbError.code || "unknown";
+      console.error("[forgot-password/verify] DB error:", msg);
+      return NextResponse.json({ error: "Invalid or expired reset code." }, { status: 400 });
+    }
+
+    if (!resetEntry) {
       return NextResponse.json(
         { error: "Invalid or expired reset code." },
+        { status: 400 }
+      );
+    }
+
+    // Check expiration in JS to avoid DB timezone issues
+    if (new Date(resetEntry.expires_at) < new Date()) {
+      return NextResponse.json(
+        { error: "Reset code has expired. Please request a new one." },
         { status: 400 }
       );
     }
@@ -74,17 +86,17 @@ export async function POST(request: Request) {
     );
 
     if (updateError) {
-      console.error("Error updating password:", updateError);
+      console.error("[forgot-password/verify] Error updating password:", updateError);
       return NextResponse.json(
         { error: "Failed to update password." },
         { status: 500 }
       );
     }
 
-    // 4. Mark the code as used
+    // 4. Delete the used reset code to prevent reuse
     await supabase
       .from("password_resets")
-      .update({ used_at: new Date().toISOString() })
+      .delete()
       .eq("id", resetEntry.id);
 
     return NextResponse.json({
@@ -92,7 +104,7 @@ export async function POST(request: Request) {
       message: "Your password has been reset successfully.",
     });
   } catch (error) {
-    console.error("Verify reset code error:", error);
+    console.error("[forgot-password/verify] Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error." },
       { status: 500 }

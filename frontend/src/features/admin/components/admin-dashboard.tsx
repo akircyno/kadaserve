@@ -1608,6 +1608,7 @@ export function AdminDashboard() {
               onClick={() => setIsSidebarOpen((current) => !current)}
               aria-label={isSidebarOpen ? "Collapse sidebar" : "Open sidebar"}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#FFF0D8]/10 bg-[#0F441D]/80 text-[#FFF0D8] transition hover:bg-[#0F441D]"
+              suppressHydrationWarning
             >
               {isSidebarOpen ? (
                 <ChevronLeft size={20} strokeWidth={1.9} />

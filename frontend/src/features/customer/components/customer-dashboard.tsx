@@ -24,7 +24,7 @@ import {
   Languages,
   Search,
   Settings,
-  ShoppingCart,
+  Bike,
   SlidersHorizontal,
   Sparkles,
   Star,
@@ -3351,7 +3351,7 @@ export function CustomerDashboard({
                                 onClick={() => handleQuickAdd(item)}
                                 className="kada-glow-ring flex flex-1 items-center justify-center gap-2 rounded-full bg-[#123E26] px-3 py-2.5 font-sans text-sm font-bold text-white transition hover:bg-[#0D2E18]"
                               >
-                                <ShoppingCart size={16} />
+                                <Bike size={16} />
                                 Add
                               </button>
                             </div>
@@ -5056,8 +5056,8 @@ export function CustomerDashboard({
                     onClick={handleAddCustomizedItem}
                     className="kada-glow-ring mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#123E26] px-5 py-4 font-sans text-base font-black text-white shadow-lg shadow-[#123E26]/20 transition hover:-translate-y-0.5 hover:bg-[#0D2E18]"
                   >
-                    <ShoppingCart size={18} />
-                    Add to Cart — {formatPrice(customizeTotal)}
+                    <Bike size={18} />
+                    Add to Order — {formatPrice(customizeTotal)}
                   </button>
                 </aside>
               </div>
@@ -5996,7 +5996,7 @@ export function CustomerDashboard({
                 isCartPulseActive ? "kada-cart-pulse" : ""
               }`}
             >
-              <ShoppingCart size={20} />
+              <Bike size={20} />
               <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 font-sans text-[11px] font-black text-white">
                 {cartCount}
               </span>
@@ -6048,7 +6048,7 @@ export function CustomerDashboard({
             isCartPulseActive ? "kada-cart-pulse ring-4 ring-[#F8EBCF]" : ""
           }`}
         >
-          <ShoppingCart size={25} />
+          <Bike size={25} />
           {cartCount > 0 ? (
             <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EF3B2D] px-1 text-[11px] font-bold text-white">
               {cartCount}

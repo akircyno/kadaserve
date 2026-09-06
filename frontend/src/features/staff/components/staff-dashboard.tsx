@@ -25,6 +25,11 @@ import { createPortal } from "react-dom";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
+import {
+  getStaleOrderLabel,
+  isOrderStale,
+  isReadyOrderStuck,
+} from "@/lib/orders/stale-orders";
 import { buildStaffSessionSummaryHtml } from "@/lib/staff-session-report";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
@@ -675,6 +680,9 @@ export function StaffDashboard() {
   const [staffToast, setStaffToast] = useState("");
   const [error, setError] = useState("");
   const [expiringOrderIds, setExpiringOrderIds] = useState<string[]>([]);
+  const [autoCancellingOrderIds, setAutoCancellingOrderIds] = useState<
+    string[]
+  >([]);
   const [sessionSummaryPage, setSessionSummaryPage] = useState(1);
 
   const activeOrders = useMemo(() => {
@@ -856,8 +864,9 @@ export function StaffDashboard() {
       outForDelivery: activeOrders.filter(
         (order) => order.status === "out_for_delivery"
       ).length,
+      stale: activeOrders.filter((order) => isOrderStale(order, now)).length,
     };
-  }, [activeOrders]);
+  }, [activeOrders, now]);
 
   const rawStaffName = staffProfile?.fullName?.trim() || "Chrizelda";
   const normalizedStaffName =
@@ -1319,6 +1328,67 @@ export function StaffDashboard() {
     };
   }, [expiringOrderIds, loadOrders, now, orders, showToast]);
 
+  useEffect(() => {
+    const stuckReadyOrders = orders.filter(
+      (order) =>
+        order.status === "ready" &&
+        isReadyOrderStuck(order, now) &&
+        !autoCancellingOrderIds.includes(order.id)
+    );
+
+    if (stuckReadyOrders.length === 0) {
+      return;
+    }
+
+    const ids = stuckReadyOrders.map((order) => order.id);
+    let isCancelled = false;
+
+    const run = async () => {
+      setAutoCancellingOrderIds((current) => [...current, ...ids]);
+
+      try {
+        await Promise.all(
+          ids.map(async (orderId) => {
+            await fetch("/api/staff/orders/update-status", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                orderId,
+                action: "auto_cancel_ready",
+                expectedStatus: "ready",
+              }),
+            });
+          })
+        );
+
+        if (!isCancelled) {
+          setStaffToast("Unclaimed ready orders were auto-cancelled.");
+          showToast({
+            title: "Ready orders auto-cancelled",
+            description:
+              "Orders left unclaimed too long in Ready were cancelled automatically.",
+            variant: "info",
+          });
+          await loadOrders({ showLoading: false });
+        }
+      } finally {
+        if (!isCancelled) {
+          setAutoCancellingOrderIds((current) =>
+            current.filter((id) => !ids.includes(id))
+          );
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [autoCancellingOrderIds, loadOrders, now, orders, showToast]);
+
   function openOrder(order: StaffOrder) {
     setSelectedOrder(order);
     const savedDeliveryFee = Math.round(getDeliveryFee(order));
@@ -1579,6 +1649,16 @@ export function StaffDashboard() {
                   {filteredOrders.length}
                 </span>
               </div>
+              {summary.stale > 0 ? (
+                <div className="inline-flex h-10 items-center gap-2 rounded-full border border-[#C55432]/30 bg-[#FFF1EC] px-4">
+                  <span className="font-sans text-[10px] font-black uppercase tracking-[0.14em] text-[#A6422A]">
+                    Needs Attention
+                  </span>
+                  <span className="font-sans text-base font-black tabular-nums text-[#A6422A]">
+                    {summary.stale}
+                  </span>
+                </div>
+              ) : null}
               {queueSummaryCards.map((card) => (
                 <div
                   key={card.label}
@@ -1708,6 +1788,7 @@ export function StaffDashboard() {
                     const isExpiringOrder = expiringOrderIds.includes(order.id);
                     const elapsedMinutes = getElapsedMinutes(order.ordered_at, now);
                     const heatmapStyle = getQueueHeatmapStyle(elapsedMinutes);
+                    const staleOrderLabel = getStaleOrderLabel(order, now);
                     const itemQuantity = getOrderItemQuantity(order);
                     const isSelectedOrder = selectedOrder?.id === order.id;
 
@@ -1777,6 +1858,12 @@ export function StaffDashboard() {
                               )}`}
                             >
                               {formatExpirationCountdown(minutesUntilExpiry)}
+                            </span>
+                          ) : null}
+
+                          {staleOrderLabel ? (
+                            <span className="inline-flex rounded-full border border-[#C55432]/30 bg-[#FFF1EC] px-2.5 py-1 font-sans text-xs font-bold text-[#A6422A]">
+                              {staleOrderLabel}
                             </span>
                           ) : null}
 
@@ -2272,6 +2359,10 @@ export function StaffDashboard() {
                           No map pin saved for this delivery.
                         </p>
                       )}
+
+                      <p className="mt-1 font-semibold text-[#0D2E18]">
+                        Phone: {selectedOrder.delivery_phone || selectedOrder.customer_profile?.phone || "No phone"}
+                      </p>
                     </div>
                   ) : null}
                 </div>

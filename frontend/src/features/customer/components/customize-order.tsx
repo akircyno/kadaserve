@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Minus, Plus, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Bike, Minus, Plus } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
 import {
@@ -426,8 +426,8 @@ export function CustomizeOrder({ menuItem }: CustomizeOrderProps) {
                 disabled={!menuItem.is_available}
                 className="kada-glow-ring mt-6 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <ShoppingCart size={18} />
-                {isEditing ? "Update Cart" : "Add to Cart"}
+                <Bike size={18} />
+                {isEditing ? "Update Order" : "Add to Order"}
               </button>
 
               {addedMessage ? (

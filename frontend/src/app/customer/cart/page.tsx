@@ -12,7 +12,6 @@ import {
   Phone,
   Plus,
   ReceiptText,
-  ShoppingCart,
   Store,
   Trash2,
   WalletCards,
@@ -762,8 +761,8 @@ export default function CartPage() {
 
           {items.length === 0 ? (
             <div className="py-16 text-center">
-              <ShoppingCart className="mx-auto h-9 w-9 text-[#0D2E18]" />
-              <p className="mt-3 font-sans text-xl font-bold">Your cart is empty</p>
+              <Bike className="mx-auto h-9 w-9 text-[#0D2E18]" />
+              <p className="mt-3 font-sans text-xl font-bold">Your order is empty</p>
               <p className="mt-1 font-sans text-sm text-[#684B35]">
                 Add a drink from the menu to see it here.
               </p>

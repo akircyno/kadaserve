@@ -9,7 +9,7 @@ import {
     PackageCheck,
     Plus,
     ReceiptText,
-    ShoppingCart,
+    Bike,
     Trash2,
     UserRound,
     X,
@@ -607,7 +607,7 @@ export function StaffEncodeOrder() {
                                                     />
                                                 ) : (
                                                     <div className="flex h-full w-full items-center justify-center bg-[#E6D7C0]">
-                                                        <ShoppingCart size={28} className="text-[#BDAE92]" />
+                                                        <Bike size={28} className="text-[#BDAE92]" />
                                                     </div>
                                                 )}
                                             </div>
@@ -673,7 +673,7 @@ export function StaffEncodeOrder() {
                                                         disabled={selectedQuantity === 0}
                                                         className="h-9 rounded-full bg-[#0D2E18] px-5 font-sans text-xs font-black text-[#FFF0DA] transition-all duration-200 hover:bg-[#123821] hover:shadow-md active:scale-95 disabled:bg-transparent disabled:px-3 disabled:text-[#8C7A64] disabled:shadow-none"
                                                     >
-                                                        {selectedQuantity > 0 ? "Customize" : "Select qty"}
+                                                        {selectedQuantity > 0 ? "Add to Order" : "Select qty"}
                                                     </button>
                                                 </div>
                                             </div>
@@ -739,7 +739,7 @@ export function StaffEncodeOrder() {
                             {cart.length === 0 ? (
                                 <div className="flex h-full min-h-[220px] items-center justify-center px-3 py-3 text-center sm:px-4">
                                     <div className="w-full max-w-[260px] rounded-[24px] border border-dashed border-[#D6C6AC] bg-[#FFF8EF] px-4 py-8">
-                                        <ShoppingCart className="mx-auto h-6 w-6 text-[#BDAE92]" />
+                                        <Bike className="mx-auto h-6 w-6 text-[#BDAE92]" />
                                         <p className="mt-2 font-sans text-sm font-black text-[#0D2E18]">
                                             Cart is empty
                                         </p>
@@ -1092,8 +1092,8 @@ export function StaffEncodeOrder() {
                                         onClick={confirmCustomization}
                                         className="sticky bottom-0 mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#123E26] px-5 py-4 text-lg font-bold text-white transition hover:opacity-95"
                                     >
-                                        <ShoppingCart size={18} />
-                                        Add to Cart
+                                        <Bike size={18} />
+                                        Add to Order
                                     </button>
                                 </aside>
                             </div>

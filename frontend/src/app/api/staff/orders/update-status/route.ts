@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPendingExpirySetupMessage } from "@/lib/orders/expire-pending-orders";
+import { readyOrderAutoCancelThresholdMinutes } from "@/lib/orders/stale-orders";
 import { sendEmail, escapeHtml, getSmtpConfig } from "@/lib/email";
 
 type OrderStatus =
@@ -36,6 +37,12 @@ function getBaseAmount(totalAmount: unknown, deliveryFee: unknown) {
 function getPendingOrderAgeMinutes(orderedAt: string) {
   return Math.floor(
     Math.max(0, Date.now() - new Date(orderedAt).getTime()) / 60000
+  );
+}
+
+function getMinutesSince(timestamp: string) {
+  return Math.floor(
+    Math.max(0, Date.now() - new Date(timestamp).getTime()) / 60000
   );
 }
 
@@ -386,7 +393,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const orderId = body.orderId as string;
     const expectedStatus = body.expectedStatus as OrderStatus | undefined;
-    const action = body.action as "advance" | "mark_paid" | "expire" | undefined;
+    const action = body.action as
+      | "advance"
+      | "mark_paid"
+      | "expire"
+      | "auto_cancel_ready"
+      | undefined;
     const finalDeliveryFee = Number(body.finalDeliveryFee);
 
     if (!orderId) {
@@ -398,7 +410,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status, total_amount, delivery_fee, ordered_at")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee, ordered_at, updated_at")
       .eq("id", orderId)
       .single();
 
@@ -478,6 +490,46 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         nextStatus: "expired",
+        notificationSent: false,
+        receiptSent: false,
+      });
+    }
+
+    if (action === "auto_cancel_ready") {
+      if (order.status !== "ready") {
+        return NextResponse.json(
+          { error: "Only ready orders can be auto-cancelled." },
+          { status: 400 }
+        );
+      }
+
+      const referenceTimestamp = String(order.updated_at ?? order.ordered_at);
+
+      if (getMinutesSince(referenceTimestamp) < readyOrderAutoCancelThresholdMinutes) {
+        return NextResponse.json(
+          {
+            error: `Ready order has not reached the ${readyOrderAutoCancelThresholdMinutes}-minute auto-cancel limit.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const { error: autoCancelError } = await supabase
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("id", orderId)
+        .eq("status", expectedStatus ?? "ready");
+
+      if (autoCancelError) {
+        return NextResponse.json(
+          { error: autoCancelError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        nextStatus: "cancelled",
         notificationSent: false,
         receiptSent: false,
       });

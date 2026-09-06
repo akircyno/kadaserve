@@ -82,6 +82,12 @@ function getExpiredOrderLabel(status: OrderStatus) {
   return status === "expired" ? "Auto-expired after 45m" : null;
 }
 
+function getOrderTypeLabel(order: StaffOrder) {
+  if (order.order_type === "delivery") return "Delivery";
+  if (order.walkin_name?.trim()) return "Walk-in";
+  return "Pickup";
+}
+
 function getCustomerName(order: StaffOrder) {
   return (
     order.walkin_name?.trim() ||
@@ -566,10 +572,12 @@ export function StaffOrderHistory() {
                       className={`mt-1 w-fit rounded-full px-2 py-0.5 font-sans text-[11px] font-bold ${
                         order.order_type === "delivery"
                           ? "bg-[#FFF0DA] text-[#684B35]"
+                          : order.walkin_name?.trim()
+                          ? "bg-[#FFF8EF] text-[#684B35]"
                           : "bg-[#E6F2E8] text-[#0D2E18]"
                       }`}
                     >
-                      {order.order_type === "delivery" ? "Delivery" : "Pickup"}
+                      {getOrderTypeLabel(order)}
                     </p>
                   </div>
                   <div>
@@ -651,7 +659,7 @@ export function StaffOrderHistory() {
                         : "bg-[#E6F2E8] text-[#0D2E18]"
                     }`}
                   >
-                    {selectedOrder.order_type === "delivery" ? "Delivery" : "Pickup"}
+                    {selectedOrder.walkin_name?.trim() ? "Walk-in" : selectedOrder.order_type === "delivery" ? "Delivery" : "Pickup"}
                   </span>
                   <span className="rounded-full bg-[#0D2E18] px-3 py-1.5 font-sans text-xs font-black text-[#FFF0DA]">
                     {peso(getHistoryGrandTotal(selectedOrder))}
@@ -735,6 +743,7 @@ export function StaffOrderHistory() {
                 </div>
 
                 <div className="rounded-[20px] border border-[#DCCFB8] bg-white p-4">
+{selectedOrder.walkin_name?.trim() ? "Walk-in" : selectedOrder.order_type === "delivery" ? "Delivery" : "Pickup"}
                   <p className="font-sans text-xs font-bold uppercase tracking-[0.12em] text-[#684B35]">
                     Timestamp
                   </p>
