@@ -26,7 +26,12 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "kadaserve-cart";
+const STORAGE_KEY_PREFIX = "kadaserve-cart";
+
+function getStorageKey(userId?: string) {
+  if (!userId) return STORAGE_KEY_PREFIX;
+  return `${STORAGE_KEY_PREFIX}-${userId}`;
+}
 
 function createCartItemId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -36,7 +41,7 @@ function createCartItemId() {
   return `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function readStoredItems(isAuthenticated: boolean) {
+function readStoredItems(isAuthenticated: boolean, userId?: string) {
   if (typeof window === "undefined") {
     return [];
   }
@@ -45,7 +50,7 @@ function readStoredItems(isAuthenticated: boolean) {
     return [];
   }
 
-  const saved = window.localStorage.getItem(STORAGE_KEY);
+  const saved = window.localStorage.getItem(getStorageKey(userId));
 
   if (!saved) {
     return [];
@@ -75,9 +80,11 @@ function buildSignature(item: AddCartItemInput) {
 export function CartProvider({
   children,
   isAuthenticated = false,
+  userId,
 }: {
   children: ReactNode;
   isAuthenticated?: boolean;
+  userId?: string;
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hasLoadedStoredItems, setHasLoadedStoredItems] = useState(false);
@@ -91,17 +98,17 @@ export function CartProvider({
 
         return currentItems.length > 0
           ? currentItems
-          : readStoredItems(isAuthenticated);
+          : readStoredItems(isAuthenticated, userId);
       });
       setHasLoadedStoredItems(true);
     }, 0);
 
     if (!isAuthenticated) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(getStorageKey(userId));
     }
 
     return () => window.clearTimeout(timeoutId);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userId]);
 
   useEffect(() => {
     if (!hasLoadedStoredItems) {
@@ -109,12 +116,12 @@ export function CartProvider({
     }
 
     if (!isAuthenticated) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(getStorageKey(userId));
       return;
     }
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [hasLoadedStoredItems, isAuthenticated, items]);
+    window.localStorage.setItem(getStorageKey(userId), JSON.stringify(items));
+  }, [hasLoadedStoredItems, isAuthenticated, userId, items]);
 
   function addItem(item: AddCartItemInput) {
     if (!isAuthenticated) {
