@@ -554,6 +554,19 @@ export default function CartPage() {
         description: `Order ${orderId.slice(0, 8).toUpperCase()} is now in your tracker.`,
         variant: "success",
       });
+
+      if (orderType === "delivery" && deliveryPhone.trim()) {
+        try {
+          await fetch("/api/customer/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: deliveryPhone.trim() }),
+          });
+        } catch {
+          // Silently fail if profile update doesn't work - order is already placed
+        }
+      }
+
       clearCart();
 
       router.replace(`/customer?tab=orders&orderId=${orderId}`);
