@@ -132,29 +132,40 @@ export default function CartPage() {
 
   async function loadSavedAddresses() {
     try {
-      const response = await fetch("/api/customer/addresses");
+      const [addressesResponse, profileResponse] = await Promise.all([
+        fetch("/api/customer/addresses"),
+        fetch("/api/customer/profile"),
+      ]);
 
-      if (!response.ok) {
-        return;
+      if (addressesResponse.ok) {
+        const result = (await addressesResponse.json()) as {
+          addresses?: CustomerAddress[];
+        };
+        const addresses = result.addresses ?? [];
+        const defaultAddress =
+          addresses.find((address) => address.is_default) ?? addresses[0];
+
+        setSavedAddresses(addresses);
+
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setDeliveryAddress((current) => current || defaultAddress.address);
+          setDeliveryLat((current) => current ?? defaultAddress.delivery_lat);
+          setDeliveryLng((current) => current ?? defaultAddress.delivery_lng);
+        }
       }
 
-      const result = (await response.json()) as {
-        addresses?: CustomerAddress[];
-      };
-      const addresses = result.addresses ?? [];
-      const defaultAddress =
-        addresses.find((address) => address.is_default) ?? addresses[0];
-
-      setSavedAddresses(addresses);
-
-      if (defaultAddress) {
-        setSelectedAddressId(defaultAddress.id);
-        setDeliveryAddress((current) => current || defaultAddress.address);
-        setDeliveryLat((current) => current ?? defaultAddress.delivery_lat);
-        setDeliveryLng((current) => current ?? defaultAddress.delivery_lng);
+      if (profileResponse.ok) {
+        const profileResult = (await profileResponse.json()) as {
+          profile?: { phone?: string | null };
+        };
+        const customerPhone = profileResult.profile?.phone;
+        if (customerPhone) {
+          setDeliveryPhone((current) => current || customerPhone);
+        }
       }
     } catch {
-      // Checkout still works when saved addresses are unavailable.
+      // Checkout still works when saved addresses/profile are unavailable.
     }
   }
 
