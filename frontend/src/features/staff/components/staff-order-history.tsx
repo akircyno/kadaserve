@@ -751,9 +751,7 @@ export function StaffOrderHistory() {
                     {formatDateTime(selectedOrder.ordered_at)}
                   </p>
                   <p className="mt-1 font-sans text-sm text-[#5F5346]">
-                    {selectedOrder.order_type === "delivery"
-                      ? "Delivery"
-                      : "Pickup"}
+                    {getOrderTypeLabel(selectedOrder)}
                   </p>
                 </div>
               </section>
