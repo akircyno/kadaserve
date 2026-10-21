@@ -13,7 +13,7 @@ export type OrderType = "pickup" | "delivery";
 
 export type PaymentMethod = "cash" | "gcash" | "online";
 
-export type PaymentStatus = "unpaid" | "paid";
+export type PaymentStatus = "unpaid" | "paid" | "pending_verification" | "rejected";
 
 export type StaffOrderItem = {
   id: string;
@@ -57,6 +57,12 @@ export type StaffOrder = {
     email: string | null;
     phone: string | null;
   } | null;
+  // GCash QR payment review (online orders)
+  has_payment_proof?: boolean;
+  payment_submitted_at?: string | null;
+  payment_verified_at?: string | null;
+  payment_verified_by_name?: string | null;
+  payment_rejection_reason?: string | null;
   order_items: StaffOrderItem[];
 };
 
@@ -94,9 +100,8 @@ export type CustomerOrder = {
   delivery_lng?: number | null;
   delivery_email?: string | null;
   delivery_phone?: string | null;
-  paymongo_qr_code_id?: string | null;
-  paymongo_qr_code_image_url?: string | null;
-  paymongo_qr_code_label?: string | null;
-  paymongo_qr_expires_at?: string | null;
+  payment_submitted_at?: string | null;
+  payment_verified_at?: string | null;
+  payment_rejection_reason?: string | null;
   order_items: CustomerOrderItem[];
 };

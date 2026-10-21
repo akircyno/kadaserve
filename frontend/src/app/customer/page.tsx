@@ -326,10 +326,9 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           delivery_lng,
           delivery_email,
           delivery_phone,
-          paymongo_qr_code_id,
-          paymongo_qr_code_image_url,
-          paymongo_qr_code_label,
-          paymongo_qr_expires_at,
+          payment_submitted_at,
+          payment_verified_at,
+          payment_rejection_reason,
           order_items (
             id,
             quantity,

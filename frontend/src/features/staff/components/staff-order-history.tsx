@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
+import { formatPaymentStatusLabel } from "@/lib/payments/gcash-payment";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type DateRange = "today" | "yesterday" | "custom" | "all";
@@ -201,7 +202,7 @@ function HistoryPagination({
 }
 
 function getPaymentMethodLabel(order: StaffOrder) {
-  if (order.payment_method === "online") return "Online";
+  if (order.payment_method === "online") return "Online (GCash QR)";
   if (order.payment_method === "gcash") return "GCash";
   if (order.payment_method === "cash") {
     return order.order_type === "delivery" ? "Cash on Delivery" : "Pay at Cafe";
@@ -210,6 +211,9 @@ function getPaymentMethodLabel(order: StaffOrder) {
 }
 
 function getPaymentStatusLabel(order: StaffOrder) {
+  if (order.payment_status === "pending_verification" || order.payment_status === "rejected") {
+    return formatPaymentStatusLabel(order.payment_status);
+  }
   if (order.status === "pending_payment") return "Awaiting Payment";
   return order.payment_status === "paid" ? "Paid" : "Unpaid";
 }

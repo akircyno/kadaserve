@@ -7,6 +7,8 @@ export type AdminPaymentFilter =
   | "all"
   | "paid"
   | "unpaid"
+  | "pending_verification"
+  | "rejected"
   | "cash"
   | "gcash"
   | "online";

@@ -74,14 +74,16 @@ Order types:
 Payment methods:
 
 - `cash`
-- `online`
+- `online` (Online Payment via GCash QR)
 
-Current production-safe behavior:
+Current behavior:
 
-- `cash` creates an order with `status: pending` and `payment_status: unpaid`.
-- `online` creates an order with `status: pending_payment`, then redirects to PayMongo checkout if enabled.
-- Online orders are not marked paid during redirect.
-- PayMongo webhook is the only authority that marks an online order paid.
+- `cash` sends the JSON body above and creates an order with `status: pending` and `payment_status: unpaid`.
+- `online` sends `multipart/form-data` with `payload` (the JSON body above) and `paymentProof` (a JPG or PNG screenshot, 4 MB max).
+- The screenshot is checked by type, size and file content, then stored in the private `payment-proofs` Supabase Storage bucket.
+- The order is created with `status: pending_payment` and `payment_status: pending_verification`. If the screenshot cannot be stored, the order is removed.
+- Uploading a screenshot never marks an order paid. Staff/admin must verify the payment (see `POST /api/staff/orders/verify-payment`).
+- The customer sees a static GCash QR (`frontend/public/payments/gcash-qr.webp`), the recipient name and the exact total before paying.
 
 Delivery fee:
 
@@ -106,6 +108,25 @@ Updates a saved address or default address.
 
 Cancels a pending customer order.
 
+- GCash QR orders can be cancelled before payment proof is sent or after it is rejected.
+- Orders with `payment_status: pending_verification` or `paid` cannot be cancelled by the customer.
+
+### `POST /api/customer/orders/payment-proof`
+
+Uploads a replacement GCash payment screenshot after staff rejected the previous one.
+
+Body: `multipart/form-data` with `orderId` and `paymentProof` (JPG or PNG, 4 MB max).
+
+- Only the customer who placed the order can upload.
+- Only allowed while `status: pending_payment` and `payment_status: rejected`.
+- Moves the same order back to `payment_status: pending_verification`; no new order is created.
+
+### `GET /api/orders/payment-proof?orderId=...`
+
+Returns a signed link (valid for 5 minutes) to an order's payment screenshot.
+
+- Allowed for the customer who placed the order, staff and admin. Anyone else gets `404`.
+
 ### `GET /api/customer/orders`
 
 Returns the signed-in customer's orders for automatic order tracker sync.
@@ -122,30 +143,18 @@ Submits feedback for a completed or delivered order item.
 
 Feedback is used as a customer preference signal for recommendation logic.
 
-## PayMongo
+## Payments
 
-### `POST /api/paymongo/webhook`
+PayMongo checkout and its webhook (`POST /api/paymongo/webhook`) were removed. Older orders keep their `paymongo_*` columns for history.
 
-Receives PayMongo webhook events.
+Payment status (separate from order status):
 
-Required event:
+- `unpaid` - cash orders before payment.
+- `pending_verification` - customer sent a GCash screenshot; staff/admin have not checked it yet.
+- `paid` - staff/admin verified the payment (or a cash payment was marked paid).
+- `rejected` - staff/admin rejected the screenshot; the customer can upload a new one on the same order.
 
-```text
-checkout_session.payment.paid
-```
-
-Security:
-
-- Validates `paymongo-signature`.
-- Uses `PAYMONGO_WEBHOOK_SECRET`.
-- Ignores unsupported events.
-
-Webhook behavior:
-
-- Finds order by PayMongo metadata `order_id`.
-- Updates online order from `pending_payment` to `pending`.
-- Sets `payment_status` to `paid`.
-- Saves PayMongo IDs for traceability.
+GCash QR orders stay in `status: pending_payment` until approved, so they never reach preparation unverified. Approval moves them to `pending`, and the normal order flow continues.
 
 ## Staff
 
@@ -167,15 +176,35 @@ Status flow:
 Payment rule:
 
 - Delivery cannot be closed as delivered unless payment is marked paid.
-- Online payment orders become paid only through PayMongo webhook.
+- GCash QR orders become paid only through `POST /api/staff/orders/verify-payment`.
 
 Expiry rule:
 
-- Pending orders expire after 45 minutes.
+- Pending orders expire after 45 minutes. For verified GCash QR orders the 45 minutes count from verification, not from ordering.
 - Expired orders use status `expired`, not `cancelled`.
 - Expired orders are treated as final orders and appear in session summary/order history.
 - The update-status API rejects early expiry attempts before the 45-minute limit.
 - Supabase must allow `expired` in `orders_status_check`; apply `backend/seed/order-status-expired.sql` if the database rejects expired status updates.
+
+### `POST /api/staff/orders/verify-payment`
+
+Approves or rejects a customer's GCash payment screenshot. Staff and admin only (checked on the server).
+
+Body:
+
+```json
+{
+  "orderId": "uuid",
+  "decision": "approve",
+  "reason": "Optional message shown to the customer when rejecting"
+}
+```
+
+- Only works while the order is `pending_payment` with `payment_status: pending_verification` and a screenshot attached.
+- `approve`: sets `payment_status: paid`, moves the order to `pending`, and records `payment_verified_at` and `payment_verified_by`.
+- `reject`: sets `payment_status: rejected`, records the reviewer and reason; the order stays `pending_payment`.
+- If another reviewer already decided, returns `409`.
+- Staff should approve only after confirming the money arrived in the GCash account; the screenshot alone is not proof.
 
 ### `POST /api/staff/orders/create`
 
@@ -251,7 +280,8 @@ Important SQL files:
 
 - `backend/seed/customer-addresses.sql`
 - `backend/seed/delivery-location.sql`
-- `backend/seed/paymongo-payments.sql`
+- `backend/seed/paymongo-payments.sql` (historical PayMongo columns, kept for older orders)
 - `backend/seed/admin-orders-view.sql`
 - `backend/seed/store-settings.sql`
 - `backend/seed/order-status-expired.sql`
+- `backend/seed/gcash-payment-proof.sql` (GCash QR payment proof columns, statuses, private storage bucket, payment guard trigger, updated `admin_orders_view`; apply before deploying the GCash QR code)

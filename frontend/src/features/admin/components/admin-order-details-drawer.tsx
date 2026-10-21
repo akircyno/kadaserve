@@ -5,7 +5,12 @@ import {
   X,
   Copy,
 } from "lucide-react";
+import {
+  PaymentProofReview,
+  type PaymentReviewUpdate,
+} from "@/features/payments/components/payment-proof-review";
 import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
+import { formatPaymentStatusLabel } from "@/lib/payments/gcash-payment";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 function peso(value: number) {
@@ -28,7 +33,7 @@ function formatDateTime(value: string) {
 function formatStatus(status: OrderStatus) {
   switch (status) {
     case "pending_payment":
-      return "Pending payment";
+      return "Verifying payment";
     case "out_for_delivery":
       return "Out for delivery";
     default:
@@ -37,16 +42,23 @@ function formatStatus(status: OrderStatus) {
 }
 
 function formatPaymentMethod(paymentMethod: StaffOrder["payment_method"]) {
-  if (paymentMethod === "online") return "Online";
+  if (paymentMethod === "online") return "GCash QR";
   if (paymentMethod === "gcash") return "GCash";
   if (paymentMethod === "cash") return "Cash";
   return "No method";
 }
 
 function formatPaymentStatus(paymentStatus: StaffOrder["payment_status"]) {
-  if (paymentStatus === "paid") return "Paid";
-  if (paymentStatus === "unpaid") return "Unpaid";
-  return "No status";
+  return formatPaymentStatusLabel(paymentStatus);
+}
+
+function hasPaymentReview(order: StaffOrder) {
+  return (
+    order.payment_method === "online" &&
+    (order.payment_status === "pending_verification" ||
+      order.payment_status === "rejected" ||
+      Boolean(order.has_payment_proof))
+  );
 }
 
 function getOrderDisplayName(order: StaffOrder) {
@@ -99,9 +111,11 @@ function getContactPhone(order: StaffOrder) {
 
 export function AdminOrderDetailsDrawer({
   onClose,
+  onOrderUpdated,
   order,
 }: {
   onClose: () => void;
+  onOrderUpdated?: (update: PaymentReviewUpdate) => void;
   order: StaffOrder;
 }) {
   const flowStatuses: OrderStatus[] =
@@ -166,6 +180,16 @@ export function AdminOrderDetailsDrawer({
               <InfoText label="Delivery Fee" value={peso(order.delivery_fee ?? 0)} />
             ) : null}
           </div>
+
+          {hasPaymentReview(order) ? (
+            <div className="mt-6">
+              <PaymentProofReview
+                key={order.id}
+                order={order}
+                onReviewed={(update) => onOrderUpdated?.(update)}
+              />
+            </div>
+          ) : null}
 
           <hr className="my-6 border-[#D8C8AA]/70" />
 

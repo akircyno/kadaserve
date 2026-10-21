@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getPendingExpirySetupMessage } from "@/lib/orders/expire-pending-orders";
+import {
+  getPendingExpirySetupMessage,
+  getPendingQueueStartedAt,
+} from "@/lib/orders/expire-pending-orders";
 import { readyOrderAutoCancelThresholdMinutes } from "@/lib/orders/stale-orders";
 import { sendEmail, escapeHtml, getSmtpConfig } from "@/lib/email";
 
@@ -15,7 +18,7 @@ type OrderStatus =
   | "completed"
   | "cancelled";
 
-type PaymentStatus = "unpaid" | "paid";
+type PaymentStatus = "unpaid" | "paid" | "pending_verification" | "rejected";
 
 const pendingOrderTimeoutMinutes = 45;
 
@@ -410,7 +413,7 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_type, status, payment_status, total_amount, delivery_fee, ordered_at, updated_at")
+      .select("id, order_type, status, payment_status, total_amount, delivery_fee, ordered_at, updated_at, payment_verified_at")
       .eq("id", orderId)
       .single();
 
@@ -465,7 +468,7 @@ export async function POST(request: Request) {
       }
 
       if (
-        getPendingOrderAgeMinutes(String(order.ordered_at)) <
+        getPendingOrderAgeMinutes(String(getPendingQueueStartedAt(order))) <
         pendingOrderTimeoutMinutes
       ) {
         return NextResponse.json(

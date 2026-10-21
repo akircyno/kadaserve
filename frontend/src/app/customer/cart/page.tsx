@@ -21,6 +21,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
 import { DeliveryLocationPicker } from "@/features/customer/components/delivery-location-picker";
 import { useCart, type CartItem } from "@/features/customer/providers/cart-provider";
+import { GcashQrPaymentPanel } from "@/features/payments/components/gcash-qr-payment-panel";
 import {
   getDistanceBasedDeliveryFee,
   hasDeliveryCoordinates,
@@ -41,12 +42,18 @@ type CustomerAddress = {
   is_default: boolean;
 };
 
-const isPayMongoCheckoutEnabled =
-  process.env.NEXT_PUBLIC_ENABLE_PAYMONGO_CHECKOUT === "true";
 const checkoutOrderTypeStorageKey = "kadaserve_checkout_order_type";
 
 function peso(value: number) {
   return `\u20B1${Math.round(value)}`;
+}
+
+// The exact amount to send by GCash, keeping centavos when there are any.
+function formatPaymentAmount(value: number) {
+  return `\u20B1${value.toLocaleString("en-PH", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatAddonLabel(value: string) {
@@ -90,6 +97,7 @@ export default function CartPage() {
 
   const [orderType, setOrderType] = useState<"pickup" | "delivery">("pickup");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "online">("cash");
+  const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [isAddressPickerOpen, setIsAddressPickerOpen] = useState(false);
@@ -476,13 +484,12 @@ export default function CartPage() {
       return;
     }
 
-    if (paymentMethod === "online" && !isPayMongoCheckoutEnabled) {
-      setError("Online payment is coming soon. Please choose cash for now.");
-      setPaymentMethod("cash");
+    if (paymentMethod === "online" && !paymentProof) {
+      setError("Upload a screenshot of your GCash payment before placing your order.");
       showToast({
-        title: "Online payment unavailable",
-        description: "Please choose cash for now.",
-        variant: "info",
+        title: "Payment screenshot required",
+        description: "Pay with the GCash QR, then upload the screenshot.",
+        variant: "error",
       });
       return;
     }
@@ -490,21 +497,34 @@ export default function CartPage() {
     setIsCheckingOut(true);
 
     try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          items: selectedItems,
-          orderType,
-          paymentMethod,
-          deliveryAddress,
-          deliveryPhone: deliveryPhone.trim(),
-          deliveryLat,
-          deliveryLng,
-        }),
-      });
+      const checkoutPayload = {
+        items: selectedItems,
+        orderType,
+        paymentMethod,
+        deliveryAddress,
+        deliveryPhone: deliveryPhone.trim(),
+        deliveryLat,
+        deliveryLng,
+      };
+      let requestInit: RequestInit;
+
+      if (paymentMethod === "online" && paymentProof) {
+        // GCash QR: send the order and the payment screenshot together.
+        const formData = new FormData();
+        formData.append("payload", JSON.stringify(checkoutPayload));
+        formData.append("paymentProof", paymentProof);
+        requestInit = { method: "POST", body: formData };
+      } else {
+        requestInit = {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(checkoutPayload),
+        };
+      }
+
+      const response = await fetch("/api/checkout", requestInit);
 
       const result = await response.json();
 
@@ -519,41 +539,23 @@ export default function CartPage() {
       }
 
       const orderId = result.orderId as string;
-      const checkoutUrl =
-        typeof result.checkoutUrl === "string" ? result.checkoutUrl : "";
-
-      if (checkoutUrl) {
-        setSuccessMessage("Redirecting to PayMongo online checkout...");
-        showToast({
-          title: "Redirecting to payment",
-          description: "PayMongo checkout is opening now.",
-          variant: "info",
-        });
-        clearCart();
-        window.location.assign(checkoutUrl);
-        return;
-      }
+      const orderCode = orderId.slice(0, 8).toUpperCase();
 
       if (paymentMethod === "online") {
-        const message =
-          "PayMongo online checkout did not return a redirect URL.";
-        setError(message);
+        setSuccessMessage(`Order ${orderCode} placed. Payment is pending verification.`);
         showToast({
-          title: "Checkout failed",
-          description: message,
-          variant: "error",
+          title: "Order placed",
+          description: `Order ${orderCode}: payment pending verification. Staff will confirm your GCash payment.`,
+          variant: "success",
         });
-        return;
+      } else {
+        setSuccessMessage(`Order placed successfully. Order ID: ${orderCode}`);
+        showToast({
+          title: "Order placed",
+          description: `Order ${orderCode} is now in your tracker.`,
+          variant: "success",
+        });
       }
-
-      setSuccessMessage(
-        `Order placed successfully. Order ID: ${orderId.slice(0, 8).toUpperCase()}`
-      );
-      showToast({
-        title: "Order placed",
-        description: `Order ${orderId.slice(0, 8).toUpperCase()} is now in your tracker.`,
-        variant: "success",
-      });
 
       if (orderType === "delivery" && deliveryPhone.trim()) {
         try {
@@ -567,6 +569,7 @@ export default function CartPage() {
         }
       }
 
+      setPaymentProof(null);
       clearCart();
 
       router.replace(`/customer?tab=orders&orderId=${orderId}`);
@@ -1043,50 +1046,37 @@ export default function CartPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (isPayMongoCheckoutEnabled) {
-                            setPaymentMethod("online");
-                            return;
-                          }
-
-                          setPaymentMethod("cash");
-                          setError(
-                            "Online payment is coming soon. Please choose cash for now."
-                          );
+                          setError("");
+                          setPaymentMethod("online");
                         }}
-                        disabled={!isPayMongoCheckoutEnabled}
-                        title={
-                          isPayMongoCheckoutEnabled
-                            ? "Pay online through PayMongo"
-                            : "Online payment is coming soon"
-                        }
+                        aria-pressed={paymentMethod === "online"}
                         className={`kada-hover-lift flex items-center gap-3 rounded-[16px] border px-4 py-3 text-left font-sans transition ${
                           paymentMethod === "online"
                             ? "border-[#0D2E18] bg-[#0D2E18] text-[#FFF0DA]"
                             : "border-[#D8C8A7] bg-white text-[#684B35] hover:border-[#0D2E18]/40"
-                        } disabled:cursor-not-allowed disabled:opacity-55`}
+                        }`}
                       >
                         <WalletCards className="h-5 w-5 shrink-0" />
                         <span>
                           <span className="block text-sm font-black">
-                            Online Payment
+                            Online Payment (GCash QR)
                           </span>
                           <span className="mt-0.5 block text-xs font-semibold opacity-75">
-                            Redirect to PayMongo&apos;s secure checkout page.
+                            Scan the QR, pay, then upload your payment screenshot.
                           </span>
                         </span>
                       </button>
                     </div>
                     {paymentMethod === "online" ? (
-                      <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                        KadaServe will redirect you to PayMongo&apos;s secure
-                        checkout page. Choose your preferred method there, such
-                        as card, GCash, Maya, or QRPh.
-                      </p>
-                    ) : !isPayMongoCheckoutEnabled ? (
-                      <p className="mt-2 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                        Online payment is ready in code and will be enabled after
-                        the PayMongo account is approved.
-                      </p>
+                      <GcashQrPaymentPanel
+                        amountLabel={formatPaymentAmount(grandTotal)}
+                        proof={paymentProof}
+                        onProofChange={(file) => {
+                          setError("");
+                          setPaymentProof(file);
+                        }}
+                        disabled={isCheckingOut}
+                      />
                     ) : null}
                   </div>
 
@@ -1123,7 +1113,8 @@ export default function CartPage() {
                       isCheckingOut ||
                       isStoreStatusLoading ||
                       isCheckoutBlocked ||
-                      selectedItems.length === 0
+                      selectedItems.length === 0 ||
+                      (paymentMethod === "online" && !paymentProof)
                     }
                     className="kada-glow-ring fixed inset-x-4 bottom-5 z-40 rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-lg font-bold text-[#FFF0DA] shadow-[0_12px_24px_rgba(13,46,24,0.22)] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60 sm:static sm:mt-5 sm:w-full"
                   >
@@ -1135,14 +1126,14 @@ export default function CartPage() {
                     ) : null}
                     {isCheckingOut
                       ? paymentMethod === "online"
-                        ? "Creating Payment..."
+                        ? "Uploading screenshot..."
                         : "Processing..."
                       : isStoreStatusLoading
                       ? "Checking store..."
                       : isCheckoutBlocked
                       ? "Ordering Closed"
-                      : paymentMethod === "online"
-                      ? "Pay Online"
+                      : paymentMethod === "online" && !paymentProof
+                      ? "Upload screenshot to order"
                       : "Place Order"}
                   </button>
                 </section>

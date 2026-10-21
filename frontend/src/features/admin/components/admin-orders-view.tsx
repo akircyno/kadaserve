@@ -15,6 +15,7 @@ import {
   type AdminTimeFilter,
 } from "@/lib/admin-order-totals";
 import { formatNameFromEmail, maskCustomerName } from "@/lib/customer-display";
+import { formatPaymentStatusLabel } from "@/lib/payments/gcash-payment";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type TimeFilter = AdminTimeFilter;
@@ -46,7 +47,7 @@ function formatDate(value: string) {
 function formatStatus(status: OrderStatus) {
   switch (status) {
     case "pending_payment":
-      return "Pending payment";
+      return "Verifying payment";
     case "out_for_delivery":
       return "Out for delivery";
     default:
@@ -55,16 +56,14 @@ function formatStatus(status: OrderStatus) {
 }
 
 function formatPaymentMethod(paymentMethod: StaffOrder["payment_method"]) {
-  if (paymentMethod === "online") return "Online";
+  if (paymentMethod === "online") return "GCash QR";
   if (paymentMethod === "gcash") return "GCash";
   if (paymentMethod === "cash") return "Cash";
   return "No method";
 }
 
 function formatPaymentStatus(paymentStatus: StaffOrder["payment_status"]) {
-  if (paymentStatus === "paid") return "Paid";
-  if (paymentStatus === "unpaid") return "Unpaid";
-  return "No status";
+  return formatPaymentStatusLabel(paymentStatus);
 }
 
 function formatOrderTypeLabel(orderType: StaffOrder["order_type"]) {
@@ -329,9 +328,15 @@ function getPaymentStyle(paymentMethod: StaffOrder["payment_method"]) {
 }
 
 function getPaymentStatusStyle(paymentStatus: StaffOrder["payment_status"]) {
-  return paymentStatus === "paid"
-    ? "border border-[#0F441D]/15 bg-[#E6F2E8] text-[#0F441D]"
-    : "border border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]";
+  if (paymentStatus === "paid") {
+    return "border border-[#0F441D]/15 bg-[#E6F2E8] text-[#0F441D]";
+  }
+
+  if (paymentStatus === "pending_verification") {
+    return "border border-[#B76522]/25 bg-[#FFF0DA] text-[#684B35]";
+  }
+
+  return "border border-[#C55432]/15 bg-[#FFF1EC] text-[#C55432]";
 }
 
 function getStatusStyle(status: OrderStatus) {
@@ -470,7 +475,7 @@ export function OrdersView({
   const statusOptions: Array<{ value: AdminStatusFilter; label: string }> = [
     { value: "all", label: "All Orders" },
     { value: "active", label: "Active" },
-    { value: "pending_payment", label: "Pending Payment" },
+    { value: "pending_payment", label: "Verifying Payment" },
     { value: "pending", label: "Pending" },
     { value: "preparing", label: "Preparing" },
     { value: "ready", label: "Ready" },
@@ -497,9 +502,11 @@ export function OrdersView({
     { value: "all", label: "All Payments" },
     { value: "paid", label: "Paid" },
     { value: "unpaid", label: "Unpaid" },
+    { value: "pending_verification", label: "Pending Verification" },
+    { value: "rejected", label: "Rejected" },
     { value: "cash", label: "Cash" },
-    { value: "gcash", label: "GCash" },
-    { value: "online", label: "Online" },
+    { value: "gcash", label: "GCash (walk-in)" },
+    { value: "online", label: "GCash QR" },
   ];
 
   const timeOptions: Array<{ value: TimeFilter; label: string }> = [

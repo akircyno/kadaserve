@@ -3,6 +3,14 @@ import {
   getDistanceBasedDeliveryFee,
   hasDeliveryCoordinates,
 } from "@/lib/delivery-fee";
+import {
+  getPaymentSetupMessage,
+  readPaymentProof,
+  removePaymentProof,
+  uploadPaymentProof,
+  type PaymentProofUpload,
+} from "@/lib/payments/payment-proof-storage";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   normalizeStoreOverride,
@@ -23,19 +31,6 @@ type CheckoutItem = {
   addon_price: number;
   special_instructions: string;
   image_url: string | null;
-};
-
-type PayMongoCheckoutSession = {
-  id: string;
-  attributes?: {
-    checkout_url?: string;
-    status?: string;
-  };
-};
-
-type PayMongoCheckoutSessionResponse = {
-  data?: PayMongoCheckoutSession;
-  errors?: Array<{ detail?: string; message?: string }>;
 };
 
 function isMissingStoreSettingsTable(error: { message?: string; code?: string } | null) {
@@ -68,125 +63,21 @@ function isValidLatLng(lat: number | null, lng: number | null) {
   );
 }
 
-function toPayMongoAmount(value: number) {
-  return Math.max(0, Math.round(value * 100));
-}
+// Cash checkout sends JSON. GCash QR checkout sends multipart form data:
+// "payload" (the same JSON) plus "paymentProof" (the payment screenshot).
+async function readCheckoutRequest(request: Request) {
+  const contentType = request.headers.get("content-type") ?? "";
 
-function getPayMongoSecretKey() {
-  return process.env.PAYMONGO_SECRET_KEY?.trim() || "";
-}
-
-function getPayMongoMode(secretKey: string) {
-  return secretKey.startsWith("sk_live_") ? "live" : "test";
-}
-
-function getPayMongoErrorMessage(
-  result: PayMongoCheckoutSessionResponse,
-  fallback: string
-) {
-  return result.errors?.[0]?.detail || result.errors?.[0]?.message || fallback;
-}
-
-function getPayMongoHeaders(secretKey: string) {
-  return {
-    Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
-    "Content-Type": "application/json",
-  };
-}
-
-function getRequestOrigin(request: Request) {
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const forwardedProto =
-    request.headers.get("x-forwarded-proto") ||
-    requestUrl.protocol.replace(":", "");
-
-  return forwardedHost
-    ? `${forwardedProto}://${forwardedHost}`
-    : requestUrl.origin;
-}
-
-const payMongoOnlinePaymentMethodTypes = ["card", "gcash", "paymaya", "qrph"];
-
-async function createPayMongoHostedCheckout({
-  orderId,
-  customerEmail,
-  customerName,
-  customerPhone,
-  orderType,
-  requestOrigin,
-  totalAmount,
-}: {
-  orderId: string;
-  customerEmail: string | null;
-  customerName: string | null;
-  customerPhone: string | null;
-  orderType: "pickup" | "delivery";
-  requestOrigin: string;
-  totalAmount: number;
-}) {
-  const secretKey = getPayMongoSecretKey();
-
-  if (!secretKey) {
-    throw new Error("PayMongo secret key is not configured.");
+  if (!contentType.includes("multipart/form-data")) {
+    return { body: await request.json(), paymentProof: null };
   }
 
-  const headers = getPayMongoHeaders(secretKey);
-  const checkoutResponse = await fetch(
-    "https://api.paymongo.com/v2/checkout_sessions",
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        data: {
-          attributes: {
-            billing: {
-              email: customerEmail ?? undefined,
-              name: customerName || "KadaServe Customer",
-              phone: customerPhone || undefined,
-            },
-            cancel_url: `${requestOrigin}/customer/cart?payment=cancelled&orderId=${orderId}`,
-            description: `KadaServe order ${orderId.slice(0, 8).toUpperCase()}`,
-            line_items: [
-              {
-                amount: toPayMongoAmount(totalAmount),
-                currency: "PHP",
-                name: `KadaServe order ${orderId.slice(0, 8).toUpperCase()}`,
-                quantity: 1,
-              },
-            ],
-            metadata: {
-              order_id: orderId,
-              order_type: orderType,
-            },
-            payment_method_types: payMongoOnlinePaymentMethodTypes,
-            reference_number: orderId,
-            send_email_receipt: true,
-            success_url: `${requestOrigin}/customer?tab=orders&orderId=${orderId}&payment=processing`,
-          },
-        },
-      }),
-    }
-  );
-  const checkoutResult =
-    (await checkoutResponse.json()) as PayMongoCheckoutSessionResponse;
-  const checkoutSession = checkoutResult.data;
-  const checkoutUrl = checkoutSession?.attributes?.checkout_url;
-
-  if (!checkoutResponse.ok || !checkoutSession?.id || !checkoutUrl) {
-    throw new Error(
-      getPayMongoErrorMessage(
-        checkoutResult,
-        "PayMongo online checkout could not be created."
-      )
-    );
-  }
+  const formData = await request.formData();
+  const payload = formData.get("payload");
 
   return {
-    mode: getPayMongoMode(secretKey),
-    checkoutSessionId: checkoutSession.id,
-    checkoutUrl,
-    totalAmount,
+    body: typeof payload === "string" ? JSON.parse(payload) : {},
+    paymentProof: formData.get("paymentProof"),
   };
 }
 
@@ -234,7 +125,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const { body, paymentProof: paymentProofField } = await readCheckoutRequest(request);
 
     const items = body.items as CheckoutItem[];
     const orderType = body.orderType as "pickup" | "delivery";
@@ -268,6 +159,19 @@ export async function POST(request: Request) {
         { error: "Please select a payment method." },
         { status: 400 }
       );
+    }
+
+    // GCash QR orders need a valid payment screenshot before anything is created.
+    let paymentProof: PaymentProofUpload | null = null;
+
+    if (paymentMethod === "online") {
+      const { proof, error: proofError } = await readPaymentProof(paymentProofField);
+
+      if (!proof) {
+        return NextResponse.json({ error: proofError }, { status: 400 });
+      }
+
+      paymentProof = proof;
     }
 
     if (orderType === "delivery") {
@@ -371,35 +275,30 @@ export async function POST(request: Request) {
       );
     }
 
-    if (paymentMethod === "online") {
+    if (paymentMethod === "online" && paymentProof) {
+      // Store the screenshot, then mark the order as waiting for staff verification.
+      // Uploading proof never marks an order paid; staff/admin approve it after checking GCash.
+      const adminSupabase = createAdminClient();
+      let proofPath: string | null = null;
+
       try {
-        const payMongoCheckout = await createPayMongoHostedCheckout({
+        proofPath = await uploadPaymentProof(adminSupabase, {
+          customerId: user.id,
           orderId: order.id,
-          customerEmail: profile?.email || user.email || null,
-          customerName: profile?.full_name ?? null,
-          customerPhone:
-            orderType === "delivery"
-              ? deliveryPhone || profile?.phone || null
-              : profile?.phone ?? null,
-          orderType,
-          requestOrigin: getRequestOrigin(request),
-          totalAmount,
+          proof: paymentProof,
         });
 
-        const { error: paymentUpdateError } = await supabase
+        const { error: paymentUpdateError } = await adminSupabase
           .from("orders")
           .update({
-            paymongo_checkout_session_id: payMongoCheckout.checkoutSessionId,
-            paymongo_payment_method_used: "hosted_checkout",
-            paymongo_qr_code_id: null,
-            paymongo_qr_code_image_url: null,
-            paymongo_qr_code_label: null,
-            paymongo_qr_expires_at: null,
+            payment_status: "pending_verification",
+            payment_proof_path: proofPath,
+            payment_submitted_at: new Date().toISOString(),
           })
           .eq("id", order.id);
 
         if (paymentUpdateError) {
-          throw new Error(paymentUpdateError.message);
+          throw paymentUpdateError;
         }
 
         return NextResponse.json({
@@ -407,26 +306,23 @@ export async function POST(request: Request) {
           orderId: order.id,
           orderType,
           deliveryFee,
-          paymentProvider: "paymongo",
-          paymentFlow: "hosted_checkout",
-          paymongoMode: payMongoCheckout.mode,
-          checkoutSessionId: payMongoCheckout.checkoutSessionId,
-          checkoutUrl: payMongoCheckout.checkoutUrl,
-          paymentStatus: "pending_payment",
+          paymentStatus: "pending_verification",
           totalAmount,
         });
-      } catch (payMongoError) {
-        await supabase.from("order_items").delete().eq("order_id", order.id);
-        await supabase.from("orders").delete().eq("id", order.id);
+      } catch (paymentError) {
+        if (proofPath) {
+          await removePaymentProof(adminSupabase, proofPath);
+        }
+        await adminSupabase.from("order_items").delete().eq("order_id", order.id);
+        await adminSupabase.from("orders").delete().eq("id", order.id);
 
         return NextResponse.json(
           {
             error:
-              payMongoError instanceof Error
-                ? payMongoError.message
-                : "PayMongo online checkout could not be created.",
+              getPaymentSetupMessage(paymentError as { message?: string }) ??
+              "Your payment screenshot could not be saved. Please try again.",
           },
-          { status: 502 }
+          { status: 500 }
         );
       }
     }
