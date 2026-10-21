@@ -1665,7 +1665,7 @@ export function AdminDashboard() {
           </div>
         </aside>
 
-        <section className="min-w-0 bg-[#FFF0DA]">
+        <section className={`min-w-0 ${activeTab === "dashboard" ? "bg-[#F5EDE1]" : "bg-[#FFF0DA]"}`}>
           <header className="kada-admin-header-enter sticky top-0 z-30 border-b border-[#DCCFB8] bg-gradient-to-r from-[#FFFCF7] via-[#FFFCF7] to-[#FFF8F0] text-[#0D2E18] shadow-[0_4px_16px_rgba(104,75,53,0.04)] backdrop-blur">
             <div className="grid gap-3 px-4 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center xl:px-6">
               {/* LEFT: Header Title & Description */}
@@ -1759,75 +1759,77 @@ export function AdminDashboard() {
                   ) : null}
                 </div>
 
-                {/* Store Status */}
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-sans text-[0.7rem] font-bold transition ${
-                      storeStatus?.effectiveStatus === "open"
-                        ? "bg-[#E9F5E7] text-[#0D2E18]"
-                        : storeStatus?.effectiveStatus === "busy"
-                        ? "bg-[#FFF0DA] text-[#684B35]"
-                        : "bg-[#FFF1EC] text-[#9C543D]"
-                    }`}
-                  >
+                {/* Store Status (the dashboard tab shows it in its service band instead) */}
+                {activeTab !== "dashboard" ? (
+                  <div className="flex items-center gap-2">
                     <span
-                      className={`h-2 w-2 rounded-full animate-pulse ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-sans text-[0.7rem] font-bold transition ${
                         storeStatus?.effectiveStatus === "open"
-                          ? "bg-[#0F441D]"
+                          ? "bg-[#E9F5E7] text-[#0D2E18]"
                           : storeStatus?.effectiveStatus === "busy"
-                          ? "bg-[#684B35]"
-                          : "bg-[#9C543D]"
+                          ? "bg-[#FFF0DA] text-[#684B35]"
+                          : "bg-[#FFF1EC] text-[#9C543D]"
                       }`}
-                    />
-                    {storeStatus?.label ?? "Loading"}
-                  </span>
+                    >
+                      <span
+                        className={`h-2 w-2 rounded-full animate-pulse ${
+                          storeStatus?.effectiveStatus === "open"
+                            ? "bg-[#0F441D]"
+                            : storeStatus?.effectiveStatus === "busy"
+                            ? "bg-[#684B35]"
+                            : "bg-[#9C543D]"
+                        }`}
+                      />
+                      {storeStatus?.label ?? "Loading"}
+                    </span>
 
-                  <div className="hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] lg:flex">
-                    {adminStoreOverrideOptions.map((option) => {
-                      const isActive = adminStoreOverrideValue === option.value;
+                    <div className="hidden rounded-full border border-[#D6C6AC] bg-[#FFF8EF] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] lg:flex">
+                      {adminStoreOverrideOptions.map((option) => {
+                        const isActive = adminStoreOverrideValue === option.value;
 
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => void handleStoreOverrideChange(option.value)}
-                          disabled={isStoreStatusUpdating}
-                          aria-pressed={isActive}
-                          className={`rounded-full px-2.5 py-1 font-sans text-[0.68rem] font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            isActive
-                              ? option.value === "closed"
-                                ? "bg-[#9C543D] text-white shadow-[0_4px_10px_rgba(156,84,61,0.2)]"
-                                : "bg-[#0D2E18] text-white shadow-[0_4px_10px_rgba(13,46,24,0.18)]"
-                              : "text-[#684B35] hover:bg-[#FFF0DA]"
-                          }`}
-                        >
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => void handleStoreOverrideChange(option.value)}
+                            disabled={isStoreStatusUpdating}
+                            aria-pressed={isActive}
+                            className={`rounded-full px-2.5 py-1 font-sans text-[0.68rem] font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                              isActive
+                                ? option.value === "closed"
+                                  ? "bg-[#9C543D] text-white shadow-[0_4px_10px_rgba(156,84,61,0.2)]"
+                                  : "bg-[#0D2E18] text-white shadow-[0_4px_10px_rgba(13,46,24,0.18)]"
+                                : "text-[#684B35] hover:bg-[#FFF0DA]"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <select
+                      value={adminStoreOverrideValue}
+                      onChange={(event) =>
+                        void handleStoreOverrideChange(
+                          event.target.value as Extract<
+                            StoreOverrideStatus,
+                            "auto" | "open" | "closed"
+                          >
+                        )
+                      }
+                      disabled={isStoreStatusUpdating}
+                      aria-label="Store order status"
+                      className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-2.5 font-sans text-[0.68rem] font-black text-[#684B35] outline-none transition disabled:opacity-60 lg:hidden"
+                    >
+                      {adminStoreOverrideOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
                           {option.label}
-                        </button>
-                      );
-                    })}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-
-                  <select
-                    value={adminStoreOverrideValue}
-                    onChange={(event) =>
-                      void handleStoreOverrideChange(
-                        event.target.value as Extract<
-                          StoreOverrideStatus,
-                          "auto" | "open" | "closed"
-                        >
-                      )
-                    }
-                    disabled={isStoreStatusUpdating}
-                    aria-label="Store order status"
-                    className="h-9 rounded-full border border-[#D6C6AC] bg-[#FFF8EF] px-2.5 font-sans text-[0.68rem] font-black text-[#684B35] outline-none transition disabled:opacity-60 lg:hidden"
-                  >
-                    {adminStoreOverrideOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                ) : null}
 
                 <p className="font-sans text-[11px] text-[#8C7A64]">
                   {syncMeta}
@@ -1877,6 +1879,11 @@ export function AdminDashboard() {
                 demandForecast={demandForecast}
                 isLoading={isLoading}
                 isRefreshing={isRefreshingAnalytics}
+                storeStatus={storeStatus}
+                storeOverrideValue={adminStoreOverrideValue}
+                storeOverrideOptions={adminStoreOverrideOptions}
+                onStoreOverrideChange={(value) => void handleStoreOverrideChange(value)}
+                isStoreStatusUpdating={isStoreStatusUpdating}
               />
             ) : null}
 
