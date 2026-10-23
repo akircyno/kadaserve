@@ -15,6 +15,7 @@
   --color-kada-brown: #684b35;
   --font-sans: var(--font-dm-sans);
   --font-display: var(--font-dm-sans);
+  --font-data: var(--font-dm-mono), ui-monospace, monospace;
 }
 
 body {
@@ -608,6 +609,30 @@ body {
   animation: kada-admin-skeleton-shimmer 1.35s ease-in-out infinite;
 }
 
+/* Admin dashboard: hour tickets swing onto the service rail */
+@keyframes kada-ticket-hang {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) rotate(-4deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(0) rotate(1.5deg);
+  }
+  80% {
+    transform: rotate(-0.6deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.kada-ticket-hang {
+  transform-origin: 50% 0;
+  animation: kada-ticket-hang 800ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
 .kada-admin-refreshing {
   position: relative;
 }
@@ -867,6 +892,7 @@ body {
   .kada-admin-content-enter,
   .kada-admin-skeleton,
   .kada-admin-refreshing::after,
+  .kada-ticket-hang,
   .kada-staff-sidebar-enter,
   .kada-staff-header-enter,
   .kada-staff-toolbar-enter,
