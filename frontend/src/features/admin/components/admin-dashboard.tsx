@@ -1971,6 +1971,13 @@ export function AdminDashboard() {
         <AdminOrderDetailsDrawer
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
+          onOrderUpdated={(update) => {
+            const applyUpdate = (order: StaffOrder) =>
+              order.id === selectedOrder.id ? { ...order, ...update } : order;
+
+            setOrders((current) => current.map(applyUpdate));
+            setSelectedOrder((current) => (current ? applyUpdate(current) : current));
+          }}
         />
       ) : null}
 

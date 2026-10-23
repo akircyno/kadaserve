@@ -31,6 +31,12 @@ import {
   isReadyOrderStuck,
 } from "@/lib/orders/stale-orders";
 import { buildStaffSessionSummaryHtml } from "@/lib/staff-session-report";
+import {
+  PaymentProofReview,
+  type PaymentReviewUpdate,
+} from "@/features/payments/components/payment-proof-review";
+import { formatPaymentStatusLabel } from "@/lib/payments/gcash-payment";
+import { getPendingQueueStartedAt } from "@/lib/orders/expire-pending-orders";
 import type { OrderStatus, StaffOrder } from "@/types/orders";
 
 type OrderFilter = "all" | "pickup" | "delivery";
@@ -125,8 +131,8 @@ const boardColumns: Array<{
 }> = [
     {
       key: "pending_payment",
-      label: "Awaiting Payment",
-      caption: "Online checkout not paid",
+      label: "Verify Payment",
+      caption: "GCash screenshots to check",
       accent: "bg-[#B76522]",
       header: "border-[#E7C08A] bg-[#FFF7E8]",
       count: "bg-[#FFF0DA] text-[#684B35]",
@@ -358,7 +364,7 @@ function requiresFinalDeliveryFee(order: StaffOrder) {
 function formatStatus(status: OrderStatus) {
   switch (status) {
     case "pending_payment":
-      return "Pending Payment";
+      return "Verifying Payment";
     case "pending":
       return "Pending";
     case "preparing":
@@ -437,7 +443,7 @@ function getPaymentLabel(order: StaffOrder) {
   }
 
   if (order.payment_method === "online") {
-    return "Online";
+    return "GCash QR";
   }
 
   if (order.payment_method === "cash") {
@@ -447,7 +453,21 @@ function getPaymentLabel(order: StaffOrder) {
   return "GCash";
 }
 
+// GCash QR orders show their review panel while awaiting or after a decision.
+function isGcashQrReviewOrder(order: StaffOrder) {
+  return (
+    order.payment_method === "online" &&
+    (order.payment_status === "pending_verification" ||
+      order.payment_status === "rejected" ||
+      Boolean(order.has_payment_proof))
+  );
+}
+
 function getPaymentStatusLabel(order: StaffOrder) {
+  if (order.payment_status === "pending_verification" || order.payment_status === "rejected") {
+    return formatPaymentStatusLabel(order.payment_status);
+  }
+
   if (order.status === "pending_payment") {
     return "Awaiting Payment";
   }
@@ -456,6 +476,10 @@ function getPaymentStatusLabel(order: StaffOrder) {
 }
 
 function getPaymentStatusStyle(order: StaffOrder) {
+  if (order.payment_status === "rejected") {
+    return "border border-[#C55432]/30 bg-[#FFF1EC] text-[#C55432]";
+  }
+
   if (order.status === "pending_payment") {
     return "border border-[#B76522]/30 bg-[#FFF0DA] text-[#684B35]";
   }
@@ -1272,7 +1296,7 @@ export function StaffDashboard() {
     const expiredPending = orders.filter(
       (order) =>
         order.status === "pending" &&
-        isPendingOrderExpired(order.ordered_at, now) &&
+        isPendingOrderExpired(getPendingQueueStartedAt(order), now) &&
         !expiringOrderIds.includes(order.id)
     );
 
@@ -1530,6 +1554,27 @@ export function StaffDashboard() {
     }
   }
 
+  function handlePaymentReviewed(
+    orderId: string,
+    update: PaymentReviewUpdate,
+    decision: "approve" | "reject"
+  ) {
+    const applyUpdate = (order: StaffOrder) =>
+      order.id === orderId ? { ...order, ...update } : order;
+
+    setOrders((current) => current.map(applyUpdate));
+    setSelectedOrder((current) => (current ? applyUpdate(current) : current));
+    showToast({
+      title: decision === "approve" ? "Payment approved" : "Payment rejected",
+      description:
+        decision === "approve"
+          ? `${formatOrderCode(orderId)} moved to Pending.`
+          : `${formatOrderCode(orderId)} is waiting for a new screenshot from the customer.`,
+      variant: decision === "approve" ? "success" : "info",
+    });
+    void loadOrders({ showLoading: false });
+  }
+
   async function handleMarkPaid(orderId: string) {
     setError("");
     setIsMarkingPaid(true);
@@ -1778,11 +1823,11 @@ export function StaffDashboard() {
                     );
                     const minutesUntilExpiry =
                       order.status === "pending"
-                        ? getMinutesUntilExpiration(order.ordered_at, now)
+                        ? getMinutesUntilExpiration(getPendingQueueStartedAt(order), now)
                         : null;
                     const isExpiredPendingOrder =
                       order.status === "pending" &&
-                      isPendingOrderExpired(order.ordered_at, now);
+                      isPendingOrderExpired(getPendingQueueStartedAt(order), now);
                     const paymentRequired = requiresPaymentBeforeNextAction(order);
                     const isUpdatingOrder = updatingOrderIds.includes(order.id);
                     const isExpiringOrder = expiringOrderIds.includes(order.id);
@@ -2258,6 +2303,18 @@ export function StaffDashboard() {
                   </p>
                 </div>
               </div>
+
+              {isGcashQrReviewOrder(selectedOrder) ? (
+                <div className="mt-3">
+                  <PaymentProofReview
+                    key={selectedOrder.id}
+                    order={selectedOrder}
+                    onReviewed={(update, decision) =>
+                      handlePaymentReviewed(selectedOrder.id, update, decision)
+                    }
+                  />
+                </div>
+              ) : null}
 
               {selectedOrder.order_type === "delivery" ? (
                 <div className="mt-3 rounded-[16px] border border-[#DCCFB8] bg-white p-3">

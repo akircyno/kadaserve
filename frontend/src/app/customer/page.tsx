@@ -326,10 +326,9 @@ export default async function CustomerPage({ searchParams }: PageProps) {
           delivery_lng,
           delivery_email,
           delivery_phone,
-          paymongo_qr_code_id,
-          paymongo_qr_code_image_url,
-          paymongo_qr_code_label,
-          paymongo_qr_expires_at,
+          payment_submitted_at,
+          payment_verified_at,
+          payment_rejection_reason,
           order_items (
             id,
             quantity,
@@ -384,15 +383,15 @@ export default async function CustomerPage({ searchParams }: PageProps) {
     if (eligibleOrderItems.length > 0) {
       const { data: existingFeedback } = await supabase
         .from("feedback")
-        .select("order_id")
+        .select("order_item_id")
         .eq("customer_id", user.id);
 
-      const submittedOrderIds = new Set(
-        (existingFeedback ?? []).map((item) => item.order_id)
+      const submittedItemIds = new Set(
+        (existingFeedback ?? []).map((item) => item.order_item_id)
       );
 
       feedbackItems = eligibleOrderItems.filter(
-        (item) => !submittedOrderIds.has(item.order_id)
+        (item) => !submittedItemIds.has(item.order_item_id)
       );
     }
 

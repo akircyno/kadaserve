@@ -14,6 +14,7 @@
     "test:recommendations": "node scripts/verify-recommendations.mjs",
     "test:item-action-insights": "node scripts/verify-item-action-insights.mjs",
     "test:reports": "node scripts/verify-reports.mjs",
+    "test:gcash-payment": "node scripts/verify-gcash-payment.mjs",
     "evaluate:recommendations": "node scripts/evaluate-recommendations.mjs"
   },
   "dependencies": {

@@ -4,6 +4,7 @@ import {
   expireOverduePendingOrders,
   getPendingExpirySetupMessage,
 } from "@/lib/orders/expire-pending-orders";
+import { getPaymentSetupMessage } from "@/lib/payments/payment-proof-storage";
 
 type AdminOrderRow = {
   id: string;
@@ -27,6 +28,11 @@ type AdminOrderRow = {
   customer_full_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  has_payment_proof: boolean | null;
+  payment_submitted_at: string | null;
+  payment_verified_at: string | null;
+  payment_verified_by_full_name: string | null;
+  payment_rejection_reason: string | null;
 };
 
 type OrderItemRow = {
@@ -113,7 +119,12 @@ export async function GET() {
           encoded_by_email,
           customer_full_name,
           customer_email,
-          customer_phone
+          customer_phone,
+          has_payment_proof,
+          payment_submitted_at,
+          payment_verified_at,
+          payment_verified_by_full_name,
+          payment_rejection_reason
         `
       )
       .order("ordered_at", { ascending: false })
@@ -121,7 +132,7 @@ export async function GET() {
 
     if (ordersError) {
       return NextResponse.json(
-        { error: ordersError.message },
+        { error: getPaymentSetupMessage(ordersError) ?? ordersError.message },
         { status: 500 }
       );
     }
@@ -219,6 +230,11 @@ export async function GET() {
               phone: order.customer_phone,
             }
           : null,
+        has_payment_proof: Boolean(order.has_payment_proof),
+        payment_submitted_at: order.payment_submitted_at,
+        payment_verified_at: order.payment_verified_at,
+        payment_verified_by_name: order.payment_verified_by_full_name,
+        payment_rejection_reason: order.payment_rejection_reason,
         order_items: (orderItemsByOrderId.get(order.id) ?? []).map((item) => ({
           id: item.id,
           quantity: item.quantity,

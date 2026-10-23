@@ -17,13 +17,14 @@ export async function expireOverduePendingOrders(
   const onlinePaymentExpiresBefore = new Date(
     Date.now() - onlinePaymentTimeoutMinutes * 60 * 1000
   ).toISOString();
-  const now = new Date().toISOString();
-
+  // A GCash order only enters the pending queue once staff verify its payment,
+  // so its 45 minutes count from that verification instead of from ordering.
   const { data: expiredPendingOrders, error: pendingError } = await supabase
     .from("orders")
     .update({ status: "expired" })
     .eq("status", "pending")
     .lte("ordered_at", pendingExpiresBefore)
+    .or(`payment_verified_at.is.null,payment_verified_at.lte."${pendingExpiresBefore}"`)
     .select("id");
 
   if (pendingError) {
@@ -34,50 +35,39 @@ export async function expireOverduePendingOrders(
     };
   }
 
-  const { data: expiredQrOrders, error: expiredQrError } = await supabase
-    .from("orders")
-    .update({ status: "cancelled" })
-    .eq("status", "pending_payment")
-    .eq("payment_method", "online")
-    .eq("payment_status", "unpaid")
-    .lte("paymongo_qr_expires_at", now)
-    .select("id");
-
-  if (expiredQrError) {
-    return {
-      expiredOrderIds: expiredPendingOrders?.map((order) => String(order.id)) ?? [],
-      cancelledOnlineOrderIds: [],
-      error: expiredQrError,
-    };
-  }
-
+  // Online orders that never got a payment screenshot (e.g. older PayMongo checkouts left unpaid).
+  // Orders pending verification or rejected are left for staff and the customer to resolve.
   const { data: oldOnlineOrders, error: oldOnlineError } = await supabase
     .from("orders")
     .update({ status: "cancelled" })
     .eq("status", "pending_payment")
     .eq("payment_method", "online")
     .eq("payment_status", "unpaid")
-    .is("paymongo_qr_expires_at", null)
     .lte("ordered_at", onlinePaymentExpiresBefore)
     .select("id");
 
   if (oldOnlineError) {
     return {
       expiredOrderIds: expiredPendingOrders?.map((order) => String(order.id)) ?? [],
-      cancelledOnlineOrderIds:
-        expiredQrOrders?.map((order) => String(order.id)) ?? [],
+      cancelledOnlineOrderIds: [],
       error: oldOnlineError,
     };
   }
 
   return {
     expiredOrderIds: expiredPendingOrders?.map((order) => String(order.id)) ?? [],
-    cancelledOnlineOrderIds: [
-      ...(expiredQrOrders?.map((order) => String(order.id)) ?? []),
-      ...(oldOnlineOrders?.map((order) => String(order.id)) ?? []),
-    ],
+    cancelledOnlineOrderIds:
+      oldOnlineOrders?.map((order) => String(order.id)) ?? [],
     error: null,
   };
+}
+
+// Staff dashboard and API use the same rule: count from payment verification when there is one.
+export function getPendingQueueStartedAt(order: {
+  ordered_at: string;
+  payment_verified_at?: string | null;
+}) {
+  return order.payment_verified_at ?? order.ordered_at;
 }
 
 export function getPendingExpirySetupMessage(error: { message?: string } | null) {
@@ -90,6 +80,10 @@ export function getPendingExpirySetupMessage(error: { message?: string } | null)
     error.message.includes("violates check constraint")
   ) {
     return "Database status constraint does not allow expired orders yet. Apply backend/seed/order-status-expired.sql in Supabase SQL Editor, then refresh the staff dashboard.";
+  }
+
+  if (error.message.includes("payment_verified_at")) {
+    return "GCash payment setup is incomplete. Apply backend/seed/gcash-payment-proof.sql in the Supabase SQL Editor.";
   }
 
   return null;

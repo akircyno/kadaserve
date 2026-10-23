@@ -12,6 +12,10 @@ function getCancelBlockReason(order: {
   payment_status: string | null;
 }) {
   if (order.status === "pending_payment") {
+    if (order.payment_status === "pending_verification") {
+      return "Staff are checking your GCash payment. Please contact the cafe to cancel this order.";
+    }
+
     return order.payment_method === "online" && order.payment_status !== "paid"
       ? null
       : "Only unpaid online orders can be cancelled while awaiting payment.";

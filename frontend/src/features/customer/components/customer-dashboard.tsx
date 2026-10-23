@@ -39,6 +39,13 @@ import Cropper, { type Area } from "react-easy-crop";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/toast-provider";
 import { useCart } from "@/features/customer/providers/cart-provider";
+import { PaymentProofPicker } from "@/features/payments/components/payment-proof-picker";
+import {
+  canCustomerCancelPayment,
+  canReuploadPaymentProof,
+  formatPaymentStatusLabel,
+  isAwaitingPaymentReview,
+} from "@/lib/payments/gcash-payment";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
   getRecommendationsForCustomer,
@@ -157,15 +164,6 @@ type CustomerNotification = {
     paymentMethod: string;
     itemLines: string[];
   };
-};
-
-type ReopenableQrPhPayment = {
-  orderId: string;
-  qrCodeImageUrl: string;
-  qrCodeLabel: string;
-  totalAmount: number;
-  expiresAt: string | null;
-  expiresInMinutes: number;
 };
 
 const sections: Array<{
@@ -472,7 +470,7 @@ function isValidOptionalPhone(value: string) {
 function formatStatus(status: CustomerOrder["status"]) {
   switch (status) {
     case "pending_payment":
-      return "Pending Payment";
+      return "Verifying Payment";
     case "pending":
       return "Pending";
     case "preparing":
@@ -497,7 +495,9 @@ function formatStatus(status: CustomerOrder["status"]) {
 function getOrderNotificationTitle(order: CustomerOrder) {
   switch (order.status) {
     case "pending_payment":
-      return "Payment is pending";
+      return order.payment_status === "rejected"
+        ? "Payment screenshot rejected"
+        : "Payment pending verification";
     case "pending":
       return "Order received";
     case "preparing":
@@ -540,7 +540,7 @@ function getCustomerPaymentMethodLabel(method?: CustomerOrder["payment_method"])
     case "gcash":
       return "GCash";
     case "online":
-      return "Online Payment";
+      return "GCash QR";
     default:
       return "Payment";
   }
@@ -576,79 +576,8 @@ function getOrderReceipt(order: CustomerOrder) {
   };
 }
 
-function getReopenableQrPhPayment(
-  order: CustomerOrder | null,
-  nowMs: number | null
-) {
-  if (
-    !order ||
-    order.status !== "pending_payment" ||
-    order.payment_method !== "online" ||
-    order.payment_status !== "unpaid" ||
-    !order.paymongo_qr_code_image_url
-  ) {
-    return null;
-  }
-
-  const expiresAt = order.paymongo_qr_expires_at
-    ? new Date(order.paymongo_qr_expires_at).getTime()
-    : 0;
-
-  if (expiresAt && nowMs !== null && expiresAt <= nowMs) {
-    return null;
-  }
-
-  return {
-    orderId: order.id,
-    qrCodeImageUrl: order.paymongo_qr_code_image_url,
-    qrCodeLabel: order.paymongo_qr_code_label || "KadaServe QR Ph",
-    totalAmount: order.total_amount,
-    expiresAt: order.paymongo_qr_expires_at ?? null,
-    expiresInMinutes:
-      expiresAt && nowMs !== null
-        ? Math.max(1, Math.ceil((expiresAt - nowMs) / 60000))
-        : 30,
-  };
-}
-
-function getQrPhMinutesLeft(payment: ReopenableQrPhPayment, nowMs: number) {
-  const expiresAt = payment.expiresAt ? new Date(payment.expiresAt).getTime() : 0;
-
-  if (!expiresAt) {
-    return payment.expiresInMinutes;
-  }
-
-  return Math.max(0, Math.ceil((expiresAt - nowMs) / 60000));
-}
-
-function hasExpiredQrPhPayment(order: CustomerOrder | null, nowMs: number | null) {
-  if (
-    !order ||
-    order.status !== "pending_payment" ||
-    order.payment_method !== "online" ||
-    order.payment_status !== "unpaid" ||
-    !order.paymongo_qr_expires_at
-  ) {
-    return false;
-  }
-
-  return nowMs !== null && new Date(order.paymongo_qr_expires_at).getTime() <= nowMs;
-}
-
-function isAwaitingOnlinePayment(order: CustomerOrder | null) {
-  return (
-    order?.status === "pending_payment" &&
-    order.payment_method === "online" &&
-    order.payment_status === "unpaid"
-  );
-}
-
 function canCustomerCancelOrder(order: CustomerOrder | null) {
-  if (!order || order.payment_status === "paid") {
-    return false;
-  }
-
-  return order.status === "pending" || order.status === "pending_payment";
+  return order ? canCustomerCancelPayment(order) : false;
 }
 
 function getCustomerCancelUnavailableMessage(order: CustomerOrder) {
@@ -656,11 +585,26 @@ function getCustomerCancelUnavailableMessage(order: CustomerOrder) {
     return "";
   }
 
+  if (order.payment_status === "pending_verification") {
+    return "Staff are checking your GCash payment. Please contact the cafe if you need to cancel.";
+  }
+
   if (order.payment_status === "paid") {
     return "Paid orders cannot be cancelled here. Please contact staff for assistance.";
   }
 
   return "Cancellation closes once staff starts preparing the order.";
+}
+
+function getPaymentStatusTone(status: CustomerOrder["payment_status"]) {
+  switch (status) {
+    case "paid":
+      return "bg-[#E9F5E7] text-[#2D7A40]";
+    case "rejected":
+      return "bg-[#FFF1EC] text-[#9C543D]";
+    default:
+      return "bg-[#FFF0DA] text-[#684B35]";
+  }
 }
 
 function getEmoji(item: CustomerMenuItem) {
@@ -1103,10 +1047,8 @@ export function CustomerDashboard({
   const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
   const [orderHistoryPage, setOrderHistoryPage] = useState(1);
   const [trackingActionMessage, setTrackingActionMessage] = useState("");
-  const [qrPhPayment, setQrPhPayment] = useState<ReopenableQrPhPayment | null>(
-    null
-  );
-  const [qrCountdownNow, setQrCountdownNow] = useState(() => Date.now());
+  const [replacementProof, setReplacementProof] = useState<File | null>(null);
+  const [isUploadingReplacementProof, setIsUploadingReplacementProof] = useState(false);
   const [isCancellingTrackedOrder, setIsCancellingTrackedOrder] = useState(false);
   const [isFeedbackPromptOpen, setIsFeedbackPromptOpen] = useState(false);
   const [isFeedbackPromptClosing, setIsFeedbackPromptClosing] = useState(false);
@@ -1166,7 +1108,6 @@ export function CustomerDashboard({
     Record<string, number>
   >({});
   const [hasLoadedBrowserPrefs, setHasLoadedBrowserPrefs] = useState(false);
-  const [clientNow, setClientNow] = useState<number | null>(null);
   const [greeting, setGreeting] = useState("Good day");
   const profileInitials = getInitials(displayProfileName);
   const contentScrollerRef = useRef<HTMLDivElement>(null);
@@ -1308,7 +1249,6 @@ export function CustomerDashboard({
   useEffect(() => {
     const hour = new Date().getHours();
 
-    setClientNow(Date.now());
     setGreeting(
       hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
     );
@@ -1707,9 +1647,12 @@ export function CustomerDashboard({
         : null,
     [customerOrders, trackingOrderId]
   );
-  const trackingQrPhPayment = getReopenableQrPhPayment(trackingOrder, clientNow);
-  const isTrackingQrPhExpired = hasExpiredQrPhPayment(trackingOrder, clientNow);
-  const isTrackingOnlinePaymentPending = isAwaitingOnlinePayment(trackingOrder);
+  const isTrackingPaymentPendingReview = trackingOrder
+    ? isAwaitingPaymentReview(trackingOrder)
+    : false;
+  const canReuploadTrackingProof = trackingOrder
+    ? canReuploadPaymentProof(trackingOrder)
+    : false;
   const canCancelTrackingOrder = canCustomerCancelOrder(trackingOrder);
   const cancelUnavailableMessage = trackingOrder
     ? getCustomerCancelUnavailableMessage(trackingOrder)
@@ -1744,83 +1687,6 @@ export function CustomerDashboard({
         };
       })
       .slice(0, 4) ?? [];
-  const qrPhMinutesLeft = qrPhPayment
-    ? getQrPhMinutesLeft(qrPhPayment, qrCountdownNow)
-    : 0;
-
-  useEffect(() => {
-    if (!qrPhPayment) {
-      return;
-    }
-
-    setQrCountdownNow(Date.now());
-    const intervalId = window.setInterval(() => {
-      setQrCountdownNow(Date.now());
-      void syncCustomerOrders();
-    }, 3000);
-
-    return () => window.clearInterval(intervalId);
-  }, [qrPhPayment, syncCustomerOrders]);
-
-  useEffect(() => {
-    if (!qrPhPayment) {
-      return;
-    }
-
-    const matchingOrder = customerOrders.find(
-      (order) => order.id === qrPhPayment.orderId
-    );
-
-    if (
-      matchingOrder?.payment_status === "paid" &&
-      matchingOrder.status !== "pending_payment"
-    ) {
-      setQrPhPayment(null);
-      setActiveSection("orders");
-      setTrackingActionMessage("");
-      setSelectedCurrentOrderId(qrPhPayment.orderId);
-      setTrackingOrderId(qrPhPayment.orderId);
-      showToast({
-        title: "Thank you for ordering",
-        description: `${formatOrderCode(qrPhPayment.orderId)} is paid and ready for tracking.`,
-        variant: "success",
-      });
-
-      const params = new URLSearchParams(window.location.search);
-      params.set("tab", "orders");
-      params.set("orderId", qrPhPayment.orderId);
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}?${params.toString()}`
-      );
-      return;
-    }
-
-    if (
-      matchingOrder &&
-      ["cancelled", "expired"].includes(matchingOrder.status)
-    ) {
-      setQrPhPayment(null);
-      setTrackingActionMessage("Payment expired. Please place a new order.");
-      showToast({
-        title: "Payment expired",
-        description: "The unpaid QR Ph checkout was cancelled.",
-        variant: "error",
-      });
-      return;
-    }
-
-    if (qrPhMinutesLeft <= 0) {
-      void syncCustomerOrders();
-    }
-  }, [
-    customerOrders,
-    qrPhMinutesLeft,
-    qrPhPayment,
-    showToast,
-    syncCustomerOrders,
-  ]);
   const activeOrderStep = activeOrder ? getOrderStepIndex(activeOrder.status) : 0;
   const hasOrderAttention = currentOrders.some((order) =>
     ["preparing", "ready", "out_for_delivery"].includes(order.status)
@@ -2503,13 +2369,63 @@ export function CustomerDashboard({
     setTrackingActionMessage("");
   }
 
-  function openTrackedQrPhPayment() {
-    if (!trackingQrPhPayment) {
-      setTrackingActionMessage("QR expired. Please place a new order.");
+  // Replaces a rejected GCash screenshot on the same order; it goes back to pending verification.
+  async function handleReplacementProofUpload() {
+    if (!trackingOrder || !replacementProof || !canReuploadTrackingProof) {
       return;
     }
 
-    setQrPhPayment(trackingQrPhPayment);
+    setTrackingActionMessage("");
+    setIsUploadingReplacementProof(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("orderId", trackingOrder.id);
+      formData.append("paymentProof", replacementProof);
+
+      const response = await fetch("/api/customer/orders/payment-proof", {
+        method: "POST",
+        body: formData,
+      });
+      const result = (await response.json()) as {
+        order?: { id: string; payment_status: CustomerOrder["payment_status"]; payment_submitted_at: string | null };
+        error?: string;
+      };
+
+      if (!response.ok || !result.order) {
+        setTrackingActionMessage(result.error || "Your screenshot could not be uploaded.");
+        showToast({
+          title: "Screenshot not uploaded",
+          description: result.error || "Please try again.",
+          variant: "error",
+        });
+        return;
+      }
+
+      const updatedOrder = result.order;
+      setCustomerOrders((current) =>
+        current.map((order) =>
+          order.id === updatedOrder.id
+            ? {
+                ...order,
+                payment_status: updatedOrder.payment_status,
+                payment_submitted_at: updatedOrder.payment_submitted_at,
+                payment_rejection_reason: null,
+              }
+            : order
+        )
+      );
+      setReplacementProof(null);
+      showToast({
+        title: "Screenshot sent",
+        description: `${formatOrderCode(updatedOrder.id)} is back to pending verification.`,
+        variant: "success",
+      });
+    } catch {
+      setTrackingActionMessage("Something went wrong while uploading your screenshot.");
+    } finally {
+      setIsUploadingReplacementProof(false);
+    }
   }
 
   async function handleCancelTrackedOrder() {
@@ -2547,9 +2463,6 @@ export function CustomerDashboard({
         current.map((order) =>
           order.id === trackingOrder.id ? { ...order, status: "cancelled" } : order
         )
-      );
-      setQrPhPayment((current) =>
-        current?.orderId === trackingOrder.id ? null : current
       );
       setTrackingActionMessage("Order cancelled. Staff and admin are updated.");
       showToast({
@@ -5289,50 +5202,54 @@ export function CustomerDashboard({
                   </div>
 
                   <div
-                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${
-                      trackingOrder.payment_status === "paid"
-                        ? "bg-[#E9F5E7] text-[#2D7A40]"
-                      : "bg-[#FFF0DA] text-[#684B35]"
-                    }`}
+                    className={`mt-3 rounded-[18px] p-3 font-sans text-sm font-semibold ${getPaymentStatusTone(
+                      trackingOrder.payment_status
+                    )}`}
                   >
                     Payment status:{" "}
                     <span className="font-black">
-                      {trackingOrder.payment_status === "paid"
-                        ? "Paid"
-                        : "Unpaid"}
+                      {formatPaymentStatusLabel(trackingOrder.payment_status ?? "unpaid")}
                     </span>
                   </div>
 
-                  {trackingQrPhPayment ? (
+                  {isTrackingPaymentPendingReview ? (
                     <div className="mt-3 rounded-[18px] border border-[#DCCFB8] bg-[#FFF8EF] p-3">
                       <p className="font-sans text-sm font-black text-[#0D2E18]">
-                        Awaiting QR Ph payment
+                        We received your GCash screenshot
                       </p>
                       <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#684B35]">
-                        Reopen the PayMongo QR to complete this order.
+                        Staff are confirming your {formatPrice(trackingOrder.total_amount)} payment.
+                        Your order starts once it is verified.
                       </p>
+                    </div>
+                  ) : null}
+
+                  {canReuploadTrackingProof ? (
+                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3">
+                      <p className="font-sans text-sm font-black text-[#9C543D]">
+                        Payment screenshot rejected
+                      </p>
+                      <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#9C543D]">
+                        {trackingOrder.payment_rejection_reason ||
+                          "We could not confirm this payment."}{" "}
+                        Upload a new screenshot of your {formatPrice(trackingOrder.total_amount)} GCash
+                        payment to keep this order.
+                      </p>
+                      <div className="mt-3">
+                        <PaymentProofPicker
+                          file={replacementProof}
+                          onChange={setReplacementProof}
+                          disabled={isUploadingReplacementProof}
+                        />
+                      </div>
                       <button
                         type="button"
-                        onClick={openTrackedQrPhPayment}
-                        className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#0F441D]"
+                        onClick={() => void handleReplacementProofUpload()}
+                        disabled={!replacementProof || isUploadingReplacementProof}
+                        className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#0D2E18] px-4 font-sans text-sm font-bold text-[#FFF0DA] transition hover:bg-[#0F441D] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Show QR Code
+                        {isUploadingReplacementProof ? "Uploading..." : "Send New Screenshot"}
                       </button>
-                    </div>
-                  ) : null}
-
-                  {isTrackingQrPhExpired ? (
-                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold text-[#9C543D]">
-                      QR expired. Please place a new order.
-                    </div>
-                  ) : null}
-
-                  {isTrackingOnlinePaymentPending &&
-                  !trackingQrPhPayment &&
-                  !isTrackingQrPhExpired ? (
-                    <div className="mt-3 rounded-[18px] border border-[#F2C8BD] bg-[#FFF1EC] p-3 font-sans text-sm font-semibold leading-6 text-[#9C543D]">
-                      QR code is not available for this order. Cancel this unpaid
-                      order, then place a new online order to generate a new QR.
                     </div>
                   ) : null}
 
@@ -5373,62 +5290,6 @@ export function CustomerDashboard({
                 </section>
               </div>
             </div>
-          </section>
-        </div>
-      ) : null}
-
-      {qrPhPayment ? (
-        <div className="fixed inset-0 z-[72] flex items-end justify-center bg-[#0D2E18]/55 px-3 backdrop-blur-sm md:items-center md:p-6">
-          <section className="kada-soft-pop w-full max-w-md rounded-t-[28px] border border-[#D8C8A7] bg-white p-5 shadow-[0_-18px_42px_rgba(13,46,24,0.20)] md:rounded-[28px]">
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8C8A7] md:hidden" />
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-[#684B35]">
-                  PayMongo QR Ph
-                </p>
-                <h2 className="mt-1 font-sans text-2xl font-black text-[#0D2E18]">
-                  Scan to pay {formatPrice(qrPhPayment.totalAmount)}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setQrPhPayment(null)}
-                aria-label="Close QR Ph payment"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D8C8A7] bg-[#FFF8EF] text-[#684B35]"
-              >
-                <X size={17} />
-              </button>
-            </div>
-
-            <div className="kada-cart-pulse mt-5 rounded-[22px] border border-[#D8C8A7] bg-[#FFF8EF] p-4 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrPhPayment.qrCodeImageUrl}
-                alt="PayMongo QR Ph payment code"
-                className="mx-auto aspect-square w-full max-w-[280px] rounded-[18px] bg-white object-contain p-3"
-              />
-              <p className="mt-3 font-sans text-sm font-black text-[#0D2E18]">
-                {formatOrderCode(qrPhPayment.orderId)}
-              </p>
-              <p className="mt-1 font-sans text-xs font-semibold leading-5 text-[#8A755D]">
-                Pay with any QR Ph-supported wallet or banking app. This QR
-                expires in about {qrPhMinutesLeft} minute
-                {qrPhMinutesLeft === 1 ? "" : "s"}.
-              </p>
-            </div>
-
-            <div className="mt-5 rounded-[16px] bg-[#E7F4EA] px-4 py-3 font-sans text-sm font-semibold leading-6 text-[#0F441D]">
-              KadaServe will close this QR and open tracking after PayMongo
-              confirms payment.
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setQrPhPayment(null)}
-              className="kada-glow-ring mt-4 w-full rounded-[18px] bg-[#0D2E18] px-5 py-4 font-sans text-base font-black text-[#FFF0DA] transition hover:bg-[#0F441D]"
-            >
-              Back to Order Tracker
-            </button>
           </section>
         </div>
       ) : null}

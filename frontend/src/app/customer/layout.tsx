@@ -13,6 +13,6 @@ export default async function CustomerLayout({
   } = await supabase.auth.getUser();
 
   return (
-    <CartProvider isAuthenticated={Boolean(user)}>{children}</CartProvider>
+    <CartProvider isAuthenticated={Boolean(user)} userId={user?.id}>{children}</CartProvider>
   );
 }
